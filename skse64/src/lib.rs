@@ -5,6 +5,9 @@
 //! @bug No known bugs.
 //!
 
+// We don't need it.
+#![no_std]
+
 mod bind;
 
 /// @brief Exposes the global branch/local trampolines.
