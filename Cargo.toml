@@ -1,0 +1,8 @@
+[workspace]
+
+members = [
+    "ctypes",
+    "skse64",
+    "versionlib",
+    "SkyrimUncapper"
+]

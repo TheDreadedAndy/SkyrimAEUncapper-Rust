@@ -1,0 +1,10 @@
+[package]
+name = "skyrim_uncapper"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+skse64 = { path = "../skse64" }
+versionlib = { path = "../versionlib" }
