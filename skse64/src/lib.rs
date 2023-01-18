@@ -12,15 +12,83 @@ mod bind;
 
 /// @brief Exposes the global branch/local trampolines.
 pub mod trampoline {
-    pub use crate::bind::BranchTrampoline;
-    pub use crate::bind::g_branchTrampoline;
-    pub use crate::bind::g_localTrampoline;
+    use core::ffi::c_void;
+
+    /// @brief Encodes the trampoline which should be operated on.
+    #[repr(C)] pub enum Trampoline { Global, Local }
+
+    extern "C" {
+        #[link_name = "SKSE64_BranchTrampoline__create__"]
+        pub fn create(t: Trampoline, len: usize, module: *mut c_void);
+
+        #[link_name = "SKSE64_BranchTrampoline__destroy__"]
+        pub fn destroy(t: Trampoline);
+
+        #[link_name = "SKSE64_BranchTrampoline__write_jump6__"]
+        pub fn write_jump6(t: Trampoline, src: usize, dst: usize);
+
+        #[link_name = "SKSE64_BranchTrampoline__write_call6__"]
+        pub fn write_call6(t: Trampoline, src: usize, dst: usize);
+
+        #[link_name = "SKSE64_BranchTrampoline__write_jump5__"]
+        pub fn write_jump5(t: Trampoline, src: usize, dst: usize);
+
+        #[link_name = "SKSE64_BranchTrampoline__write_call5__"]
+        pub fn write_call5(t: Trampoline, src: usize, dst: usize);
+    }
 }
 
 /// @brief Exposes the safe-write functions.
 pub mod safe_write {
-    pub use crate::bind::{SafeWrite8, SafeWrite16, SafeWrite32, SafeWrite64, SafeWriteBuf};
-    pub use crate::bind::{SafeWriteJump, SafeWriteCall};
+    use core::ffi::c_int;
+
+    extern "C" {
+        fn SKSE64_SafeWrite__safe_write_buf__(addr: usize, data: *mut u8, len: usize);
+        fn SKSE64_SafeWrite__safe_write_jump__(src: usize, dst: usize) -> c_int;
+        fn SKSE64_SafeWrite__safe_write_call__(src: usize, dst: usize) -> c_int;
+    }
+
+    ///
+    /// @brief Writes out a buffer filled with type T to the given addr.
+    /// @param addr The address to write to.
+    /// @param data The data to write.
+    /// @param len The number of T's to write.
+    ///
+    pub unsafe fn safe_write<T>(
+        addr: usize,
+        data: *mut T,
+        len: usize
+    ) {
+        SKSE64_SafeWrite__safe_write_buf__(
+            addr,
+            data as *mut u8,
+            len * core::mem::size_of::<T>()
+        );
+    }
+
+    /// @brief Writes a 5-byte jump to the given address.
+    pub unsafe fn safe_write_jump(
+        src: usize,
+        dst: usize
+    ) -> Result<(), ()> {
+        if SKSE64_SafeWrite__safe_write_jump__(src, dst) >= 0 {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+
+    /// @brief Writes a 5-byte call to the given address.
+    pub unsafe fn safe_write_call(
+        src: usize,
+        dst: usize
+    ) -> Result<(), ()> {
+        if SKSE64_SafeWrite__safe_write_call__(src, dst) >= 0 {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
 }
 
 ///
@@ -32,6 +100,7 @@ pub mod version {
     pub use crate::bind::{SKSE_VERSION_INTEGER, SKSE_VERSION_INTEGER_MINOR};
     pub use crate::bind::{SKSE_VERSION_INTEGER_BETA, SKSE_VERSION_VERSTRING};
     pub use crate::bind::{SKSE_VERSION_PADDEDSTRING, SKSE_VERSION_RELEASEIDX};
+    pub use crate::bind::{RUNTIME_TYPE_BETHESDA, RUNTIME_TYPE_GOG, RUNTIME_TYPE_EPIC};
 
     /// @brief Wraps a skse version.
     #[derive(Copy, Clone, PartialOrd, Ord, PartialEq, Eq)]
@@ -88,10 +157,6 @@ pub mod version {
             self.0 & 0xF
         }
     }
-
-    pub const RUNTIME_TYPE_BETHESDA: u32 = 0;
-    pub const RUNTIME_TYPE_GOG: u32 = 1;
-    pub const RUNTIME_TYPE_EPIC: u32 = 2;
 
     pub const RUNTIME_VERSION_1_1_47: SkseVersion =
         SkseVersion::new(1, 1, 47, RUNTIME_TYPE_BETHESDA);

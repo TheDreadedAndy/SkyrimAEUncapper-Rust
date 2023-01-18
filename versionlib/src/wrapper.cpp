@@ -18,53 +18,79 @@
 
 extern "C" {
     void *
-    VersionLibDb__create__() {
+    VersionLibDb__init__() {
         try {
-            VersionDb *ret = new VersionDb();
-            ret->Load();
-            return ret;
+            return new VersionDb();
         } catch(...) {
-            return nullptr;
+            HALT("Failed to construct version database");
         }
     }
 
     void
     VersionLibDb__destroy__(
-        void *database
+        VersionDb *db
     ) {
-        VersionDb *db = static_cast<VersionDb*>(database);
         try {
+            ASSERT(db);
             delete db;
         } catch(...) {
             HALT("Failed to destroy version database");
         }
     }
 
+    void
+    VersionLibDb__load_current__(
+        VersionDb *db
+    ) {
+        try {
+            ASSERT(db);
+            ASSERT(db->Load());
+        } catch(...) {
+            HALT("Failed to load database into version db");
+        }
+    }
+
+    void
+    VersionLibDb__load_release__(
+        VersionDb *db,
+        int major,
+        int minor,
+        int build,
+        int sub
+    ) {
+        try {
+            ASSERT(db);
+            ASSERT(db->Load(major, minor, build, sub));
+        } catch(...) {
+            HALT("Failed to load specific release into db");
+        }
+    }
+
     int
     VersionLibDb__find_offset_by_id__(
-        void *database,
+        VersionDb *db,
         unsigned long long id,
         unsigned long long *result
     ) {
-        VersionDb *db = static_cast<VersionDb*>(database);
         try {
+            ASSERT(db);
             return db->FindOffsetById(id, *result) ? 0 : -1;
         } catch(...) {
-            return -1;
+            HALT("Failed to find offset by id in version db");
         }
     }
 
     int
     VersionLibDb__find_id_by_offset__(
-        void *database,
+        VersionDb *db,
         unsigned long long offset,
         unsigned long long *result
     ) {
-        VersionDb *db = static_cast<VersionDb*>(database);
         try {
+            ASSERT(db);
             return db->FindOffsetById(offset, *result) ? 0 : -1;
         } catch(...) {
-            return -1;
+            HALT("Failed to find id by offset in version db");
         }
     }
 }
