@@ -175,6 +175,22 @@ pub mod errors {
     }
 }
 
+/// @brief Wraps the SKSE logging API.
+pub mod log {
+    use core::ffi::{c_int, c_char};
+
+    extern "C" {
+        #[link_name = "SKSE64_DebugLog__open_relative__"]
+        fn glog_open_rel(id: c_int, path: *const c_char);
+
+        #[link_name = "SKSE64_DebugLog__message__"]
+        fn glog_message(msg: *const c_char);
+
+        #[link_name = "SKSE64_DebugLog__error__"]
+        fn glog_error(msg: *const c_char);
+    }
+}
+
 /// @brief Exposes the plugin API data structure.
 pub mod plugin_api {
     pub use crate::bind::SKSEInterface;

@@ -49,6 +49,40 @@ extern "C" {
     }
 
     void
+    SKSE64_DebugLog__open_relative__(
+        int folder_id,
+        const char *path
+    ) {
+        try {
+            gLog.OpenRelative(folder_id, path);
+        } catch(...) {
+            HALT("Failed to open log file");
+        }
+    }
+
+    void
+    SKSE64_DebugLog__message__(
+        const char *msg
+    ) {
+        try {
+            _MESSAGE(msg);
+        } catch(...) {
+            HALT("Failed to write message to log.");
+        }
+    }
+
+    void
+    SKSE64_DebugLog__error__(
+        const char *msg
+    ) {
+        try {
+            _ERROR(msg);
+        } catch(...) {
+            HALT("Failed to write error to log.");
+        }
+    }
+
+    void
     SKSE64_BranchTrampoline__create__(
         Trampoline t,
         size_t len,
