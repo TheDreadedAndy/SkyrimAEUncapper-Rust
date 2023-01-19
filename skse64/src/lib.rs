@@ -5,7 +5,13 @@
 //! @bug No known bugs.
 //!
 
+// We don't need it.
+#![no_std]
+
 mod bind;
+
+// For macros.
+pub use core;
 
 ///
 /// @brief Exposes the various version constants and functions to manage them.
@@ -129,10 +135,8 @@ pub mod version {
 }
 
 pub mod errors {
-    use std::panic::Location;
-    use std::ffi::{c_char, c_ulong, CString};
-
-    use ctypes::cstr;
+    use core::ffi::c_ulong;
+    pub use ctypes::cstr;
 
     extern "C" {
         /// @brief SKSE panic function.
@@ -140,30 +144,34 @@ pub mod errors {
         fn skse_panic_impl(file: *const c_char, line: c_ulong, msg: *const c_char) -> !;
     }
 
-    ///
-    /// @brief Wraps a call the skse panic function.
-    ///
-    #[track_caller]
-    pub fn skse_panic(
-        msg: &str
-    ) -> ! {
-        let loc = Location::caller();
-        let default_file = cstr!("<Failed to parse file string>");
-        let default_msg = cstr!("<Failed to parse message string>");
+    /// @brief Uses the SKSE panic handler to terminate the application.
+    #[macro_export]
+    macro_rules! skse_halt {
+        ( $s:expr ) => {{
+            let s = $crate::errors::cstr!($s);
+            let file = $crate::errors::cstr!($crate::core::file!());
+            let line = $crate::core::line!();
 
-        // Allocating in the panic fn is.... yikes.
-        // But we unfortunately don't have much of a choice...
-        let file = CString::new(loc.file());
-        let msg = CString::new(msg);
+            unsafe {
+                skse_panic_impl(file, line as $crate::core::ffi::c_ulong, s);
+            }
+        }};
+    }
 
-        unsafe {
-            // SAFETY: We ensure that the strings we give the fn are valid.
-            skse_panic_impl(
-                file.as_ref().map(|s| s.as_c_str().as_ptr()).unwrap_or(default_file),
-                loc.line() as c_ulong,
-                msg.as_ref().map(|s| s.as_c_str().as_ptr()).unwrap_or(default_msg)
-            );
-        }
+    /// @brief Uses the SKSE panic handler to assert a condition.
+    #[macro_export]
+    macro_rules! skse_assert {
+        ( $cond:expr ) => {
+            if !($cond) {
+                $crate::skse_halt!($crate::core::stringify!($cond));
+            }
+        };
+
+        ( $cond:expr, $lit:expr ) => {
+            if !($cond) {
+                $crate::skse_halt!($lit);
+            }
+        };
     }
 }
 
