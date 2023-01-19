@@ -9,7 +9,7 @@
  */
 
 #include <cstdint>
-#include <cstddef>
+#include <cstdlib>
 
 #include <common/IPrefix.h>
 #include <SafeWrite.h>
@@ -34,6 +34,20 @@ GetTrampoline(
 }
 
 extern "C" {
+    void
+    SKSE64_Errors__assert_failed__(
+        const char *file,
+        unsigned long line,
+        const char *msg
+    ) {
+        try {
+            _AssertionFailed(file, line, msg);
+        } catch(...) {
+            // What are we gonna do, panic harder?
+            abort();
+        }
+    }
+
     void
     SKSE64_BranchTrampoline__create__(
         Trampoline t,

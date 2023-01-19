@@ -5,91 +5,7 @@
 //! @bug No known bugs.
 //!
 
-// We don't need it.
-#![no_std]
-
 mod bind;
-
-/// @brief Exposes the global branch/local trampolines.
-pub mod trampoline {
-    use core::ffi::c_void;
-
-    /// @brief Encodes the trampoline which should be operated on.
-    #[repr(C)] pub enum Trampoline { Global, Local }
-
-    extern "C" {
-        #[link_name = "SKSE64_BranchTrampoline__create__"]
-        pub fn create(t: Trampoline, len: usize, module: *mut c_void);
-
-        #[link_name = "SKSE64_BranchTrampoline__destroy__"]
-        pub fn destroy(t: Trampoline);
-
-        #[link_name = "SKSE64_BranchTrampoline__write_jump6__"]
-        pub fn write_jump6(t: Trampoline, src: usize, dst: usize);
-
-        #[link_name = "SKSE64_BranchTrampoline__write_call6__"]
-        pub fn write_call6(t: Trampoline, src: usize, dst: usize);
-
-        #[link_name = "SKSE64_BranchTrampoline__write_jump5__"]
-        pub fn write_jump5(t: Trampoline, src: usize, dst: usize);
-
-        #[link_name = "SKSE64_BranchTrampoline__write_call5__"]
-        pub fn write_call5(t: Trampoline, src: usize, dst: usize);
-    }
-}
-
-/// @brief Exposes the safe-write functions.
-pub mod safe_write {
-    use core::ffi::c_int;
-
-    extern "C" {
-        fn SKSE64_SafeWrite__safe_write_buf__(addr: usize, data: *mut u8, len: usize);
-        fn SKSE64_SafeWrite__safe_write_jump__(src: usize, dst: usize) -> c_int;
-        fn SKSE64_SafeWrite__safe_write_call__(src: usize, dst: usize) -> c_int;
-    }
-
-    ///
-    /// @brief Writes out a buffer filled with type T to the given addr.
-    /// @param addr The address to write to.
-    /// @param data The data to write.
-    /// @param len The number of T's to write.
-    ///
-    pub unsafe fn safe_write<T>(
-        addr: usize,
-        data: *mut T,
-        len: usize
-    ) {
-        SKSE64_SafeWrite__safe_write_buf__(
-            addr,
-            data as *mut u8,
-            len * core::mem::size_of::<T>()
-        );
-    }
-
-    /// @brief Writes a 5-byte jump to the given address.
-    pub unsafe fn safe_write_jump(
-        src: usize,
-        dst: usize
-    ) -> Result<(), ()> {
-        if SKSE64_SafeWrite__safe_write_jump__(src, dst) >= 0 {
-            Ok(())
-        } else {
-            Err(())
-        }
-    }
-
-    /// @brief Writes a 5-byte call to the given address.
-    pub unsafe fn safe_write_call(
-        src: usize,
-        dst: usize
-    ) -> Result<(), ()> {
-        if SKSE64_SafeWrite__safe_write_call__(src, dst) >= 0 {
-            Ok(())
-        } else {
-            Err(())
-        }
-    }
-}
 
 ///
 /// @brief Exposes the various version constants and functions to manage them.
@@ -212,6 +128,45 @@ pub mod version {
         SkseVersion::new(1, 6, 678, RUNTIME_TYPE_EPIC);
 }
 
+pub mod errors {
+    use std::panic::Location;
+    use std::ffi::{c_char, c_ulong, CString};
+
+    use ctypes::cstr;
+
+    extern "C" {
+        /// @brief SKSE panic function.
+        #[link_name = "SKSE64_Errors__assert_failed__"]
+        fn skse_panic_impl(file: *const c_char, line: c_ulong, msg: *const c_char) -> !;
+    }
+
+    ///
+    /// @brief Wraps a call the skse panic function.
+    ///
+    #[track_caller]
+    pub fn skse_panic(
+        msg: &str
+    ) -> ! {
+        let loc = Location::caller();
+        let default_file = cstr!("<Failed to parse file string>");
+        let default_msg = cstr!("<Failed to parse message string>");
+
+        // Allocating in the panic fn is.... yikes.
+        // But we unfortunately don't have much of a choice...
+        let file = CString::new(loc.file());
+        let msg = CString::new(msg);
+
+        unsafe {
+            // SAFETY: We ensure that the strings we give the fn are valid.
+            skse_panic_impl(
+                file.as_ref().map(|s| s.as_c_str().as_ptr()).unwrap_or(default_file),
+                loc.line() as c_ulong,
+                msg.as_ref().map(|s| s.as_c_str().as_ptr()).unwrap_or(default_msg)
+            );
+        }
+    }
+}
+
 /// @brief Exposes the plugin API data structure.
 pub mod plugin_api {
     pub use crate::bind::SKSEInterface;
@@ -221,4 +176,85 @@ pub mod plugin_api {
     pub use crate::bind::SKSEPluginVersionData_kVersionIndependent_Signatures;
     pub use crate::bind::SKSEPluginVersionData_kVersionIndependent_StructsPost629;
     pub use crate::bind::SKSEPluginVersionData_kVersionIndependentEx_NoStructUse;
+}
+
+/// @brief Exposes the global branch/local trampolines.
+pub mod trampoline {
+    use core::ffi::c_void;
+
+    /// @brief Encodes the trampoline which should be operated on.
+    #[repr(C)] pub enum Trampoline { Global, Local }
+
+    extern "C" {
+        #[link_name = "SKSE64_BranchTrampoline__create__"]
+        pub fn create(t: Trampoline, len: usize, module: *mut c_void);
+
+        #[link_name = "SKSE64_BranchTrampoline__destroy__"]
+        pub fn destroy(t: Trampoline);
+
+        #[link_name = "SKSE64_BranchTrampoline__write_jump6__"]
+        pub fn write_jump6(t: Trampoline, src: usize, dst: usize);
+
+        #[link_name = "SKSE64_BranchTrampoline__write_call6__"]
+        pub fn write_call6(t: Trampoline, src: usize, dst: usize);
+
+        #[link_name = "SKSE64_BranchTrampoline__write_jump5__"]
+        pub fn write_jump5(t: Trampoline, src: usize, dst: usize);
+
+        #[link_name = "SKSE64_BranchTrampoline__write_call5__"]
+        pub fn write_call5(t: Trampoline, src: usize, dst: usize);
+    }
+}
+
+/// @brief Exposes the safe-write functions.
+pub mod safe_write {
+    use core::ffi::c_int;
+
+    extern "C" {
+        fn SKSE64_SafeWrite__safe_write_buf__(addr: usize, data: *mut u8, len: usize);
+        fn SKSE64_SafeWrite__safe_write_jump__(src: usize, dst: usize) -> c_int;
+        fn SKSE64_SafeWrite__safe_write_call__(src: usize, dst: usize) -> c_int;
+    }
+
+    ///
+    /// @brief Writes out a buffer filled with type T to the given addr.
+    /// @param addr The address to write to.
+    /// @param data The data to write.
+    /// @param len The number of T's to write.
+    ///
+    pub unsafe fn safe_write<T>(
+        addr: usize,
+        data: *mut T,
+        len: usize
+    ) {
+        SKSE64_SafeWrite__safe_write_buf__(
+            addr,
+            data as *mut u8,
+            len * core::mem::size_of::<T>()
+        );
+    }
+
+    /// @brief Writes a 5-byte jump to the given address.
+    pub unsafe fn safe_write_jump(
+        src: usize,
+        dst: usize
+    ) -> Result<(), ()> {
+        if SKSE64_SafeWrite__safe_write_jump__(src, dst) >= 0 {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+
+    /// @brief Writes a 5-byte call to the given address.
+    pub unsafe fn safe_write_call(
+        src: usize,
+        dst: usize
+    ) -> Result<(), ()> {
+        if SKSE64_SafeWrite__safe_write_call__(src, dst) >= 0 {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
 }
