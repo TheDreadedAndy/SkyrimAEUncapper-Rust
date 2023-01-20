@@ -16,6 +16,8 @@ pub use core;
 /// Bindgen can't evaluate macros, so these have to be written manually.
 ///
 pub mod version {
+    use std::fmt::{Display, Formatter, Error};
+
     pub use crate::bind::{SKSE_VERSION_INTEGER, SKSE_VERSION_INTEGER_MINOR};
     pub use crate::bind::{SKSE_VERSION_INTEGER_BETA, SKSE_VERSION_VERSTRING};
     pub use crate::bind::{SKSE_VERSION_PADDEDSTRING, SKSE_VERSION_RELEASEIDX};
@@ -74,6 +76,23 @@ pub mod version {
             &self
         ) -> u32 {
             self.0 & 0xF
+        }
+    }
+
+    /// @brief Allows a skse64 version to be printed.
+    impl Display for SkseVersion {
+        fn fmt(
+            &self,
+            f: &mut Formatter<'_>
+        ) -> Result<(), Error> {
+            let runtime = match self.runtime_type() {
+                RUNTIME_TYPE_BETHESDA => "Bethesda",
+                RUNTIME_TYPE_GOG => "GOG",
+                RUNTIME_TYPE_EPIC => "Epic",
+                _ => "Unknown"
+            };
+
+            write!(f, "{}.{}.{} ({})", self.major(), self.minor(), self.build(), runtime)
         }
     }
 
