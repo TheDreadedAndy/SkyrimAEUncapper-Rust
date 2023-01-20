@@ -11,6 +11,8 @@ mod skyrim;
 mod hook_wrappers;
 
 use ctypes::cstr_array;
+use skse64::log::skse_message;
+use skse64::version::{SkseVersion, PACKED_SKSE_VERSION, CURRENT_RELEASE_RUNTIME};
 use skse64::plugin_api::{SKSEPluginVersionData, SKSEInterface};
 use skse64::plugin_api::SKSEPluginVersionData_kVersion;
 use skse64::plugin_api::SKSEPluginVersionData_kVersionIndependentEx_NoStructUse;
@@ -49,7 +51,14 @@ pub unsafe extern "system" fn SKSEPlugin_Load(
 
     // TODO: Open log file.
 
-    // TODO: Print runtime/skse info.
+    // Log runtime/skse info.
+    skse_message!(
+        "Compiled: SKSE64 = {}, Skyrim AE = {}\nRunning: SKSE64 = {}, Skyrim AE = {}",
+        PACKED_SKSE_VERSION,
+        CURRENT_RELEASE_RUNTIME,
+        SkseVersion::from_raw((*skse).skseVersion),
+        SkseVersion::from_raw((*skse).runtimeVersion)
+    );
 
     // TODO: Load settings.
     let _ini_path = get_runtime_dir().join("data/SKSE/SkyrimUncapper.ini");

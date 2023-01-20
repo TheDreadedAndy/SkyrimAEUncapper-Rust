@@ -148,6 +148,14 @@ pub mod version {
         SkseVersion::new(1, 6, 659, RUNTIME_TYPE_GOG);
     pub const RUNTIME_VERSION_1_6_678_EPIC: SkseVersion =
         SkseVersion::new(1, 6, 678, RUNTIME_TYPE_EPIC);
+
+    pub const CURRENT_RELEASE_RUNTIME: SkseVersion = RUNTIME_VERSION_1_6_640;
+    pub const PACKED_SKSE_VERSION: SkseVersion = SkseVersion::new(
+        SKSE_VERSION_INTEGER,
+        SKSE_VERSION_INTEGER_MINOR,
+        SKSE_VERSION_INTEGER_BETA,
+        RUNTIME_TYPE_BETHESDA
+    );
 }
 
 pub mod errors {
@@ -232,14 +240,14 @@ pub mod log {
     #[macro_export]
     macro_rules! skse_message {
         ( $($fmt:tt)* ) => {
-            $crate::log::skse_message_impl(::std::fmt::format!($($fmt)*).as_str());
+            $crate::log::skse_message_impl(::std::format!($($fmt)*).as_str());
         };
     }
 
     #[macro_export]
     macro_rules! skse_error {
         ( $($fmt:tt)* ) => {
-            $crate::log::skse_error_impl(::std::fmt::format!($($fmt)*).as_str());
+            $crate::log::skse_error_impl(::std::format!($($fmt)*).as_str());
         };
     }
 
