@@ -10,3 +10,4 @@ skse64 = { path = "../skse64" }
 
 [build-dependencies]
 cc = "1.0.78"
+vsprofile = { path = "../vsprofile" }

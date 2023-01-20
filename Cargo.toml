@@ -1,6 +1,7 @@
 [workspace]
 
 members = [
+    "vsprofile",
     "ctypes",
     "skse64",
     "versionlib",

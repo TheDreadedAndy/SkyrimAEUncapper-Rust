@@ -12,11 +12,11 @@ fn main() {
     println!("cargo:rerun-if-changed={}", WRAPPER_FILE);
 
     // Compile our wrapper.
-    cc::Build::new()
-        .cpp(true)
+    let mut builder = cc::Build::new();
+    builder.cpp(true)
         .file(WRAPPER_FILE)
-        .cpp_link_stdlib("msvcrtd") // FIXME
         .flag("-Isrc/")
-        .flag("-I../skse64_src/common/")
-        .compile("libwrapper.a");
+        .flag("-I../skse64_src/common/");
+    vsprofile::VsProfile::get().config_builder(&mut builder);
+    builder.compile("libwrapper.a");
 }

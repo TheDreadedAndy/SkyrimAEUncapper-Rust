@@ -1,7 +1,7 @@
 //!
 //! @file build.rs
 //! @brief Generates bindings for the address independence library.
-//! @author Andrew Spaulding (aspauldi)
+//! @author Andrew Spaulding (Kasplat)
 //! @bug No known bugs.
 //!
 
@@ -14,17 +14,9 @@ const BINDGEN_FILE: &str = "bindgen_wrapper.h";
 const SKSE_SOLUTION: &str = "../skse64_src/skse64/skse64.sln";
 const MSBUILD: &str = "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Community\\MSBuild\\Current\\Bin\\MSBuild.exe";
 
-/// @brief Gets the running profile type.
-fn get_profile() -> &'static str {
-    let profile = std::env::var("PROFILE");
-    match profile.as_ref().map(|s| s.as_str()) {
-        Ok("debug") => "Debug",
-        Ok("release") => "Release",
-        _ => panic!("{}", "Unknown profile")
-    }
-}
-
 fn main() {
+    let vs_profile = vsprofile::VsProfile::get();
+
     // Mark our header wrapper as a dep.
     println!("cargo:rerun-if-changed={}", BINDGEN_FILE);
     println!("cargo:rerun-if-changed={}", WRAPPER_FILE);
@@ -38,15 +30,7 @@ fn main() {
         .flag("-I../skse64_src/common/")
         .flag("-I../skse64_src/skse64/")
         .flag("-I../skse64_src/skse64/skse64_common/");
-
-    // Configure profile specific settings for wrapper compilation.
-    if get_profile() == "Debug" {
-        builder.flag("-D_DEBUG").flag("-D_ITERATOR_DEBUG_LEVEL=2");
-        builder.cpp_link_stdlib("msvcrtd"); // Debug dynamic windows stdc++ lib.
-    } else {
-        builder.cpp_link_stdlib("msvcrt"); // Release dynamic windows stdc++ lib.
-    }
-
+    vs_profile.config_builder(&mut builder);
     builder.compile("libwrapper.a");
 
     // Generate the bindings.
@@ -66,14 +50,15 @@ fn main() {
     bindings.write_to_file(binding_file).unwrap();
 
     // Build skse64.
-    let vc_profile = get_profile();
-    Command::new(MSBUILD).args(
-        &[SKSE_SOLUTION, "-t:Build", std::format!("-p:Configuration={}", vc_profile).as_str()]
-    ).status().unwrap();
+    Command::new(MSBUILD).args(&[
+        SKSE_SOLUTION,
+        "-t:Build",
+        std::format!("-p:Configuration={}", vs_profile.name()).as_str()
+    ]).status().unwrap();
 
     // Add directories to search for libs in.
-    println!("cargo:rustc-link-search=skse64_src/skse64/x64/{}/", vc_profile);
-    println!("cargo:rustc-link-search=skse64_src/skse64/x64_v142/{}/", vc_profile);
+    println!("cargo:rustc-link-search=skse64_src/skse64/x64/{}/", vs_profile.name());
+    println!("cargo:rustc-link-search=skse64_src/skse64/x64_v142/{}/", vs_profile.name());
 
     // Link in windows api.
     println!("cargo:rustc-link-lib=dylib=comdlg32");
