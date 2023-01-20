@@ -15,7 +15,6 @@ fn main() {
     cc::Build::new()
         .cpp(true)
         .file(WRAPPER_FILE)
-        .cpp_link_stdlib("stdc++")
         .flag("-Isrc/")
         .flag("-I../skse64_src/common/")
         .compile("libwrapper.a");

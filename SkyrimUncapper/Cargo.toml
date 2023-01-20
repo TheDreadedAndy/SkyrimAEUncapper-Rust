@@ -1,13 +1,13 @@
 [package]
 name = "skyrim_uncapper"
-version = "0.1.0"
+version = "2.0.0"
 edition = "2021"
 
 [lib]
+name = "SkyrimUncapper"
 crate-type = ["cdylib"]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
+ctypes = { path = "../ctypes" }
 skse64 = { path = "../skse64" }
-versionlib = { path = "../versionlib" }
+#versionlib = { path = "../versionlib" }

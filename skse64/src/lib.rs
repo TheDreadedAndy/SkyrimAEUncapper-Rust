@@ -169,7 +169,7 @@ pub mod errors {
             let line = $crate::core::line!();
 
             unsafe {
-                $crate::error::skse_panic_impl(file, line as $crate::core::ffi::c_ulong, s);
+                $crate::errors::skse_panic_impl(file, line as $crate::core::ffi::c_ulong, s);
             }
         }};
     }

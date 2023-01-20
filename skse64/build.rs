@@ -11,18 +11,29 @@ use std::process::Command;
 
 const WRAPPER_FILE: &str = "src/wrapper.cpp";
 const BINDGEN_FILE: &str = "bindgen_wrapper.h";
+const SKSE_SOLUTION: &str = "../skse64_src/skse64/skse64.sln";
 const MSBUILD: &str = "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Community\\MSBuild\\Current\\Bin\\MSBuild.exe";
+
+/// @brief Gets the running profile type.
+fn get_profile() -> &'static str {
+    let profile = std::env::var("PROFILE");
+    match profile.as_ref().map(|s| s.as_str()) {
+        Ok("debug") => "Debug",
+        Ok("release") => "Release",
+        _ => panic!("{}", "Unknown profile")
+    }
+}
 
 fn main() {
     // Mark our header wrapper as a dep.
     println!("cargo:rerun-if-changed={}", BINDGEN_FILE);
     println!("cargo:rerun-if-changed={}", WRAPPER_FILE);
+    println!("cargo:rerun-if-changed={}", SKSE_SOLUTION);
 
     // Compile our wrapper.
     cc::Build::new()
         .cpp(true)
         .file(WRAPPER_FILE)
-        .cpp_link_stdlib("stdc++")
         .flag("-Isrc/")
         .flag("-I../skse64_src/common/")
         .flag("-I../skse64_src/skse64/skse64_common/")
@@ -45,13 +56,14 @@ fn main() {
     bindings.write_to_file(binding_file).unwrap();
 
     // Build skse64.
+    let vc_profile = get_profile();
     Command::new(MSBUILD).args(
-        &["../skse64_src/skse64/skse64.sln", "-t:Build", "-p:Configuration=Debug"]
+        &[SKSE_SOLUTION, "-t:Build", std::format!("-p:Configuration={}", vc_profile).as_str()]
     ).status().unwrap();
 
     // Add directories to search for libs in.
-    println!("cargo:rustc-link-search=skse64_src/skse64/x64/Debug/");
-    println!("cargo:rustc-link-search=skse64_src/skse64/x64_v142/Debug/");
+    println!("cargo:rustc-link-search=skse64_src/skse64/x64/{}/", vc_profile);
+    println!("cargo:rustc-link-search=skse64_src/skse64/x64_v142/{}/", vc_profile);
 
     // Link in skse64.
     println!("cargo:rustc-link-lib=static=skse64_1_6_323");

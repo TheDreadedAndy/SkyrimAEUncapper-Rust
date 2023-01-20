@@ -7,7 +7,7 @@
 
 use std::ffi::c_int;
 
-use skse64::error::skse_assert;
+use skse64::errors::skse_assert;
 
 /// @brief The number of skills the player has.
 pub const SKILL_COUNT: usize = 18;
@@ -43,14 +43,6 @@ pub enum ActorAttribute {
     Stamina,
     /* 0x1b-0x1f unknown */
     CarryWeight = 0x20
-}
-
-/// @brief Encodes the actor attribute data modified at each level up.
-pub struct ActorAttributeLevelUp {
-    pub health: f32,
-    pub magicka: f32,
-    pub stamina: f32,
-    pub carry_weight: f32
 }
 
 impl ActorAttribute {
