@@ -5,9 +5,6 @@
 //! @bug No known bugs.
 //!
 
-// We don't need it.
-#![no_std]
-
 mod bind;
 
 // For macros.
@@ -135,13 +132,13 @@ pub mod version {
 }
 
 pub mod errors {
-    use core::ffi::c_ulong;
+    use core::ffi::{c_ulong, c_char};
     pub use ctypes::cstr;
 
     extern "C" {
         /// @brief SKSE panic function.
         #[link_name = "SKSE64_Errors__assert_failed__"]
-        fn skse_panic_impl(file: *const c_char, line: c_ulong, msg: *const c_char) -> !;
+        pub fn skse_panic_impl(file: *const c_char, line: c_ulong, msg: *const c_char) -> !;
     }
 
     /// @brief Uses the SKSE panic handler to terminate the application.
@@ -153,7 +150,7 @@ pub mod errors {
             let line = $crate::core::line!();
 
             unsafe {
-                skse_panic_impl(file, line as $crate::core::ffi::c_ulong, s);
+                $crate::error::skse_panic_impl(file, line as $crate::core::ffi::c_ulong, s);
             }
         }};
     }
@@ -173,15 +170,18 @@ pub mod errors {
             }
         };
     }
+
+    pub use skse_assert;
+    pub use skse_halt;
 }
 
 /// @brief Wraps the SKSE logging API.
 pub mod log {
-    use core::ffi::{c_int, c_char};
+    use std::ffi::{c_int, c_char, CString};
 
     extern "C" {
         #[link_name = "SKSE64_DebugLog__open_relative__"]
-        fn glog_open_rel(id: c_int, path: *const c_char);
+        pub fn glog_open_rel(id: c_int, path: *const c_char);
 
         #[link_name = "SKSE64_DebugLog__message__"]
         fn glog_message(msg: *const c_char);
@@ -189,6 +189,43 @@ pub mod log {
         #[link_name = "SKSE64_DebugLog__error__"]
         fn glog_error(msg: *const c_char);
     }
+
+    #[doc(hidden)]
+    pub fn skse_message_impl(
+        msg: &str
+    ) {
+        unsafe {
+            // SAFETY: we are giving this fn a valid string.
+            glog_message(CString::new(msg).unwrap().as_c_str().as_ptr());
+        }
+    }
+
+    #[doc(hidden)]
+    pub fn skse_error_impl(
+        msg: &str
+    ) {
+        unsafe {
+            // SAFETY: We are giving this fn a valid string.
+            glog_error(CString::new(msg).unwrap().as_c_str().as_ptr());
+        }
+    }
+
+    #[macro_export]
+    macro_rules! skse_message {
+        ( $($fmt:tt)* ) => {
+            $crate::log::skse_message_impl(::std::fmt::format!($($fmt)*).as_str());
+        };
+    }
+
+    #[macro_export]
+    macro_rules! skse_error {
+        ( $($fmt:tt)* ) => {
+            $crate::log::skse_error_impl(::std::fmt::format!($($fmt)*).as_str());
+        };
+    }
+
+    pub use skse_message;
+    pub use skse_error;
 }
 
 /// @brief Exposes the plugin API data structure.
