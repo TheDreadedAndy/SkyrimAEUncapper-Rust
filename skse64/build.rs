@@ -31,13 +31,23 @@ fn main() {
     println!("cargo:rerun-if-changed={}", SKSE_SOLUTION);
 
     // Compile our wrapper.
-    cc::Build::new()
-        .cpp(true)
+    let mut builder = cc::Build::new();
+    builder.cpp(true)
         .file(WRAPPER_FILE)
         .flag("-Isrc/")
         .flag("-I../skse64_src/common/")
-        .flag("-I../skse64_src/skse64/skse64_common/")
-        .compile("libwrapper.a");
+        .flag("-I../skse64_src/skse64/")
+        .flag("-I../skse64_src/skse64/skse64_common/");
+
+    // Configure profile specific settings for wrapper compilation.
+    if get_profile() == "Debug" {
+        builder.flag("-D_DEBUG").flag("-D_ITERATOR_DEBUG_LEVEL=2");
+        builder.cpp_link_stdlib("msvcrtd"); // Debug dynamic windows stdc++ lib.
+    } else {
+        builder.cpp_link_stdlib("msvcrt"); // Release dynamic windows stdc++ lib.
+    }
+
+    builder.compile("libwrapper.a");
 
     // Generate the bindings.
     let bindings = bindgen::Builder::default()
@@ -64,6 +74,10 @@ fn main() {
     // Add directories to search for libs in.
     println!("cargo:rustc-link-search=skse64_src/skse64/x64/{}/", vc_profile);
     println!("cargo:rustc-link-search=skse64_src/skse64/x64_v142/{}/", vc_profile);
+
+    // Link in windows api.
+    println!("cargo:rustc-link-lib=dylib=comdlg32");
+    println!("cargo:rustc-link-lib=dylib=Shell32");
 
     // Link in skse64.
     println!("cargo:rustc-link-lib=static=skse64_1_6_323");

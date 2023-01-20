@@ -12,6 +12,7 @@
 #include <cstdlib>
 
 #include <common/IPrefix.h>
+#include <Utilities.h>
 #include <SafeWrite.h>
 #include <BranchTrampoline.h>
 
@@ -79,6 +80,15 @@ extern "C" {
             _ERROR(msg);
         } catch(...) {
             HALT("Failed to write error to log.");
+        }
+    }
+
+    const char *
+    SKSE64_Utilities__get_runtime_dir__() {
+        try {
+            return GetRuntimeDirectory().c_str();
+        } catch(...) {
+            HALT("Failed to get runtime directory.");
         }
     }
 
