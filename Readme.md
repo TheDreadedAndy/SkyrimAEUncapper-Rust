@@ -2,17 +2,18 @@
 
 1) Install visual studio 2019.
 2) Use VS2019 installer to install dependencies.
-    a) Windows SDK.
-    b) clang++.
-    c) MSBuild.
-3) Configure SKSE64 (both release and debug profiles).
-    a) Retarget to latest version (DO THIS FIRST).
-    b) Change all compile types to static libs.
-    c) Add common include path to common project.
-    d) Disable all post-build actions.
-    e) Change the C++ runtime library to the DLL version.
-    f) Test build. Should succeed.
-4) Install Rust using rust-up.
-5) define LIBCLANG\_PATH environment variable.
-6) Update path to MSBulid.exe in skse64/build.rs (if different).
-7) Run cargo build.
+    * Windows SDK.
+    * clang++.
+    * MSBuild.
+3) Install SKSE64 src a skse64_src to the workspace directory.
+4) Configure SKSE64 (both release and debug profiles).
+    * Retarget to latest version (DO THIS FIRST).
+    * Change all compile types to static libs.
+    * Add common include path to common project.
+    * Disable all post-build actions.
+    * Change the C++ runtime library to the DLL version.
+    * Test build. Should succeed.
+5) Install Rust using rust-up.
+6) define LIBCLANG\_PATH environment variable.
+7) Update path to MSBulid.exe in skse64/build.rs (if different).
+8) Run cargo build.
