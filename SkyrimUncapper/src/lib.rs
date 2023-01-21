@@ -9,6 +9,8 @@
 
 mod skyrim;
 mod hook_wrappers;
+mod settings;
+mod patcher;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -43,11 +45,11 @@ pub static SKSEPlugin_Version: SKSEPluginVersionData = SKSEPluginVersionData {
 /// The given interface must be valid for this to be safe.
 ///
 #[no_mangle]
-pub unsafe extern "system" fn SKSEPlugin_Load(
-    skse: *const SKSEInterface
+pub extern "system" fn SKSEPlugin_Load(
+    skse: &SKSEInterface
 ) -> bool {
     // "yup no more editor" ~ianpatt
-    if (*skse).isEditor != 0 { return false; }
+    if skse.isEditor != 0 { return false; }
 
     // Prevent reinit.
     static IS_INIT: AtomicBool = AtomicBool::new(false);
@@ -67,14 +69,23 @@ pub unsafe extern "system" fn SKSEPlugin_Load(
         "Compiled: SKSE64 = {}, Skyrim AE = {}\nRunning: SKSE64 = {}, Skyrim AE = {}",
         PACKED_SKSE_VERSION,
         CURRENT_RELEASE_RUNTIME,
-        SkseVersion::from_raw((*skse).skseVersion),
-        SkseVersion::from_raw((*skse).runtimeVersion)
+        SkseVersion::from_raw(skse.skseVersion),
+        SkseVersion::from_raw(skse.runtimeVersion)
     );
 
-    // TODO: Load settings.
-    let _ini_path = get_runtime_dir().join("data/SKSE/SkyrimUncapper.ini");
+    // Load/create the INI file.
+    let ini_path = get_runtime_dir().join("data/SKSE/SkyrimUncapper.ini");
+    if settings::init(&ini_path).is_err() {
+        return false;
+    }
 
-    // TODO: Apply game patches.
+    // Apply game patches.
+    unsafe {
+        // SAFETY: We ensure that we give this function the correct runtime version.
+        if patcher::apply(SkseVersion::from_raw(skse.runtimeVersion)).is_err() {
+            return false;
+        }
+    }
 
     skse_message!("Initialization complete!");
     return true;
