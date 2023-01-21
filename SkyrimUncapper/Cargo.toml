@@ -14,3 +14,6 @@ libc = "0.2.139"
 ctypes = { path = "../ctypes" }
 skse64 = { path = "../skse64" }
 versionlib = { path = "../versionlib" }
+
+[build-dependencies]
+winres = "0.1.12"
