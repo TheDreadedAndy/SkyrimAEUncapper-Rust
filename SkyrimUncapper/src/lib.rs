@@ -10,8 +10,10 @@
 mod skyrim;
 mod hook_wrappers;
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use ctypes::cstr_array;
-use skse64::log::skse_message;
+use skse64::log::{skse_message, skse_error};
 use skse64::version::{SkseVersion, PACKED_SKSE_VERSION, CURRENT_RELEASE_RUNTIME};
 use skse64::plugin_api::{SKSEPluginVersionData, SKSEInterface};
 use skse64::plugin_api::SKSEPluginVersionData_kVersion;
@@ -47,9 +49,18 @@ pub unsafe extern "system" fn SKSEPlugin_Load(
     // "yup no more editor" ~ianpatt
     if (*skse).isEditor != 0 { return false; }
 
-    // TODO: Prevent reinit.
+    // Prevent reinit.
+    static IS_INIT: AtomicBool = AtomicBool::new(false);
+    if IS_INIT.swap(true, Ordering::Relaxed) {
+        skse_error!("Cannot reinitialize library!");
+        return true;
+    }
 
-    // TODO: Open log file.
+    // Create/open log file.
+    let log_file = dirs_next::document_dir().unwrap().join(
+        "My Games/Skyrim Special Edition/SKSE/SkyrimUncapper.log"
+    );
+    skse64::log::open(&log_file);
 
     // Log runtime/skse info.
     skse_message!(
@@ -65,5 +76,6 @@ pub unsafe extern "system" fn SKSEPlugin_Load(
 
     // TODO: Apply game patches.
 
+    skse_message!("Initialization complete!");
     return true;
 }

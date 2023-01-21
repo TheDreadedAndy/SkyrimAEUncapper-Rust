@@ -50,12 +50,11 @@ extern "C" {
     }
 
     void
-    SKSE64_DebugLog__open_relative__(
-        int folder_id,
+    SKSE64_DebugLog__open__(
         const char *path
     ) {
         try {
-            gLog.OpenRelative(folder_id, path);
+            gLog.Open(path);
         } catch(...) {
             HALT("Failed to open log file");
         }
