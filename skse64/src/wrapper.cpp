@@ -168,15 +168,21 @@ extern "C" {
     }
 
     void
-    SKSE64_SafeWrite__safe_write_buf__(
+    SKSE64_SafeWrite__virtual_protect__(
         uintptr_t addr,
-        void *data,
-        size_t len
+        size_t size,
+        uint32_t new_prot,
+        uint32_t *old_prot
     ) {
         try {
-            SafeWriteBuf(addr, data, len);
+            ASSERT(VirtualProtect(
+                reinterpret_cast<void*>(addr),
+                size,
+                new_prot,
+                reinterpret_cast<PDWORD>(old_prot)
+            ));
         } catch(...) {
-            HALT("Failed call to SafeWriteBuf");
+            HALT("Failed to protect memory region");
         }
     }
 

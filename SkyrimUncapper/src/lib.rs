@@ -11,6 +11,7 @@ mod skyrim;
 mod hook_wrappers;
 mod settings;
 mod patcher;
+mod safe;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 

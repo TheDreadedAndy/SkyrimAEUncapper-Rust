@@ -63,6 +63,7 @@ fn main() {
     // Link in windows api.
     println!("cargo:rustc-link-lib=dylib=comdlg32");
     println!("cargo:rustc-link-lib=dylib=Shell32");
+    println!("cargo:rustc-link-lib=dylib=Kernel32");
 
     // Link in skse64.
     println!("cargo:rustc-link-lib=static=skse64_1_6_323");

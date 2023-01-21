@@ -298,13 +298,15 @@ pub mod plugin_api {
 /// @brief Exposes the global branch/local trampolines.
 pub mod trampoline {
     use core::ffi::c_void;
+    use core::ptr::NonNull;
 
     /// @brief Encodes the trampoline which should be operated on.
     #[repr(C)] pub enum Trampoline { Global, Local }
 
     extern "C" {
+        // module == None => "use skyrim module".
         #[link_name = "SKSE64_BranchTrampoline__create__"]
-        pub fn create(t: Trampoline, len: usize, module: *mut c_void);
+        pub fn create(t: Trampoline, len: usize, module: Option<NonNull<c_void>>);
 
         #[link_name = "SKSE64_BranchTrampoline__destroy__"]
         pub fn destroy(t: Trampoline);
@@ -324,31 +326,31 @@ pub mod trampoline {
 }
 
 /// @brief Exposes the safe-write functions.
-pub mod safe_write {
+pub mod safe {
     use core::ffi::c_int;
 
     extern "C" {
-        fn SKSE64_SafeWrite__safe_write_buf__(addr: usize, data: *mut u8, len: usize);
+        fn SKSE64_SafeWrite__virtual_protect__(
+            addr: usize,
+            size: usize,
+            new_prot: u32,
+            old_prot: *mut u32
+        );
         fn SKSE64_SafeWrite__safe_write_jump__(src: usize, dst: usize) -> c_int;
         fn SKSE64_SafeWrite__safe_write_call__(src: usize, dst: usize) -> c_int;
     }
 
-    ///
-    /// @brief Writes out a buffer filled with type T to the given addr.
-    /// @param addr The address to write to.
-    /// @param data The data to write.
-    /// @param len The number of T's to write.
-    ///
-    pub unsafe fn safe_write<T>(
+    /// @brief Temporarily marks the given memory region for read/write, then call the given fn.
+    pub unsafe fn use_region(
         addr: usize,
-        data: *mut T,
-        len: usize
+        size: usize,
+        func: impl FnOnce()
     ) {
-        SKSE64_SafeWrite__safe_write_buf__(
-            addr,
-            data as *mut u8,
-            len * core::mem::size_of::<T>()
-        );
+        const PAGE_EXECUTE_READWRITE: u32 = 0x40;
+        let mut old_prot: u32 = 0;
+        SKSE64_SafeWrite__virtual_protect__(addr, size, PAGE_EXECUTE_READWRITE, &mut old_prot);
+        func();
+        SKSE64_SafeWrite__virtual_protect__(addr, size, old_prot, &mut old_prot);
     }
 
     /// @brief Writes a 5-byte jump to the given address.
