@@ -8,6 +8,7 @@ name = "SkyrimUncapper"
 crate-type = ["cdylib"]
 
 [dependencies]
+rust-ini = "0.18.0"
 ctypes = { path = "../ctypes" }
 skse64 = { path = "../skse64" }
-#versionlib = { path = "../versionlib" }
+versionlib = { path = "../versionlib" }
