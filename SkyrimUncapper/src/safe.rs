@@ -16,23 +16,19 @@ use skse64::errors::skse_assert;
 /// intended code is being overwritten.
 ///
 #[derive(Copy, Clone)]
+#[repr(u8)]
 pub enum Opcode {
     Code(u8),
     Any
 }
 
+/// Identifies a distinct string of binary code within the skyrim binary.
+pub struct Signature(&'static [Opcode]);
+
 /// @brief Generates a new signature out of hex digits and question marks.
 macro_rules! signature {
     ( $($sig:tt)* ) => {
-        [ $crate::safe::signature!(@munch $($sig)*) ]
-    };
-
-    ( @munch $op:literal, $($sig:tt)* ) => {
-        $crate::safe::Opcode::Code($op), $crate::safe::signature!(@munch $($sig)*)
-    };
-
-    ( @munch ?, $($sig:tt)* ) => {
-        $crate::safe::Opcode::Any, $crate::safe::signature!(@munch $($sig)*)
+        $crate::safe::Signature::new(&[ $($crate::safe::signature!(@munch $sig)),* ])
     };
 
     ( @munch $op:literal ) => {
@@ -44,8 +40,48 @@ macro_rules! signature {
     };
 }
 
+impl Signature {
+    /// Creates a new signature structure.
+    pub fn new(
+        sig: &'static [Opcode]
+    ) -> Self {
+        Self(sig)
+    }
+
+    ///
+    /// Checks the given signature against the given memory location.
+    ///
+    /// In order to use this function safely, the address range specified must be
+    /// a valid part of the Skyrim binary.
+    ///
+    pub unsafe fn check(
+        &self,
+        a: usize
+    ) -> Result<(), usize> {
+        if self.0.len() == 0 { return Ok(()); }
+
+        let mut diff = 0;
+        skse64::safe::use_region(a, self.0.len(), || {
+            let mut addr = a as *mut u8;
+            skse_assert!(!addr.is_null());
+            for op in self.0.iter() {
+                if let Opcode::Code(b) = *op {
+                    diff += if b == *addr { 0 } else { 1 };
+                }
+                addr = addr.add(1);
+            }
+        });
+
+        if diff > 0 {
+            Err(diff)
+        } else {
+            Ok(())
+        }
+    }
+}
+
 ///
-/// @brief Uses the SKSE SafeWrite functions to set the given memory location.
+/// Uses the SKSE SafeWrite functions to set the given memory location.
 ///
 /// In order to use this function safely, the given address range must be a valid
 /// part of the skyrim binary.
@@ -60,35 +96,4 @@ pub unsafe fn memset(
     skse64::safe::use_region(a, n, || {
         libc::memset(a as *mut c_void, c as c_int, n);
     });
-}
-
-///
-/// @brief Confirms that the given address contains the given code signature.
-///
-/// In order to use this function safely, the given address range must be a valid
-/// part of the skyrim binary.
-///
-pub unsafe fn sigcheck(
-    a: usize,
-    sig: &[Opcode]
-) -> Result<(), usize> {
-    if sig.len() == 0 { return Ok(()); }
-
-    let mut diff = 0;
-    skse64::safe::use_region(a, sig.len(), || {
-        let mut addr = a as *mut u8;
-        skse_assert!(!addr.is_null());
-        for op in sig.iter() {
-            if let Opcode::Code(b) = *op {
-                diff += if b == *addr { 0 } else { 1 };
-            }
-            addr = addr.add(1);
-        }
-    });
-
-    if diff > 0 {
-        Err(diff)
-    } else {
-        Ok(())
-    }
 }
