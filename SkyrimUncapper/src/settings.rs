@@ -6,6 +6,9 @@
 //! @bug No known bugs.
 //!
 
+mod config;
+mod skills;
+
 use std::path::Path;
 
 // TODO

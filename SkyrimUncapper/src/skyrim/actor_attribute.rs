@@ -45,6 +45,9 @@ pub enum ActorAttribute {
     CarryWeight = 0x20
 }
 
+/// @brief Iterates over the skills of an actor.
+pub struct SkillIterator(Option<ActorAttribute>);
+
 impl ActorAttribute {
     /// @brief Converts a c_int into an ActorAttribute, if it has a known value.
     pub fn from_raw(
@@ -110,5 +113,45 @@ impl ActorAttribute {
             ActorAttribute::Stamina => "Stamina",
             ActorAttribute::CarryWeight => "CarryWeight"
         }
+    }
+}
+
+impl SkillIterator {
+    /// @brief Creates a new skill iterator.
+    pub fn new() -> Self {
+        Self(Some(ActorAttribute::OneHanded))
+    }
+}
+
+impl Iterator for SkillIterator {
+    type Item = ActorAttribute;
+
+    fn next(
+        &mut self
+    ) -> Option<Self::Item> {
+        let ret = self.0.clone();
+        self.0 = match ret {
+            Some(ActorAttribute::OneHanded) => Some(ActorAttribute::TwoHanded),
+            Some(ActorAttribute::TwoHanded) => Some(ActorAttribute::Marksman),
+            Some(ActorAttribute::Marksman) => Some(ActorAttribute::Block),
+            Some(ActorAttribute::Block) => Some(ActorAttribute::Smithing),
+            Some(ActorAttribute::Smithing) => Some(ActorAttribute::HeavyArmor),
+            Some(ActorAttribute::HeavyArmor) => Some(ActorAttribute::LightArmor),
+            Some(ActorAttribute::LightArmor) => Some(ActorAttribute::Pickpocket),
+            Some(ActorAttribute::Pickpocket) => Some(ActorAttribute::LockPicking),
+            Some(ActorAttribute::LockPicking) => Some(ActorAttribute::Sneak),
+            Some(ActorAttribute::Sneak) => Some(ActorAttribute::Alchemy),
+            Some(ActorAttribute::Alchemy) => Some(ActorAttribute::Speechcraft),
+            Some(ActorAttribute::Speechcraft) => Some(ActorAttribute::Alteration),
+            Some(ActorAttribute::Alteration) => Some(ActorAttribute::Conjuration),
+            Some(ActorAttribute::Conjuration) => Some(ActorAttribute::Destruction),
+            Some(ActorAttribute::Destruction) => Some(ActorAttribute::Illusion),
+            Some(ActorAttribute::Illusion) => Some(ActorAttribute::Restoration),
+            Some(ActorAttribute::Restoration) => Some(ActorAttribute::Enchanting),
+            Some(ActorAttribute::Enchanting) => None,
+            None => None,
+            _ => unreachable!()
+        };
+        return ret;
     }
 }

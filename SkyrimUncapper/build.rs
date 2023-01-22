@@ -21,5 +21,5 @@ fn main() {
     res.set("OriginalFilename", RC_FILE);
     res.set("ProductName", RC_NAME);
     res.set("ProductVersion", RC_VERSION);
-    res.compile();
+    res.compile().unwrap();
 }
