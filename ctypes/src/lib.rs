@@ -9,13 +9,9 @@
 
 mod prim;
 mod cstr;
-mod invoker;
-mod extern_method;
 
 pub use prim::*;
 pub use cstr::*;
-pub use invoker::*;
-pub use extern_method::*;
 
 // Necessary for macro hygiene
 pub use ::core;
