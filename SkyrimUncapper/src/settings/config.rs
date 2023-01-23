@@ -5,6 +5,7 @@
 //! @bug No known bugs.
 //!
 
+use std::ops::Deref;
 use ini::Ini;
 
 pub trait IniNamedReadable {
@@ -80,6 +81,15 @@ impl<T: IniNamedReadable> IniDefaultReadable for DefaultIniSection<T> {
     }
 }
 
+impl<T: IniNamedReadable> Deref for DefaultIniSection<T> {
+    type Target = T;
+    fn deref(
+        &self
+    ) -> &Self::Target {
+        &self.field
+    }
+}
+
 impl<T: IniUnnamedReadable + Default> DefaultIniField<T> {
     /// Creates a new INI field with default presets.
     pub fn new(
@@ -96,11 +106,20 @@ impl<T: IniUnnamedReadable + Default> DefaultIniField<T> {
     }
 }
 
-impl<T: IniUnnamedReadable> DefaultIniField<T> {
+impl<T: IniUnnamedReadable> IniDefaultReadable for DefaultIniField<T> {
     fn read_ini_default(
         &mut self,
         ini: &Ini
     ) {
         self.field.read_ini_unnamed(ini, self.section, self.name, self.default);
+    }
+}
+
+impl<T: IniUnnamedReadable> Deref for DefaultIniField<T> {
+    type Target = T;
+    fn deref(
+        &self
+    ) -> &Self::Target {
+        &self.field
     }
 }
