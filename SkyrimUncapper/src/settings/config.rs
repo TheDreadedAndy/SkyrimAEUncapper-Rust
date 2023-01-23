@@ -7,7 +7,7 @@
 
 use ini::Ini;
 
-pub trait IniReadable {
+pub trait IniNamedReadable {
     /// @brief The type of the underlying values.
     type Value: Copy;
 
@@ -17,7 +17,21 @@ pub trait IniReadable {
     /// @param section The section of the INI to read from.
     /// @param default The default value to assume if none is available.
     ///
-    fn read_ini(&mut self, ini: &Ini, section: &str, default: Self::Value);
+    fn read_ini_named(&mut self, ini: &Ini, section: &str, default: Self::Value);
+}
+
+pub trait IniUnnamedReadable {
+    /// @brief The type of the underlying vaules.
+    type Value: Copy;
+
+    ///
+    /// @brief Reads the value of the config item from the given section and key of the INI.
+    /// @param ini The INI to read from.
+    /// @param section The section of the INI to read from.
+    /// @param name The key in the field to read from.
+    /// @param default The default vaule to assume if none is available.
+    ///
+    fn read_ini_unnamed(&mut self, ini: &Ini, section: &str, name: &str, default: Self::Value);
 }
 
 pub trait IniDefaultReadable {
@@ -28,33 +42,65 @@ pub trait IniDefaultReadable {
     fn read_ini_default(&mut self, ini: &Ini);
 }
 
-/// @brief Configures an INI field with default values
-pub struct DefaultIniField<T: IniReadable> {
+/// Configures an INI section with default values
+pub struct DefaultIniSection<T: IniNamedReadable> {
     field: T,
     section: &'static str,
-    default: <T as IniReadable>::Value
+    default: <T as IniNamedReadable>::Value
 }
 
-impl<T: IniReadable> DefaultIniField<T> {
-    /// @brief Creates a new INI field with default presets.
+/// Configures an INI field with default values.
+pub struct DefaultIniField<T: IniUnnamedReadable> {
+    field: T,
+    section: &'static str,
+    name: &'static str,
+    default: <T as IniUnnamedReadable>::Value
+}
+
+impl<T: IniNamedReadable + Default> DefaultIniSection<T> {
+    /// Creates a new INI field with default presets.
     pub fn new(
-        field: T,
         section: &'static str,
-        default: <T as IniReadable>::Value
+        default: <T as IniNamedReadable>::Value
     ) -> Self {
         Self {
-            field,
+            field: T::default(),
             section,
             default
         }
     }
 }
 
-impl<T: IniReadable> IniDefaultReadable for DefaultIniField<T> {
+impl<T: IniNamedReadable> IniDefaultReadable for DefaultIniSection<T> {
     fn read_ini_default(
         &mut self,
         ini: &Ini
     ) {
-        self.field.read_ini(ini, self.section, self.default);
+        self.field.read_ini_named(ini, self.section, self.default);
+    }
+}
+
+impl<T: IniUnnamedReadable + Default> DefaultIniField<T> {
+    /// Creates a new INI field with default presets.
+    pub fn new(
+        section: &'static str,
+        name: &'static str,
+        default: <T as IniUnnamedReadable>::Value
+    ) -> Self {
+        Self {
+            field: T::default(),
+            section,
+            name,
+            default
+        }
+    }
+}
+
+impl<T: IniUnnamedReadable> DefaultIniField<T> {
+    fn read_ini_default(
+        &mut self,
+        ini: &Ini
+    ) {
+        self.field.read_ini_unnamed(ini, self.section, self.name, self.default);
     }
 }

@@ -8,6 +8,8 @@
 
 mod config;
 mod skills;
+mod field;
+mod leveled;
 
 use std::path::Path;
 

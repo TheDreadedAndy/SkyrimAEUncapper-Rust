@@ -7,7 +7,7 @@
 
 use ini::Ini;
 
-use super::config::IniReadable;
+use super::config::IniNamedReadable;
 use crate::skyrim::{ActorAttribute, SkillIterator, SKILL_COUNT};
 
 pub trait IniSkillReadable {
@@ -31,14 +31,9 @@ pub trait IniSkillReadable {
 
 /// Manages per-skill setting groups, allowing them to be read in together.
 #[derive(Default)]
-pub struct IniSkillManager<T>([T; SKILL_COUNT]);
+pub struct IniSkillManager<T: Default>([T; SKILL_COUNT]);
 
 impl<T: IniSkillReadable + Default> IniSkillManager<T> {
-    /// Creates a new managed skill configuration.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     /// Gets the configuration item for the given skill.
     pub fn get(
         &self,
@@ -48,10 +43,10 @@ impl<T: IniSkillReadable + Default> IniSkillManager<T> {
     }
 }
 
-impl<T: IniSkillReadable> IniReadable for IniSkillManager<T> {
+impl<T: IniSkillReadable + Default> IniNamedReadable for IniSkillManager<T> {
     type Value = <T as IniSkillReadable>::Value;
 
-    fn read_ini(
+    fn read_ini_named(
         &mut self,
         ini: &Ini,
         section: &str,
