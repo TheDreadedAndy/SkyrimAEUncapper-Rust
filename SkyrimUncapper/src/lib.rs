@@ -16,8 +16,6 @@ mod settings;
 mod patcher;
 mod safe;
 
-use std::sync::atomic::{AtomicBool, Ordering};
-
 use ctypes::cstr_array;
 use skse64::log::{skse_message, skse_error};
 use skse64::version::{SkseVersion, PACKED_SKSE_VERSION, CURRENT_RELEASE_RUNTIME};
@@ -32,7 +30,7 @@ use skse64::utilities::get_runtime_dir;
 pub static SKSEPlugin_Version: SKSEPluginVersionData = SKSEPluginVersionData {
     dataVersion: SKSEPluginVersionData_kVersion as u32,
     pluginVersion: 2,
-    name: cstr_array("SkyrimUncapperAE"),
+    name: cstr_array("SkyrimUncapper"),
     author: cstr_array("Andrew Spaulding (Kasplat)"),
     supportEmail: cstr_array("andyespaulding@gmail.com"),
     versionIndependenceEx: SKSEPluginVersionData_kVersionIndependentEx_NoStructUse as u32,
@@ -44,25 +42,12 @@ pub static SKSEPlugin_Version: SKSEPluginVersionData = SKSEPluginVersionData {
 ///
 /// Plugin entry point.
 ///
-/// Called by the SKSE64 crate when our plugin is loaded.
+/// Called by the SKSE64 crate when our plugin is loaded. This function will only be called once.
 ///
 #[no_mangle]
 pub fn skse_plugin_rust_entry(
     skse: &SKSEInterface
 ) -> Result<(), ()> {
-    // Prevent reinit.
-    static IS_INIT: AtomicBool = AtomicBool::new(false);
-    if IS_INIT.swap(true, Ordering::Relaxed) {
-        skse_error!("Cannot reinitialize library!");
-        return Err(());
-    }
-
-    // Create/open log file.
-    let log_file = dirs_next::document_dir().unwrap().join(
-        "My Games/Skyrim Special Edition/SKSE/SkyrimUncapper.log"
-    );
-    skse64::log::open(&log_file);
-
     // Log runtime/skse info.
     skse_message!(
         "Compiled: SKSE64 = {}, Skyrim AE = {}\nRunning: SKSE64 = {}, Skyrim AE = {}",
@@ -73,8 +58,7 @@ pub fn skse_plugin_rust_entry(
     );
 
     // Load/create the INI file.
-    let ini_path = get_runtime_dir().join("data/SKSE/SkyrimUncapper.ini");
-    settings::init(&ini_path)?;
+    settings::init(&get_runtime_dir().join("data\\SKSE\\Plugins\\SkyrimUncapper.ini"))?;
 
     // SAFETY: We ensure that we give this function the correct runtime version.
     unsafe { patcher::apply()?; }

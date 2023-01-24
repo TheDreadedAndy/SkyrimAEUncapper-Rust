@@ -16,6 +16,7 @@ use std::path::Path;
 use once_cell::sync::OnceCell;
 use ini::Ini;
 use skse64::errors::{skse_assert, skse_halt};
+use skse64::log::skse_message;
 
 use field::IniField;
 use skills::IniSkillManager;
@@ -81,9 +82,9 @@ static SETTINGS: OnceCell<Settings> = OnceCell::new();
 impl Settings {
     /// Creates a new settings structure, with default values for missing fields.
     fn new() -> Self {
-        const GEN_SEC: &str = "";
-        const EN_SEC: &str = "";
-        const LEG_SEC: &str = "";
+        const GEN_SEC: &'static str = "General";
+        const EN_SEC: &'static str = "Enchanting";
+        const LEG_SEC: &'static str = "LegendarySkill";
 
         Self {
             general: GeneralSettings {
@@ -191,10 +192,14 @@ impl Settings {
 pub fn init(
     path: &Path
 ) -> Result<(), ()> {
-    let ini = Ini::load_from_file(path).map_err(|_| ())?;
+    skse_message!("Loading config file: {}", path.display());
+
     let mut settings = Settings::new();
+    let ini = Ini::load_from_file(path).map_err(|_| ())?;
     settings.read_ini(&ini);
     skse_assert!(SETTINGS.set(settings).is_ok());
+
+    skse_message!("Successfully loaded config file.");
     Ok(())
 }
 

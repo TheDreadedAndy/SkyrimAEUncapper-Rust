@@ -234,7 +234,7 @@ pub mod log {
     }
 
     /// @brief Opens the file pointed to by the path as the log file for the plugin.
-    pub fn open(
+    pub (in crate) fn open(
         path: &Path
     ) {
         unsafe {
@@ -393,9 +393,20 @@ pub mod safe {
     }
 }
 
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::ffi::CStr;
+
 use version::{RUNNING_GAME_VERSION, RUNNING_SKSE_VERSION};
 use version::SkseVersion;
-use plugin_api::SKSEInterface;
+use plugin_api::{SKSEInterface, SKSEPluginVersionData};
+
+extern "Rust" {
+    /// Entry point for plugins using this crate.
+    fn skse_plugin_rust_entry(skse: &SKSEInterface) -> Result<(), ()>;
+
+    /// Used to name the log file.
+    static SKSEPlugin_Version: SKSEPluginVersionData;
+}
 
 ///
 /// SKSE plugin entry point.
@@ -404,10 +415,25 @@ use plugin_api::SKSEInterface;
 /// something more "Rust" like and performing any necessary initialization.
 ///
 #[no_mangle]
-pub unsafe extern "system" fn SKSEPlugin_load(
+pub unsafe extern "system" fn SKSEPlugin_Load(
     skse: *const SKSEInterface
 ) -> bool {
-    skse_assert!(!skse.is_null());
+    // Before we do anything else, we try and open up a log file.
+    log::open(&dirs_next::document_dir().unwrap().join(
+        format!(
+            "My Games/Skyrim Special Edition/SKSE/{}.log",
+            CStr::from_ptr(SKSEPlugin_Version.name.as_ptr()).to_str().unwrap()
+        )
+    ));
+
+    // Prevent reinit.
+    static IS_INIT: AtomicBool = AtomicBool::new(false);
+    if IS_INIT.swap(true, Ordering::Relaxed) {
+        skse_error!("Cannot reinitialize library!");
+        return false;
+    }
+
+    skse_assert!(!(skse.is_null()));
 
     // "yup, no more editor" ~ianpatt
     if (*skse).isEditor != 0 { return false; }
@@ -417,8 +443,5 @@ pub unsafe extern "system" fn SKSEPlugin_load(
     skse_assert!(RUNNING_GAME_VERSION.set(SkseVersion::from_raw((*skse).runtimeVersion)).is_ok());
 
     // Call the rust entry point.
-    extern "Rust" {
-        fn skse_plugin_rust_entry(skse: &SKSEInterface) -> Result<(), ()>;
-    }
     return skse_plugin_rust_entry(skse.as_ref().unwrap()).is_ok();
 }

@@ -5,6 +5,7 @@
 //! @bug No known bugs.
 //!
 
+use std::fmt::Debug;
 use std::str::FromStr;
 use std::string::ToString;
 
@@ -28,7 +29,7 @@ impl<T: Copy + Default> IniField<T> {
 }
 
 impl<T: Copy + FromStr + ToString + Default> IniUnnamedReadable for IniField<T>
-    where <T as FromStr>::Err: std::fmt::Debug
+    where <T as FromStr>::Err: Debug
 {
     type Value = T;
     fn read_ini_unnamed(
