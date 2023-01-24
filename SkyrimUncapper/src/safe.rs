@@ -83,7 +83,7 @@ impl Signature {
     pub fn len(
         &self
     ) -> usize {
-        self.len()
+        self.0.len()
     }
 }
 

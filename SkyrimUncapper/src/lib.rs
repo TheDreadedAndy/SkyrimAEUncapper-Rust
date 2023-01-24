@@ -39,24 +39,19 @@ pub static SKSEPlugin_Version: SKSEPluginVersionData = SKSEPluginVersionData {
 };
 
 ///
-/// @brief SKSE plugin entrypoint.
+/// Plugin entry point.
 ///
-/// Called by SKSE when our plugin is loaded.
-///
-/// The given interface must be valid for this to be safe.
+/// Called by the SKSE64 crate when our plugin is loaded.
 ///
 #[no_mangle]
-pub extern "system" fn SKSEPlugin_Load(
+pub fn skse_plugin_rust_entry(
     skse: &SKSEInterface
-) -> bool {
-    // "yup no more editor" ~ianpatt
-    if skse.isEditor != 0 { return false; }
-
+) -> Result<(), ()> {
     // Prevent reinit.
     static IS_INIT: AtomicBool = AtomicBool::new(false);
     if IS_INIT.swap(true, Ordering::Relaxed) {
         skse_error!("Cannot reinitialize library!");
-        return true;
+        return Err(());
     }
 
     // Create/open log file.
@@ -76,18 +71,11 @@ pub extern "system" fn SKSEPlugin_Load(
 
     // Load/create the INI file.
     let ini_path = get_runtime_dir().join("data/SKSE/SkyrimUncapper.ini");
-    if settings::init(&ini_path).is_err() {
-        return false;
-    }
+    settings::init(&ini_path)?;
 
-    // Apply game patches.
-    unsafe {
-        // SAFETY: We ensure that we give this function the correct runtime version.
-        if patcher::apply(SkseVersion::from_raw(skse.runtimeVersion)).is_err() {
-            return false;
-        }
-    }
+    // SAFETY: We ensure that we give this function the correct runtime version.
+    unsafe { patcher::apply()?; }
 
     skse_message!("Initialization complete!");
-    return true;
+    Ok(())
 }

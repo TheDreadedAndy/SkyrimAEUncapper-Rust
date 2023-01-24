@@ -17,6 +17,7 @@ pub use core;
 ///
 pub mod version {
     use std::fmt::{Display, Formatter, Error};
+    use once_cell::sync::OnceCell;
 
     pub use crate::bind::{SKSE_VERSION_INTEGER, SKSE_VERSION_INTEGER_MINOR};
     pub use crate::bind::{SKSE_VERSION_INTEGER_BETA, SKSE_VERSION_VERSTRING};
@@ -27,6 +28,71 @@ pub mod version {
     #[derive(Copy, Clone, PartialOrd, Ord, PartialEq, Eq)]
     #[repr(transparent)]
     pub struct SkseVersion(u32);
+
+    pub const RUNTIME_VERSION_1_1_47: SkseVersion =
+        SkseVersion::new(1, 1, 47, RUNTIME_TYPE_BETHESDA);
+    pub const RUNTIME_VERSION_1_1_51: SkseVersion =
+        SkseVersion::new(1, 1, 51, RUNTIME_TYPE_BETHESDA);
+    pub const RUNTIME_VERSION_1_2_36: SkseVersion =
+        SkseVersion::new(1, 2, 36, RUNTIME_TYPE_BETHESDA);
+    pub const RUNTIME_VERSION_1_2_39: SkseVersion =
+        SkseVersion::new(1, 2, 39, RUNTIME_TYPE_BETHESDA);
+    pub const RUNTIME_VERSION_1_3_5: SkseVersion =
+        SkseVersion::new(1, 3, 5, RUNTIME_TYPE_BETHESDA);
+    pub const RUNTIME_VERSION_1_3_9: SkseVersion =
+        SkseVersion::new(1, 3, 9, RUNTIME_TYPE_BETHESDA);
+    pub const RUNTIME_VERSION_1_4_2: SkseVersion =
+        SkseVersion::new(1, 4, 2, RUNTIME_TYPE_BETHESDA);
+    pub const RUNTIME_VERSION_1_5_3: SkseVersion =
+        SkseVersion::new(1, 5, 3, RUNTIME_TYPE_BETHESDA);
+    pub const RUNTIME_VERSION_1_5_16: SkseVersion =
+        SkseVersion::new(1, 5, 16, RUNTIME_TYPE_BETHESDA);
+    pub const RUNTIME_VERSION_1_5_23: SkseVersion =
+        SkseVersion::new(1, 5, 23, RUNTIME_TYPE_BETHESDA);
+    pub const RUNTIME_VERSION_1_5_39: SkseVersion =
+        SkseVersion::new(1, 5, 39, RUNTIME_TYPE_BETHESDA);
+    pub const RUNTIME_VERSION_1_5_50: SkseVersion =
+        SkseVersion::new(1, 5, 50, RUNTIME_TYPE_BETHESDA);
+    pub const RUNTIME_VERSION_1_5_53: SkseVersion =
+        SkseVersion::new(1, 5, 53, RUNTIME_TYPE_BETHESDA);
+    pub const RUNTIME_VERSION_1_5_62: SkseVersion =
+        SkseVersion::new(1, 5, 62, RUNTIME_TYPE_BETHESDA);
+    pub const RUNTIME_VERSION_1_5_73: SkseVersion =
+        SkseVersion::new(1, 5, 73, RUNTIME_TYPE_BETHESDA);
+    pub const RUNTIME_VERSION_1_5_80: SkseVersion =
+        SkseVersion::new(1, 5, 80, RUNTIME_TYPE_BETHESDA);
+    pub const RUNTIME_VERSION_1_5_97: SkseVersion =
+        SkseVersion::new(1, 5, 97, RUNTIME_TYPE_BETHESDA);
+    pub const RUNTIME_VERSION_1_6_317: SkseVersion =
+        SkseVersion::new(1, 6, 317, RUNTIME_TYPE_BETHESDA);
+    pub const RUNTIME_VERSION_1_6_318: SkseVersion =
+        SkseVersion::new(1, 6, 318, RUNTIME_TYPE_BETHESDA);
+    pub const RUNTIME_VERSION_1_6_323: SkseVersion =
+        SkseVersion::new(1, 6, 323, RUNTIME_TYPE_BETHESDA);
+    pub const RUNTIME_VERSION_1_6_342: SkseVersion =
+        SkseVersion::new(1, 6, 342, RUNTIME_TYPE_BETHESDA);
+    pub const RUNTIME_VERSION_1_6_353: SkseVersion =
+        SkseVersion::new(1, 6, 353, RUNTIME_TYPE_BETHESDA);
+    pub const RUNTIME_VERSION_1_6_629: SkseVersion =
+        SkseVersion::new(1, 6, 629, RUNTIME_TYPE_BETHESDA);
+    pub const RUNTIME_VERSION_1_6_640: SkseVersion =
+        SkseVersion::new(1, 6, 640, RUNTIME_TYPE_BETHESDA);
+    pub const RUNTIME_VERSION_1_6_659_GOG: SkseVersion =
+        SkseVersion::new(1, 6, 659, RUNTIME_TYPE_GOG);
+    pub const RUNTIME_VERSION_1_6_678_EPIC: SkseVersion =
+        SkseVersion::new(1, 6, 678, RUNTIME_TYPE_EPIC);
+
+    pub const CURRENT_RELEASE_RUNTIME: SkseVersion = RUNTIME_VERSION_1_6_640;
+    pub const PACKED_SKSE_VERSION: SkseVersion = SkseVersion::new(
+        SKSE_VERSION_INTEGER,
+        SKSE_VERSION_INTEGER_MINOR,
+        SKSE_VERSION_INTEGER_BETA,
+        RUNTIME_TYPE_BETHESDA
+    );
+
+    /// Holds the running game/skse version. Initialized by the entry point.
+    pub (in super) static RUNNING_GAME_VERSION: OnceCell<SkseVersion> = OnceCell::new();
+    pub (in super) static RUNNING_SKSE_VERSION: OnceCell<SkseVersion> = OnceCell::new();
 
     impl SkseVersion {
         const fn new(
@@ -96,66 +162,15 @@ pub mod version {
         }
     }
 
-    pub const RUNTIME_VERSION_1_1_47: SkseVersion =
-        SkseVersion::new(1, 1, 47, RUNTIME_TYPE_BETHESDA);
-    pub const RUNTIME_VERSION_1_1_51: SkseVersion =
-        SkseVersion::new(1, 1, 51, RUNTIME_TYPE_BETHESDA);
-    pub const RUNTIME_VERSION_1_2_36: SkseVersion =
-        SkseVersion::new(1, 2, 36, RUNTIME_TYPE_BETHESDA);
-    pub const RUNTIME_VERSION_1_2_39: SkseVersion =
-        SkseVersion::new(1, 2, 39, RUNTIME_TYPE_BETHESDA);
-    pub const RUNTIME_VERSION_1_3_5: SkseVersion =
-        SkseVersion::new(1, 3, 5, RUNTIME_TYPE_BETHESDA);
-    pub const RUNTIME_VERSION_1_3_9: SkseVersion =
-        SkseVersion::new(1, 3, 9, RUNTIME_TYPE_BETHESDA);
-    pub const RUNTIME_VERSION_1_4_2: SkseVersion =
-        SkseVersion::new(1, 4, 2, RUNTIME_TYPE_BETHESDA);
-    pub const RUNTIME_VERSION_1_5_3: SkseVersion =
-        SkseVersion::new(1, 5, 3, RUNTIME_TYPE_BETHESDA);
-    pub const RUNTIME_VERSION_1_5_16: SkseVersion =
-        SkseVersion::new(1, 5, 16, RUNTIME_TYPE_BETHESDA);
-    pub const RUNTIME_VERSION_1_5_23: SkseVersion =
-        SkseVersion::new(1, 5, 23, RUNTIME_TYPE_BETHESDA);
-    pub const RUNTIME_VERSION_1_5_39: SkseVersion =
-        SkseVersion::new(1, 5, 39, RUNTIME_TYPE_BETHESDA);
-    pub const RUNTIME_VERSION_1_5_50: SkseVersion =
-        SkseVersion::new(1, 5, 50, RUNTIME_TYPE_BETHESDA);
-    pub const RUNTIME_VERSION_1_5_53: SkseVersion =
-        SkseVersion::new(1, 5, 53, RUNTIME_TYPE_BETHESDA);
-    pub const RUNTIME_VERSION_1_5_62: SkseVersion =
-        SkseVersion::new(1, 5, 62, RUNTIME_TYPE_BETHESDA);
-    pub const RUNTIME_VERSION_1_5_73: SkseVersion =
-        SkseVersion::new(1, 5, 73, RUNTIME_TYPE_BETHESDA);
-    pub const RUNTIME_VERSION_1_5_80: SkseVersion =
-        SkseVersion::new(1, 5, 80, RUNTIME_TYPE_BETHESDA);
-    pub const RUNTIME_VERSION_1_5_97: SkseVersion =
-        SkseVersion::new(1, 5, 97, RUNTIME_TYPE_BETHESDA);
-    pub const RUNTIME_VERSION_1_6_317: SkseVersion =
-        SkseVersion::new(1, 6, 317, RUNTIME_TYPE_BETHESDA);
-    pub const RUNTIME_VERSION_1_6_318: SkseVersion =
-        SkseVersion::new(1, 6, 318, RUNTIME_TYPE_BETHESDA);
-    pub const RUNTIME_VERSION_1_6_323: SkseVersion =
-        SkseVersion::new(1, 6, 323, RUNTIME_TYPE_BETHESDA);
-    pub const RUNTIME_VERSION_1_6_342: SkseVersion =
-        SkseVersion::new(1, 6, 342, RUNTIME_TYPE_BETHESDA);
-    pub const RUNTIME_VERSION_1_6_353: SkseVersion =
-        SkseVersion::new(1, 6, 353, RUNTIME_TYPE_BETHESDA);
-    pub const RUNTIME_VERSION_1_6_629: SkseVersion =
-        SkseVersion::new(1, 6, 629, RUNTIME_TYPE_BETHESDA);
-    pub const RUNTIME_VERSION_1_6_640: SkseVersion =
-        SkseVersion::new(1, 6, 640, RUNTIME_TYPE_BETHESDA);
-    pub const RUNTIME_VERSION_1_6_659_GOG: SkseVersion =
-        SkseVersion::new(1, 6, 659, RUNTIME_TYPE_GOG);
-    pub const RUNTIME_VERSION_1_6_678_EPIC: SkseVersion =
-        SkseVersion::new(1, 6, 678, RUNTIME_TYPE_EPIC);
+    /// Gets the currently running game version.
+    pub fn current_runtime() -> SkseVersion {
+        *RUNNING_GAME_VERSION.get().unwrap()
+    }
 
-    pub const CURRENT_RELEASE_RUNTIME: SkseVersion = RUNTIME_VERSION_1_6_640;
-    pub const PACKED_SKSE_VERSION: SkseVersion = SkseVersion::new(
-        SKSE_VERSION_INTEGER,
-        SKSE_VERSION_INTEGER_MINOR,
-        SKSE_VERSION_INTEGER_BETA,
-        RUNTIME_TYPE_BETHESDA
-    );
+    /// Gets the currently running SKSE version.
+    pub fn current_skse() -> SkseVersion {
+        *RUNNING_SKSE_VERSION.get().unwrap()
+    }
 }
 
 pub mod errors {
@@ -376,4 +391,34 @@ pub mod safe {
             Err(())
         }
     }
+}
+
+use version::{RUNNING_GAME_VERSION, RUNNING_SKSE_VERSION};
+use version::SkseVersion;
+use plugin_api::SKSEInterface;
+
+///
+/// SKSE plugin entry point.
+///
+/// Wraps the safe rust entry point for SKSE plugins, converting the interface to
+/// something more "Rust" like and performing any necessary initialization.
+///
+#[no_mangle]
+pub unsafe extern "system" fn SKSEPlugin_load(
+    skse: *const SKSEInterface
+) -> bool {
+    skse_assert!(!skse.is_null());
+
+    // "yup, no more editor" ~ianpatt
+    if (*skse).isEditor != 0 { return false; }
+
+    // Set running version to the given value.
+    skse_assert!(RUNNING_SKSE_VERSION.set(SkseVersion::from_raw((*skse).skseVersion)).is_ok());
+    skse_assert!(RUNNING_GAME_VERSION.set(SkseVersion::from_raw((*skse).runtimeVersion)).is_ok());
+
+    // Call the rust entry point.
+    extern "Rust" {
+        fn skse_plugin_rust_entry(skse: &SKSEInterface) -> Result<(), ()>;
+    }
+    return skse_plugin_rust_entry(skse.as_ref().unwrap()).is_ok();
 }

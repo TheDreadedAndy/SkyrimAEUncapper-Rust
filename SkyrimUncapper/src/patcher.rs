@@ -11,7 +11,6 @@
 
 use std::cell::UnsafeCell;
 
-use skse64::version::SkseVersion;
 use skse64::errors::skse_assert;
 use skse64::log::skse_message;
 use versionlib::VersionDb;
@@ -177,8 +176,6 @@ impl<T> RelocAddr<T> {
 unsafe impl<T> Sync for RelocAddr<T> {}
 
 // TODO
-pub unsafe fn apply(
-    _version: SkseVersion
-) -> Result<(), ()> {
+pub unsafe fn apply() -> Result<(), ()> {
     Ok(())
 }
