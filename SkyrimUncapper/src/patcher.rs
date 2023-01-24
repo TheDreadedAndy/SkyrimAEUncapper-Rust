@@ -65,6 +65,16 @@ pub enum RelocPatch {
     }
 }
 
+/// Describes error reasons for why a patch could not be located.
+enum PatchError {
+    Disabled,
+    Missing,
+    Mismatch
+}
+
+/// The result of an attempt to locate a patch.
+type PatchResult = Result<usize, PatchError>;
+
 ///
 /// Contains an address retrieved by the patcher.
 ///
@@ -78,21 +88,21 @@ impl GameLocation {
     fn find(
         &self,
         db: &VersionDb
-    ) -> Result<usize, ()> {
+    ) -> PatchResult {
         match self {
             Self::Offset { base, offset } => {
                 if let Ok(id) = db.find_id_by_offset(*base) {
                     skse_message!("Offset {:#x} has ID {}", base, id);
                     Ok(base + offset)
                 } else {
-                    Err(())
+                    Err(PatchError::Missing)
                 }
             },
             Self::Id { id, offset } => {
                 if let Ok(base) = db.find_offset_by_id(*id) {
                     Ok(base + offset)
                 } else {
-                    Err(())
+                    Err(PatchError::Missing)
                 }
             }
         }
@@ -135,6 +145,50 @@ impl Hook {
             Hook::None => 0,
             Hook::Jump5(_) | Hook::Call5(_) | Hook::DirectJump(_) | Hook::DirectCall(_) => 5,
             Hook::Jump6(_) | Hook::Call6(_) => 6
+        }
+    }
+}
+
+impl RelocPatch {
+    /// Finds the patch and verifies its signature, if applicable.
+    fn find(
+        &self,
+        db: &VersionDb
+    ) -> PatchResult {
+        match self {
+            Self::Object { loc, .. } => loc.find(db),
+            Self::Function { loc, .. } => loc.find(db),
+            Self::Patch { enabled, loc, sig, .. } => {
+                if !enabled() {
+                    return Err(PatchError::Disabled)
+                }
+
+                let addr = loc.find(db)?;
+                unsafe {
+                    // SAFETY: We know addr is in the skyrim binary, since it came from the db.
+                    sig.check(addr).map_err(|_| PatchError::Mismatch)?;
+                }
+                Ok(addr)
+            }
+        }
+    }
+}
+
+impl std::fmt::Display for RelocPatch {
+    fn fmt(
+        &self,
+        f: &mut std::fmt::Formatter<'_>
+    ) -> Result<(), std::fmt::Error> {
+        match self {
+            Self::Object { name, loc, .. } => {
+                write!(f, "Object {} {}", name, loc)
+            },
+            Self::Function { name, loc, .. } => {
+                write!(f, "Function {} {}", name, loc)
+            },
+            Self::Patch { name, loc, .. } => {
+                write!(f, "Patch {} {}", name, loc)
+            }
         }
     }
 }
