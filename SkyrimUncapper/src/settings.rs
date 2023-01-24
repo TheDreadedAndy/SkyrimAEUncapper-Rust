@@ -15,12 +15,13 @@ use std::path::Path;
 
 use once_cell::sync::OnceCell;
 use ini::Ini;
-use skse64::errors::skse_assert;
+use skse64::errors::{skse_assert, skse_halt};
 
 use field::IniField;
 use skills::IniSkillManager;
 use leveled::LeveledIniSection;
 use config::{DefaultIniSection, DefaultIniField, IniDefaultReadable};
+use crate::skyrim::ActorAttribute;
 
 struct GeneralSettings {
     skill_caps_en: DefaultIniField<IniField<bool>>,
@@ -53,12 +54,12 @@ struct Settings {
     legendary: LegendarySettings,
     skill_caps: DefaultIniSection<IniSkillManager<IniField<u32>>>,
     skill_formula_caps: DefaultIniSection<IniSkillManager<IniField<u32>>>,
-    skill_exp_gain_mults: DefaultIniSection<IniSkillManager<IniField<f32>>>,
-    skill_exp_gain_mults_with_skills: DefaultIniSection<IniSkillManager<LeveledIniSection<f32>>>,
-    skill_exp_gain_mults_with_pc_lvl: DefaultIniSection<IniSkillManager<LeveledIniSection<f32>>>,
-    level_exp_gain_mults: DefaultIniSection<IniSkillManager<IniField<f32>>>,
-    level_exp_gain_mults_with_skills: DefaultIniSection<IniSkillManager<LeveledIniSection<f32>>>,
-    level_exp_gain_mults_with_pc_lvl: DefaultIniSection<IniSkillManager<LeveledIniSection<f32>>>,
+    skill_exp_mults: DefaultIniSection<IniSkillManager<IniField<f32>>>,
+    skill_exp_mults_with_skills: DefaultIniSection<IniSkillManager<LeveledIniSection<f32>>>,
+    skill_exp_mults_with_pc_lvl: DefaultIniSection<IniSkillManager<LeveledIniSection<f32>>>,
+    level_exp_mults: DefaultIniSection<IniSkillManager<IniField<f32>>>,
+    level_exp_mults_with_skills: DefaultIniSection<IniSkillManager<LeveledIniSection<f32>>>,
+    level_exp_mults_with_pc_lvl: DefaultIniSection<IniSkillManager<LeveledIniSection<f32>>>,
     perks_at_lvl_up: DefaultIniSection<LeveledIniSection<f32>>,
     hp_at_lvl_up: DefaultIniSection<LeveledIniSection<u32>>,
     hp_at_mp_lvl_up: DefaultIniSection<LeveledIniSection<u32>>,
@@ -108,21 +109,21 @@ impl Settings {
             },
             skill_caps: DefaultIniSection::new("SkillCaps", 100),
             skill_formula_caps: DefaultIniSection::new("SkillFormulaCaps", 100),
-            skill_exp_gain_mults: DefaultIniSection::new("SkillExpGainMults", 1.00),
-            skill_exp_gain_mults_with_skills: DefaultIniSection::new(
+            skill_exp_mults: DefaultIniSection::new("SkillExpGainMults", 1.00),
+            skill_exp_mults_with_skills: DefaultIniSection::new(
                 "SkillExpGainMults\\BaseSkillLevel",
                 1.00
             ),
-            skill_exp_gain_mults_with_pc_lvl: DefaultIniSection::new(
+            skill_exp_mults_with_pc_lvl: DefaultIniSection::new(
                 "SkillExpGainMults\\CharacterLevel",
                 1.00
             ),
-            level_exp_gain_mults: DefaultIniSection::new("LevelSkillExpMults", 1.00),
-            level_exp_gain_mults_with_skills: DefaultIniSection::new(
+            level_exp_mults: DefaultIniSection::new("LevelSkillExpMults", 1.00),
+            level_exp_mults_with_skills: DefaultIniSection::new(
                 "LevelSkillExpMults\\BaseSkillLevel",
                 1.00
             ),
-            level_exp_gain_mults_with_pc_lvl: DefaultIniSection::new(
+            level_exp_mults_with_pc_lvl: DefaultIniSection::new(
                 "LevelSkillExpMults\\CharacterLevel",
                 1.00
             ),
@@ -164,12 +165,12 @@ impl Settings {
         self.legendary.skill_level_after.read_ini_default(ini);
         self.skill_caps.read_ini_default(ini);
         self.skill_formula_caps.read_ini_default(ini);
-        self.skill_exp_gain_mults.read_ini_default(ini);
-        self.skill_exp_gain_mults_with_skills.read_ini_default(ini);
-        self.skill_exp_gain_mults_with_pc_lvl.read_ini_default(ini);
-        self.level_exp_gain_mults.read_ini_default(ini);
-        self.level_exp_gain_mults_with_skills.read_ini_default(ini);
-        self.level_exp_gain_mults_with_pc_lvl.read_ini_default(ini);
+        self.skill_exp_mults.read_ini_default(ini);
+        self.skill_exp_mults_with_skills.read_ini_default(ini);
+        self.skill_exp_mults_with_pc_lvl.read_ini_default(ini);
+        self.level_exp_mults.read_ini_default(ini);
+        self.level_exp_mults_with_skills.read_ini_default(ini);
+        self.level_exp_mults_with_pc_lvl.read_ini_default(ini);
         self.perks_at_lvl_up.read_ini_default(ini);
         self.hp_at_lvl_up.read_ini_default(ini);
         self.hp_at_mp_lvl_up.read_ini_default(ini);
@@ -235,4 +236,137 @@ pub fn is_attr_points_enabled() -> bool {
 /// Checks if the legendary skill patches are enabled.
 pub fn is_legendary_enabled() -> bool {
     SETTINGS.get().unwrap().general.legendary_en.get()
+}
+
+/// Gets the level cap for the given skill.
+pub fn get_skill_cap(
+    skill: ActorAttribute
+) -> f32 {
+    SETTINGS.get().unwrap().skill_caps.get(skill).get() as f32
+}
+
+/// Gets the formula cap for the given skill.
+pub fn get_skill_formula_cap(
+    skill: ActorAttribute
+) -> f32 {
+    SETTINGS.get().unwrap().skill_formula_caps.get(skill).get() as f32
+}
+
+/// Gets the formula cap for magnitude enchantments.
+pub fn get_enchant_magnitude_cap() -> f32 {
+    (SETTINGS.get().unwrap().enchant.magnitude_cap.get() as f32).min(
+        get_skill_formula_cap(ActorAttribute::Enchanting)
+    )
+}
+
+/// Gets the formula cap for weapon-charge enchantments.
+pub fn get_enchant_charge_cap() -> f32 {
+    (SETTINGS.get().unwrap().enchant.charge_cap.get() as f32).min(199.0).min(
+        get_skill_formula_cap(ActorAttribute::Enchanting)
+    )
+}
+
+/// Checks if the weapon charge equation should use a linear charge amount increase per level.
+pub fn is_enchant_charge_linear() -> bool {
+    SETTINGS.get().unwrap().enchant.use_linear_charge.get()
+}
+
+/// Calculates the skill exp gain multiplier for the given skill, skill level, and player level.
+pub fn get_skill_exp_mult(
+    skill: ActorAttribute,
+    skill_level: u32,
+    player_level: u32
+) -> f32 {
+    let s = SETTINGS.get().unwrap();
+    let base_mult = s.skill_exp_mults.get(skill).get();
+    let skill_mult = s.skill_exp_mults_with_skills.get(skill).get_nearest(skill_level);
+    let pc_mult = s.skill_exp_mults_with_pc_lvl.get(skill).get_nearest(player_level);
+    return base_mult * skill_mult * pc_mult;
+}
+
+/// Calculates the level exp gain multiplier for the given skill, skill level, and player level.
+pub fn get_level_exp_mult(
+    skill: ActorAttribute,
+    skill_level: u32,
+    player_level: u32
+) -> f32 {
+    let s = SETTINGS.get().unwrap();
+    let base_mult = s.level_exp_mults.get(skill).get();
+    let skill_mult = s.level_exp_mults_with_skills.get(skill).get_nearest(skill_level);
+    let pc_mult = s.level_exp_mults_with_pc_lvl.get(skill).get_nearest(player_level);
+    return base_mult * skill_mult * pc_mult;
+}
+
+/// Gets the number of perk points the player should receive for reaching the given level.
+pub fn get_perk_delta(
+    player_level: u32
+) -> u32 {
+    SETTINGS.get().unwrap().perks_at_lvl_up.get_cumulative_delta(player_level)
+}
+
+/// Gets the number of (hp, mp, sp, cw) points the player should get for the given level and
+/// attribute selection.
+pub fn get_attribute_level_up(
+    player_level: u32,
+    attr: ActorAttribute
+) -> (f32, f32, f32, f32) {
+    let s = SETTINGS.get().unwrap();
+    match attr {
+        ActorAttribute::Health => (
+            s.hp_at_lvl_up.get_nearest(player_level) as f32,
+            s.mp_at_hp_lvl_up.get_nearest(player_level) as f32,
+            s.sp_at_hp_lvl_up.get_nearest(player_level) as f32,
+            s.cw_at_hp_lvl_up.get_nearest(player_level) as f32
+        ),
+        ActorAttribute::Magicka => (
+            s.hp_at_mp_lvl_up.get_nearest(player_level) as f32,
+            s.mp_at_lvl_up.get_nearest(player_level) as f32,
+            s.sp_at_mp_lvl_up.get_nearest(player_level) as f32,
+            s.cw_at_mp_lvl_up.get_nearest(player_level) as f32
+        ),
+        ActorAttribute::Stamina => (
+            s.hp_at_sp_lvl_up.get_nearest(player_level) as f32,
+            s.mp_at_sp_lvl_up.get_nearest(player_level) as f32,
+            s.sp_at_lvl_up.get_nearest(player_level) as f32,
+            s.cw_at_sp_lvl_up.get_nearest(player_level) as f32
+        ),
+        _ => skse_halt!("Cannot get the attribute level up with an invalid choice.")
+    }
+}
+
+/// Checks if the legendary button should be displayed above a skill with the given level.
+pub fn is_legendary_button_visible(
+    skill_level: u32
+) -> bool {
+    let s = SETTINGS.get().unwrap();
+    (skill_level >= s.legendary.skill_level_en.get()) && !(s.legendary.hide_button.get())
+}
+
+/// Checks if the given skill level is high enough to legendary.
+pub fn is_legendary_available(
+    skill_level: u32
+) -> bool {
+    skill_level >= SETTINGS.get().unwrap().legendary.skill_level_en.get()
+}
+
+/// Gets the level a skill should be set to after being legendaried.
+pub fn get_post_legendary_skill_level(
+    default_reset: f32,
+    base_level: f32
+) -> f32 {
+    let s = SETTINGS.get().unwrap();
+
+    // Check if legendarying should reset the level at all.
+    if s.legendary.keep_skill_level.get() {
+        return base_level;
+    }
+
+    // 0 in the conf file means we should use the default value.
+    let mut reset_level = s.legendary.skill_level_after.get() as f32;
+    if reset_level == 0.0 {
+        reset_level = default_reset;
+    }
+
+    // Don't allow legendarying to raise the skill level.
+    reset_level.min(base_level)
 }
