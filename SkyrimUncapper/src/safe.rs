@@ -78,6 +78,13 @@ impl Signature {
             Ok(())
         }
     }
+
+    /// Checks how long the signature is.
+    pub fn len(
+        &self
+    ) -> usize {
+        self.len()
+    }
 }
 
 ///
