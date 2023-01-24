@@ -7,3 +7,10 @@ members = [
     "versionlib",
     "SkyrimUncapper"
 ]
+
+[profile.release]
+opt-level = 'z'
+
+[profile.dev]
+# O0 is just impossible to read.
+opt-level = 1

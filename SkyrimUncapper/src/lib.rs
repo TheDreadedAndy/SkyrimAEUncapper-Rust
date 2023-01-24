@@ -7,6 +7,9 @@
 //! @bug No known bugs.
 //!
 
+// Our crate name is stupid, for historical reasons.
+#![allow(non_snake_case)]
+
 mod skyrim;
 mod hook_wrappers;
 mod settings;

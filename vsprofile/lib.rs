@@ -40,9 +40,11 @@ impl VsProfile {
         match self {
             Self::Debug => {
                 builder.flag("-D_DEBUG").flag("-D_ITERATOR_DEBUG_LEVEL=2");
+                builder.opt_level_str("1");
                 builder.cpp_link_stdlib("msvcrtd"); // Debug dynamic windows stdc++ lib.
             }
             Self::Release => {
+                builder.opt_level_str("z");
                 builder.cpp_link_stdlib("msvcrt"); // Release dynamic windows stdc++ lib.
             }
         }
