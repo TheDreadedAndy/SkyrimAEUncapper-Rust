@@ -15,21 +15,37 @@ use std::ffi::c_int;
 use skse64::errors::skse_assert;
 
 use crate::settings;
-use crate::patcher::RelocPatch;
+use crate::patcher::{RelocPatch, Hook, HookFn, GameLocation};
+use crate::safe::signature;
 use crate::skyrim::{ActorAttribute, ActorValueOwner, PlayerSkills};
 use crate::skyrim::{player_avo_get_current_original, get_game_setting};
-
-disarray::disarray! {
-    /// The hooks which must be installed by the game patcher.
-    pub static HOOK_SIGNATURES: [RelocPatch; NUM_HOOK_SIGNATURES] = [
-    ];
-}
 
 /// Formats a string as a game variable string.
 macro_rules! game_var {
     ( $str:literal ) => {
         ::std::concat!($str, "\0").as_bytes()
     }
+}
+
+disarray::disarray! {
+    /// The hooks which must be installed by the game patcher.
+    pub static HOOK_SIGNATURES: [RelocPatch; NUM_HOOK_SIGNATURES] = [
+        //
+        // Injects the code which alters the real skill cap of each skill.
+        //
+        // Note that the last two bytes of this patch must be overwritten with NOPs
+        // and returned to, at the request of the author of the eXPerience mod (17751).
+        // This is handled by the patcher, we need only make our signature long enough.
+        //
+        RelocPatch::Patch {
+            name: "GetSkillCap",
+            enabled: settings::is_skill_cap_enabled,
+            hook: Hook::Call6(unsafe { HookFn::new(&get_skill_cap_hook) }),
+            loc: GameLocation::Id { id: 41561, offset: 0x76 },
+            sig: signature![0xf3, 0x44, 0x0f, 0x10, 0x15, ?, ?, ?, ?],
+            trampoline: None
+        }
+    ];
 }
 
 /// Determines the real skill cap of the given skill.

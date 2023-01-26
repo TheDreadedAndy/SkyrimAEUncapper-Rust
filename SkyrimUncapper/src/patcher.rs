@@ -23,6 +23,7 @@ use skse64::log::{skse_message, skse_error};
 use skse64::trampoline::Trampoline;
 use versionlib::VersionDb;
 
+use crate::safe;
 use crate::safe::Signature;
 use crate::skyrim::GAME_SIGNATURES;
 use crate::hooks::{HOOK_SIGNATURES, NUM_HOOK_SIGNATURES};
@@ -44,12 +45,12 @@ pub enum GameLocation {
 /// Encodes the type of hook which is being used by a patch.
 pub enum Hook {
     None,
-    Jump5(usize),
-    Jump6(usize),
-    DirectJump(usize),
-    Call5(usize),
-    Call6(usize),
-    DirectCall(usize)
+    Jump5(HookFn),
+    Jump6(HookFn),
+    DirectJump(HookFn),
+    Call5(HookFn),
+    Call6(HookFn),
+    DirectCall(HookFn)
 }
 
 /// Describes a location in code to be parsed and acted on by the patcher.
@@ -85,6 +86,11 @@ enum PatchError {
 
 /// The result of an attempt to locate a patch.
 type PatchResult = Result<usize, PatchError>;
+
+/// Stores a function which is used by a hook.
+#[repr(transparent)]
+#[derive(Copy, Clone)]
+pub struct HookFn(*const u8);
 
 ///
 /// Contains an address retrieved by the patcher.
@@ -163,6 +169,39 @@ impl Hook {
             Hook::Jump6(_) | Hook::Call6(_) => 6
         }
     }
+
+    ///
+    /// Installs the given patch.
+    ///
+    /// In order to use this function safely, the given address must be the correct
+    /// location for this patch to be installed to.
+    ///
+    unsafe fn install(
+        &self,
+        addr: usize
+    ) {
+        match self {
+            Self::Jump5(hook) => {
+                skse64::trampoline::write_jump5(Trampoline::Global, addr, hook.addr());
+            },
+            Self::Call5(hook) => {
+                skse64::trampoline::write_call5(Trampoline::Global, addr, hook.addr());
+            },
+            Self::Jump6(hook) => {
+                skse64::trampoline::write_jump6(Trampoline::Global, addr, hook.addr());
+            },
+            Self::Call6(hook) => {
+                skse64::trampoline::write_call6(Trampoline::Global, addr, hook.addr());
+            },
+            Self::DirectJump(hook) => {
+                skse64::safe::write_jump(addr, hook.addr()).unwrap();
+            },
+            Self::DirectCall(hook) => {
+                skse64::safe::write_call(addr, hook.addr()).unwrap();
+            },
+            Self::None => skse_halt!("Cannot install to a None hook!")
+        }
+    }
 }
 
 impl RelocPatch {
@@ -214,24 +253,54 @@ impl RelocPatch {
         }
     }
 
-    /// Gets the result structure for this patch.
+    /// Gets the number of bytes in the game code this patch expects to alter.
+    fn size(
+        &self
+    ) -> usize {
+        match self {
+            Self::Patch { sig, .. } => sig.len(),
+            _ => 0
+        }
+    }
+
+    /// Gets the result structure for this patch, if available
     fn result(
         &self
-    ) -> Result<RelocResult, ()> {
+    ) -> Option<RelocResult> {
         match self {
-            Self::Object { result, .. } => Ok(*result),
-            Self::Function { result, .. } => Ok(*result),
-            _ => Err(())
+            Self::Object { result, .. } => Some(*result),
+            Self::Function { result, .. } => Some(*result),
+            _ => None
         }
     }
 
     /// Gets the hook for this patch.
     fn hook<'a>(
         &'a self
-    ) -> Result<&'a Hook, ()> {
+    ) -> Option<&'a Hook> {
         match self {
-            Self::Patch { hook, .. } => Ok(hook),
-            _ => Err(())
+            Self::Patch { hook, .. } => Some(hook),
+            _ => None
+        }
+    }
+
+    /// Gets the trampoline for this patch, if available.
+    fn trampoline(
+        &self
+    ) -> Option<RelocResult> {
+        match self {
+            Self::Patch { trampoline, .. } => *trampoline,
+            _ => None
+        }
+    }
+
+    /// Checks if the given patch is disabled.
+    fn disabled(
+        &self
+    ) -> bool {
+        match self {
+            Self::Patch { enabled, .. } => !enabled(),
+            _ => false
         }
     }
 }
@@ -252,6 +321,27 @@ impl std::fmt::Display for RelocPatch {
                 write!(f, "Patch {} {}", name, loc)
             }
         }
+    }
+}
+
+impl HookFn {
+    ///
+    /// Creates a new hook function type.
+    ///
+    /// In order to use this function safely, the function type
+    /// must be a valid extern "system" fn.
+    ///
+    pub const unsafe fn new<F>(
+        func: &F
+    ) -> Self {
+        Self(unsafe { ::std::mem::transmute(func) })
+    }
+
+    /// Gets the underlying address of the hook function.
+    pub fn addr(
+        self
+    ) -> usize {
+        self.0 as usize
     }
 }
 
@@ -309,6 +399,7 @@ impl RelocResult {
 }
 
 // Lie.
+unsafe impl Sync for HookFn {}
 unsafe impl<T> Sync for RelocAddr<T> {}
 unsafe impl Sync for RelocResult {}
 
@@ -349,6 +440,12 @@ pub fn apply() -> Result<(), ()> {
 
     skse_message!("-------------------------------------");
 
+    if fails > 0 {
+        skse_message!("Could not locate every game signature!");
+        return Err(())
+    }
+
+    // Allocate our branch trampoline.
     if alloc_size > 0 {
         skse_message!("Creating a branch trampoline buffer with {} bytes of space", alloc_size);
 
@@ -358,11 +455,24 @@ pub fn apply() -> Result<(), ()> {
         skse_message!("Everything is disabled...");
     }
 
-    // TODO: Apply patches.
+    // Install our patches.
+    for (i, sig) in HOOK_SIGNATURES.iter().enumerate() {
+        if sig.disabled() { continue; }
 
-    if fails == 0 {
-        Ok(())
-    } else {
-        Err(())
+        let hook_size = sig.hook().unwrap().patch_size();
+        let ret_addr = res_addrs[i] + hook_size;
+        if let Some(t) = sig.trampoline() {
+            // SAFETY: We will ensure our return address is valid by writing NOPS to any bytes
+            //         that are part of the patch and after the return address.
+            unsafe { t.write(ret_addr); }
+        }
+
+        unsafe {
+            // SAFETY: We have matched signatures to ensure our patch is valid.
+            sig.hook().unwrap().install(res_addrs[i]);
+            safe::memset(ret_addr, 0x90, sig.size() - hook_size);
+        }
     }
+
+    Ok(())
 }

@@ -27,7 +27,7 @@ pub struct Signature(&'static [Opcode]);
 
 /// @brief Generates a new signature out of hex digits and question marks.
 macro_rules! signature {
-    ( $($sig:tt)* ) => {
+    ( $($sig:tt),* ) => {
         $crate::safe::Signature::new(&[ $($crate::safe::signature!(@munch $sig)),* ])
     };
 
@@ -39,10 +39,11 @@ macro_rules! signature {
         $crate::safe::Opcode::Any
     };
 }
+pub (in crate) use signature;
 
 impl Signature {
     /// Creates a new signature structure.
-    pub fn new(
+    pub const fn new(
         sig: &'static [Opcode]
     ) -> Self {
         Self(sig)

@@ -382,7 +382,7 @@ pub mod safe {
     }
 
     /// @brief Writes a 5-byte jump to the given address.
-    pub unsafe fn safe_write_jump(
+    pub unsafe fn write_jump(
         src: usize,
         dst: usize
     ) -> Result<(), ()> {
@@ -394,7 +394,7 @@ pub mod safe {
     }
 
     /// @brief Writes a 5-byte call to the given address.
-    pub unsafe fn safe_write_call(
+    pub unsafe fn write_call(
         src: usize,
         dst: usize
     ) -> Result<(), ()> {
