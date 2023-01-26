@@ -5,7 +5,7 @@
 //! @bug No known bugs.
 //!
 
-#[no_std]
+#![no_std]
 
 ///
 /// Allows for a dynamically sized initialization of an array, capturing its size
@@ -13,11 +13,21 @@
 ///
 #[macro_export]
 macro_rules! disarray {
+    // Size capturing.
     ( $(#[$meta:meta])* $scope:vis static $arr:ident: [$type:ty; $size:ident] = [
         $($items:expr),*
     ]; ) => {
         $scope const $size: usize = $crate::disarray!(@maybe_count $($items),*);
         $(#[$meta])* $scope static $arr: [$type; $size] = [ $($items),* ];
+    };
+
+    // Non-capturing.
+    ( $(#[$meta:meta])* $scope:vis static $arr:ident: [$type:ty] = [
+        $($items:expr),*
+    ]; ) => {
+        $(#[$meta])* $scope static $arr: [$type; $crate::disarray!(@maybe_count $($items),*)] = [
+            $($items),*
+        ];
     };
 
     // Empty array len angers the compiler (idk).

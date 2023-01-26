@@ -14,6 +14,7 @@
 #include <common/IPrefix.h>
 #include <Utilities.h>
 #include <SafeWrite.h>
+#include <Relocation.h>
 #include <BranchTrampoline.h>
 
 /// @brief The type of trampoline each function should operate on.
@@ -89,6 +90,11 @@ extern "C" {
         } catch(...) {
             HALT("Failed to get runtime directory.");
         }
+    }
+
+    uintptr_t
+    SKSE64_Reloc__base__() {
+        return RelocationManager::s_baseAddr;
     }
 
     void

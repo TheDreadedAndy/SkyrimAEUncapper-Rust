@@ -177,7 +177,7 @@ pub mod errors {
     use core::ffi::{c_ulong, c_char};
     pub use ctypes::cstr;
 
-    extern "C" {
+    extern "system" {
         /// @brief SKSE panic function.
         #[link_name = "SKSE64_Errors__assert_failed__"]
         pub fn skse_panic_impl(file: *const c_char, line: c_ulong, msg: *const c_char) -> !;
@@ -222,7 +222,7 @@ pub mod log {
     use std::ffi::{c_char, CString};
     use std::path::Path;
 
-    extern "C" {
+    extern "system" {
         #[link_name = "SKSE64_DebugLog__open__"]
         fn glog_open(path: *const c_char);
 
@@ -286,7 +286,7 @@ pub mod utilities {
     pub use std::ffi::{c_char, CStr, CString};
     pub use std::path::PathBuf;
 
-    extern "C" {
+    extern "system" {
         fn SKSE64_Utilities__get_runtime_dir__() -> *const c_char;
     }
 
@@ -310,6 +310,19 @@ pub mod plugin_api {
     pub use crate::bind::SKSEPluginVersionData_kVersionIndependentEx_NoStructUse;
 }
 
+/// Exposes a method to get the base address of the game binary.
+pub mod reloc {
+    extern "system" {
+        fn SKSE64_Reloc__base__() -> usize;
+    }
+
+    /// Gets the base address of the skyrim binary.
+    pub fn base() -> usize {
+        // SAFETY: Not actually unsafe lol.
+        unsafe { SKSE64_Reloc__base__() }
+    }
+}
+
 /// @brief Exposes the global branch/local trampolines.
 pub mod trampoline {
     use core::ffi::c_void;
@@ -318,7 +331,7 @@ pub mod trampoline {
     /// @brief Encodes the trampoline which should be operated on.
     #[repr(C)] pub enum Trampoline { Global, Local }
 
-    extern "C" {
+    extern "system" {
         // module == None => "use skyrim module".
         #[link_name = "SKSE64_BranchTrampoline__create__"]
         pub fn create(t: Trampoline, len: usize, module: Option<NonNull<c_void>>);
@@ -344,7 +357,7 @@ pub mod trampoline {
 pub mod safe {
     use core::ffi::c_int;
 
-    extern "C" {
+    extern "system" {
         fn SKSE64_SafeWrite__virtual_protect__(
             addr: usize,
             size: usize,

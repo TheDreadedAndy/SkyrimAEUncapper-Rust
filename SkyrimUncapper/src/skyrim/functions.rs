@@ -42,7 +42,7 @@ disarray::disarray! {
     ///
     /// Used by the patcher to locate our objects/functions.
     ///
-    pub static GAME_SIGNATURES: [RelocPatch; NUM_GAME_SIGNATURES] = [
+    pub static GAME_SIGNATURES: [RelocPatch] = [
         RelocPatch::Object {
             name: "g_thePlayer",
             loc: GameLocation::Id { id: 403521, offset: 0 },

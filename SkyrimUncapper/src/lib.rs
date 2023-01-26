@@ -51,11 +51,12 @@ pub fn skse_plugin_rust_entry(
 ) -> Result<(), ()> {
     // Log runtime/skse info.
     skse_message!(
-        "Compiled: SKSE64 = {}, Skyrim AE = {}\nRunning: SKSE64 = {}, Skyrim AE = {}",
+        "Compiled: SKSE64 {}, Skyrim AE {}\nRunning: SKSE64 {}, Skyrim AE {}\nBase addr: {:#x}",
         PACKED_SKSE_VERSION,
         CURRENT_RELEASE_RUNTIME,
         SkseVersion::from_raw(skse.skseVersion),
-        SkseVersion::from_raw(skse.runtimeVersion)
+        SkseVersion::from_raw(skse.runtimeVersion),
+        skse64::reloc::base()
     );
 
     settings::init(&get_runtime_dir().join("data\\SKSE\\Plugins\\SkyrimUncapper.ini"))?;

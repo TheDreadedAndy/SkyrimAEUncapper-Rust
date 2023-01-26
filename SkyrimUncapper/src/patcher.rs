@@ -20,10 +20,12 @@ use std::cell::UnsafeCell;
 
 use skse64::errors::{skse_assert, skse_halt};
 use skse64::log::{skse_message, skse_error};
+use skse64::trampoline::Trampoline;
 use versionlib::VersionDb;
 
 use crate::safe::Signature;
 use crate::skyrim::GAME_SIGNATURES;
+use crate::hooks::{HOOK_SIGNATURES, NUM_HOOK_SIGNATURES};
 
 /// Tracks a location in the skyrim game binary.
 #[allow(dead_code)]
@@ -98,7 +100,7 @@ pub struct RelocAddr<T>(UnsafeCell<usize>, std::marker::PhantomData<T>);
 pub struct RelocResult(*mut UnsafeCell<usize>);
 
 impl GameLocation {
-    /// Finds the game offset specified by this location.
+    /// Finds the game address specified by this location.
     fn find(
         &self,
         db: &VersionDb
@@ -107,14 +109,14 @@ impl GameLocation {
             Self::Offset { base, offset } => {
                 if let Ok(id) = db.find_id_by_offset(*base) {
                     skse_message!("Offset {:#x} has ID {}", base, id);
-                    Ok(base + offset)
+                    Ok(skse64::reloc::base() + base + offset)
                 } else {
                     Err(PatchError::Missing)
                 }
             },
             Self::Id { id, offset } => {
                 if let Ok(base) = db.find_offset_by_id(*id) {
-                    Ok(base + offset)
+                    Ok(skse64::reloc::base() + base + offset)
                 } else {
                     Err(PatchError::Missing)
                 }
@@ -164,7 +166,7 @@ impl Hook {
 }
 
 impl RelocPatch {
-    /// Finds the patch and verifies its signature, if applicable.
+    /// Finds the address and verifies its signature, if applicable.
     fn find(
         &self,
         db: &VersionDb
@@ -194,7 +196,11 @@ impl RelocPatch {
     ) {
         match res {
             Ok(addr) => {
-                skse_message!("[SUCCESS] {} is at offset {:#x}", self, addr);
+                skse_message!(
+                    "[SUCCESS] {} is at offset {:#x}",
+                    self,
+                    addr - skse64::reloc::base()
+                );
             },
             Err(PatchError::Disabled) => {
                 skse_message!("[SKIPPED] {} is disabled", self);
@@ -211,11 +217,21 @@ impl RelocPatch {
     /// Gets the result structure for this patch.
     fn result(
         &self
-    ) -> RelocResult {
+    ) -> Result<RelocResult, ()> {
         match self {
-            Self::Object { result, .. } => *result,
-            Self::Function { result, .. } => *result,
-            Self::Patch { .. } => skse_halt!("Cannot get the result field of a patch type!")
+            Self::Object { result, .. } => Ok(*result),
+            Self::Function { result, .. } => Ok(*result),
+            _ => Err(())
+        }
+    }
+
+    /// Gets the hook for this patch.
+    fn hook<'a>(
+        &'a self
+    ) -> Result<&'a Hook, ()> {
+        match self {
+            Self::Patch { hook, .. } => Ok(hook),
+            _ => Err(())
         }
     }
 }
@@ -300,6 +316,8 @@ unsafe impl Sync for RelocResult {}
 pub fn apply() -> Result<(), ()> {
     let db = VersionDb::new(None);
 
+    skse_message!("---------- Game Signatures ----------");
+
     // Locate any game signatures for objects/functions we call.
     let mut fails = 0;
     for sig in GAME_SIGNATURES.iter() {
@@ -308,11 +326,39 @@ pub fn apply() -> Result<(), ()> {
 
         if let Ok(addr) = res {
             // SAFETY: The version DB ensures we obtained the correct object.
-            unsafe { sig.result().write(addr); }
+            unsafe { sig.result().unwrap().write(addr); }
         } else {
             fails += 1;
         }
     }
+
+    // Attempt to locate all of the patch signatures.
+    let mut res_addrs: [usize; NUM_HOOK_SIGNATURES] = [0; NUM_HOOK_SIGNATURES];
+    let mut alloc_size: usize = 0;
+    for (i, sig) in HOOK_SIGNATURES.iter().enumerate() {
+        let res = sig.find(&db);
+        sig.report(&res);
+        alloc_size += sig.hook().unwrap().alloc_size();
+
+        if let Ok(addr) = res {
+            res_addrs[i] = addr;
+        } else {
+            fails += 1;
+        }
+    }
+
+    skse_message!("-------------------------------------");
+
+    if alloc_size > 0 {
+        skse_message!("Creating a branch trampoline buffer with {} bytes of space", alloc_size);
+
+        // SAFETY: We're not giving an image base, so this is actually safe.
+        unsafe { skse64::trampoline::create(Trampoline::Global, alloc_size, None) };
+    } else {
+        skse_message!("Everything is disabled...");
+    }
+
+    // TODO: Apply patches.
 
     if fails == 0 {
         Ok(())
