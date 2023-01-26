@@ -15,8 +15,15 @@ use std::ffi::c_int;
 use skse64::errors::skse_assert;
 
 use crate::settings;
+use crate::patcher::RelocPatch;
 use crate::skyrim::{ActorAttribute, ActorValueOwner, PlayerSkills};
 use crate::skyrim::{player_avo_get_current_original, get_game_setting};
+
+disarray::disarray! {
+    /// The hooks which must be installed by the game patcher.
+    pub static HOOK_SIGNATURES: [RelocPatch; NUM_HOOK_SIGNATURES] = [
+    ];
+}
 
 /// Formats a string as a game variable string.
 macro_rules! game_var {

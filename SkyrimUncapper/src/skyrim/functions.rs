@@ -36,60 +36,62 @@ static PLAYER_AVO_MOD_CURRENT_ENTRY: RelocAddr<
     fn(*mut ActorValueOwner, u32, ActorAttribute, f32)
 > = RelocAddr::new();
 
-///
-/// Holds the relocatable locations of each object/function exposed by this file.
-///
-/// Used by the patcher to locate our objects/functions.
-///
-pub static GAME_SIGNATURES: &'static [&'static RelocPatch] = &[
-    &RelocPatch::Object {
-        name: "g_thePlayer",
-        loc: GameLocation::Id { id: 403521, offset: 0 },
-        result: PLAYER_OBJECT.inner()
-    },
+disarray::disarray! {
+    ///
+    /// Holds the relocatable locations of each object/function exposed by this file.
+    ///
+    /// Used by the patcher to locate our objects/functions.
+    ///
+    pub static GAME_SIGNATURES: [RelocPatch; NUM_GAME_SIGNATURES] = [
+        RelocPatch::Object {
+            name: "g_thePlayer",
+            loc: GameLocation::Id { id: 403521, offset: 0 },
+            result: PLAYER_OBJECT.inner()
+        },
 
-    &RelocPatch::Object {
-        name: "g_gameSettingCollection",
-        loc: GameLocation::Id { id: 400782, offset: 0 },
-        result: GAME_SETTINGS_OBJECT.inner()
-    },
+        RelocPatch::Object {
+            name: "g_gameSettingCollection",
+            loc: GameLocation::Id { id: 400782, offset: 0 },
+            result: GAME_SETTINGS_OBJECT.inner()
+        },
 
-    &RelocPatch::Function {
-        name: "GetLevel",
-        loc: GameLocation::Id { id: 37334, offset: 0 },
-        result: GET_LEVEL_ENTRY.inner()
-    },
+        RelocPatch::Function {
+            name: "GetLevel",
+            loc: GameLocation::Id { id: 37334, offset: 0 },
+            result: GET_LEVEL_ENTRY.inner()
+        },
 
-    &RelocPatch::Function {
-        name: "GetGameSetting",
-        loc: GameLocation::Id { id: 22788, offset: 0 },
-        result: GET_GAME_SETTING_ENTRY.inner()
-    },
+        RelocPatch::Function {
+            name: "GetGameSetting",
+            loc: GameLocation::Id { id: 22788, offset: 0 },
+            result: GET_GAME_SETTING_ENTRY.inner()
+        },
 
-    &RelocPatch::Function {
-        name: "PlayerAVOGetBase",
-        loc: GameLocation::Id { id: 38464, offset: 0 },
-        result: PLAYER_AVO_GET_BASE_ENTRY.inner()
-    },
+        RelocPatch::Function {
+            name: "PlayerAVOGetBase",
+            loc: GameLocation::Id { id: 38464, offset: 0 },
+            result: PLAYER_AVO_GET_BASE_ENTRY.inner()
+        },
 
-    &RelocPatch::Function {
-        name: "PlayerAVOGetCurrent",
-        loc: GameLocation::Id { id: 38462, offset: 0 },
-        result: PLAYER_AVO_GET_CURRENT_ENTRY.inner()
-    },
+        RelocPatch::Function {
+            name: "PlayerAVOGetCurrent",
+            loc: GameLocation::Id { id: 38462, offset: 0 },
+            result: PLAYER_AVO_GET_CURRENT_ENTRY.inner()
+        },
 
-    &RelocPatch::Function {
-        name: "PlayerAVOModBase",
-        loc: GameLocation::Id { id: 38466, offset: 0 },
-        result: PLAYER_AVO_MOD_BASE_ENTRY.inner()
-    },
+        RelocPatch::Function {
+            name: "PlayerAVOModBase",
+            loc: GameLocation::Id { id: 38466, offset: 0 },
+            result: PLAYER_AVO_MOD_BASE_ENTRY.inner()
+        },
 
-    &RelocPatch::Function {
-        name: "PlayerAVOModCurrent",
-        loc: GameLocation::Id { id: 38467, offset: 0 },
-        result: PLAYER_AVO_MOD_CURRENT_ENTRY.inner()
-    }
-];
+        RelocPatch::Function {
+            name: "PlayerAVOModCurrent",
+            loc: GameLocation::Id { id: 38467, offset: 0 },
+            result: PLAYER_AVO_MOD_CURRENT_ENTRY.inner()
+        }
+    ];
+}
 
 /// Gets the player actor value owner structure.
 fn get_player_avo() -> *mut ActorValueOwner {
