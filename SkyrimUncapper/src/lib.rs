@@ -12,6 +12,7 @@
 
 mod skyrim;
 mod hook_wrappers;
+mod hooks;
 mod settings;
 mod patcher;
 mod safe;

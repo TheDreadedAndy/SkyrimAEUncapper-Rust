@@ -31,7 +31,7 @@ fn main() {
         .flag("-I../skse64_src/skse64/")
         .flag("-I../skse64_src/skse64/skse64_common/");
     vs_profile.config_builder(&mut builder);
-    builder.compile("libwrapper.a");
+    builder.compile("wrapper");
 
     // Generate the bindings.
     let bindings = bindgen::Builder::default()

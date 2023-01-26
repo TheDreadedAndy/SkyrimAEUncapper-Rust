@@ -108,7 +108,7 @@ pub fn get_player_level() -> u16 {
 /// Gets the game setting associated with the null-terminated c-string.
 pub fn get_game_setting(
     var: &[c_char]
-) -> &Setting {
+) -> &'static Setting {
     skse_assert!(var[var.len() - 1] == b'\0' as c_char);
 
     let settings = unsafe { *(GAME_SETTINGS_OBJECT.get()) };

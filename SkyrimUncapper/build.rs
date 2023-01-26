@@ -10,6 +10,8 @@ const RC_NAME: &str = "Skyrim Uncapper AE";
 const RC_VERSION: &str = "2.0.0.0";
 const RC_FILE: &str = "SkyrimUncapper.dll";
 
+const HOOKS_FILE: &str = "src/hook_wrappers.S";
+
 fn main() {
     // Embed resource information.
     let mut res = winres::WindowsResource::new();
@@ -22,4 +24,9 @@ fn main() {
     res.set("ProductName", RC_NAME);
     res.set("ProductVersion", RC_VERSION);
     res.compile().unwrap();
+
+    // Compile our assembly hooks.
+    println!("cargo:rerun-if-changed={}", HOOKS_FILE);
+    let clang = std::path::PathBuf::from(std::env::var("LIBCLANG_PATH").unwrap()).join("clang.exe");
+    cc::Build::new().file(HOOKS_FILE).compiler(clang).compile("hooks");
 }

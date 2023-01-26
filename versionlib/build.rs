@@ -18,5 +18,5 @@ fn main() {
         .flag("-Isrc/")
         .flag("-I../skse64_src/common/");
     vsprofile::VsProfile::get().config_builder(&mut builder);
-    builder.compile("libwrapper.a");
+    builder.compile("wrapper");
 }

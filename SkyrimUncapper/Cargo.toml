@@ -17,3 +17,4 @@ versionlib = { path = "../versionlib" }
 
 [build-dependencies]
 winres = "0.1.12"
+cc = "1.0.78"

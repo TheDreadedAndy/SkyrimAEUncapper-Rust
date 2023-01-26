@@ -132,7 +132,7 @@ PUBLIC_FN(display_true_skill_color_hook)
 PUBLIC_FN(improve_player_skill_points_original)
     mov %rsp, %rax
     push %rdi
-    psuh %r12
+    push %r12
     jmp improve_player_skill_points_return_trampoline
 
 /*
@@ -160,12 +160,12 @@ PUBLIC_FN(improve_level_exp_by_skill_level_wrapper)
     movdqu %xmm6, (%rsp) // Save xmm6, we will wipe it later.
     SAVEALL
 
-    movss %xmm1, %xmm0 ; xmm1 contains level exp
-    mov %rsi, %rdx ; rsi contains skill_id.
+    movss %xmm1, %xmm0 // xmm1 contains level exp
+    mov %rsi, %rdx // rsi contains skill_id.
     sub $0x20, %rsp
     call improve_level_exp_by_skill_level_hook
     add $0x20, %rsp
-    movss %xmm0, %xmm6 ; Save result in xmm6.
+    movss %xmm0, %xmm6 // Save result in xmm6.
 
     RESTOREALL
 
