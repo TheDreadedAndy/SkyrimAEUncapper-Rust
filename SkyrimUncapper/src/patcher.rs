@@ -6,18 +6,27 @@
 //! @brief Locates and applies pre-defined patches to game functions and objects.
 //! @bug No known bugs.
 //!
-//! TODO
+//! This file includes the patcher implementation, which reads in arrays of patches
+//! from the skyrim and patches modules, and then applies them to the game. Note
+//! that even though I say "patches" here, I really mean any relocatable function
+//! or object as well, which is what the "patches" in the skyrim module are.
+//!
+//! Note that patches which modify the games code must also provide a signature of the code
+//! they expect to be at the modification site for the length of the patch, to ensure the
+//! mod is doing the intended modification on every version.
 //!
 
 use std::cell::UnsafeCell;
 
-use skse64::errors::skse_assert;
-use skse64::log::skse_message;
+use skse64::errors::{skse_assert, skse_halt};
+use skse64::log::{skse_message, skse_error};
 use versionlib::VersionDb;
 
 use crate::safe::Signature;
+use crate::skyrim::GAME_SIGNATURES;
 
 /// Tracks a location in the skyrim game binary.
+#[allow(dead_code)]
 pub enum GameLocation {
     Offset {
         base: usize,
@@ -84,6 +93,8 @@ type PatchResult = Result<usize, PatchError>;
 pub struct RelocAddr<T>(UnsafeCell<usize>, std::marker::PhantomData<T>);
 
 /// Contains a pointer to the unsafe cell of a RelocAddr, to be written back to by the patcher.
+#[repr(transparent)]
+#[derive(Copy, Clone)]
 pub struct RelocResult(*mut UnsafeCell<usize>);
 
 impl GameLocation {
@@ -175,6 +186,38 @@ impl RelocPatch {
             }
         }
     }
+
+    /// Reports the results of an attempt to find a signature.
+    fn report(
+        &self,
+        res: &PatchResult
+    ) {
+        match res {
+            Ok(addr) => {
+                skse_message!("[SUCCESS] {} is at offset {:#x}", self, addr);
+            },
+            Err(PatchError::Disabled) => {
+                skse_message!("[SKIPPED] {} is disabled", self);
+            },
+            Err(PatchError::Missing) => {
+                skse_error!("[FAILURE] {} was not in the version database!", self);
+            },
+            Err(PatchError::Mismatch) => {
+                skse_error!("[FAILURE] {} did not match the expected code signature!", self);
+            }
+        }
+    }
+
+    /// Gets the result structure for this patch.
+    fn result(
+        &self
+    ) -> RelocResult {
+        match self {
+            Self::Object { result, .. } => *result,
+            Self::Function { result, .. } => *result,
+            Self::Patch { .. } => skse_halt!("Cannot get the result field of a patch type!")
+        }
+    }
 }
 
 impl std::fmt::Display for RelocPatch {
@@ -253,7 +296,27 @@ impl RelocResult {
 unsafe impl<T> Sync for RelocAddr<T> {}
 unsafe impl Sync for RelocResult {}
 
-// TODO
-pub unsafe fn apply() -> Result<(), ()> {
-    Ok(())
+/// Locates any game functions/objects, and applies any code patches.
+pub fn apply() -> Result<(), ()> {
+    let db = VersionDb::new(None);
+
+    // Locate any game signatures for objects/functions we call.
+    let mut fails = 0;
+    for sig in GAME_SIGNATURES.iter() {
+        let res = sig.find(&db);
+        sig.report(&res);
+
+        if let Ok(addr) = res {
+            // SAFETY: The version DB ensures we obtained the correct object.
+            unsafe { sig.result().write(addr); }
+        } else {
+            fails += 1;
+        }
+    }
+
+    if fails == 0 {
+        Ok(())
+    } else {
+        Err(())
+    }
 }

@@ -57,12 +57,8 @@ pub fn skse_plugin_rust_entry(
         SkseVersion::from_raw(skse.runtimeVersion)
     );
 
-    // Load/create the INI file.
     settings::init(&get_runtime_dir().join("data\\SKSE\\Plugins\\SkyrimUncapper.ini"))?;
-
-    // SAFETY: We ensure that we give this function the correct runtime version.
-    unsafe { patcher::apply()?; }
-
+    patcher::apply()?;
     skse_message!("Initialization complete!");
     Ok(())
 }
