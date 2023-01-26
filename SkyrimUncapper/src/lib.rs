@@ -17,7 +17,7 @@ mod patcher;
 mod safe;
 
 use ctypes::cstr_array;
-use skse64::log::{skse_message, skse_error};
+use skse64::log::skse_message;
 use skse64::version::{SkseVersion, PACKED_SKSE_VERSION, CURRENT_RELEASE_RUNTIME};
 use skse64::plugin_api::{SKSEPluginVersionData, SKSEInterface};
 use skse64::plugin_api::SKSEPluginVersionData_kVersion;

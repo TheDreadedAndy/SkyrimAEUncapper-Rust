@@ -6,7 +6,11 @@
 //!
 
 mod actor_attribute;
-mod abstract_types;
+mod player;
+mod settings;
+mod functions;
 
 pub use actor_attribute::*;
-pub use abstract_types::*;
+pub use player::*;
+pub use settings::*;
+pub use functions::*;

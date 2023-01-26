@@ -46,13 +46,13 @@ pub enum RelocPatch {
     Function {
         name: &'static str,
         loc: GameLocation,
-        result: *mut UnsafeCell<usize>
+        result: RelocResult
     },
 
     Object {
         name: &'static str,
         loc: GameLocation,
-        result: *mut UnsafeCell<usize>
+        result: RelocResult
     },
 
     Patch {
@@ -61,7 +61,7 @@ pub enum RelocPatch {
         hook: Hook,
         loc: GameLocation,
         sig: Signature,
-        trampoline: Option<*mut UnsafeCell<usize>>
+        trampoline: Option<RelocResult>
     }
 }
 
@@ -82,6 +82,9 @@ type PatchResult = Result<usize, PatchError>;
 ///
 #[repr(transparent)]
 pub struct RelocAddr<T>(UnsafeCell<usize>, std::marker::PhantomData<T>);
+
+/// Contains a pointer to the unsafe cell of a RelocAddr, to be written back to by the patcher.
+pub struct RelocResult(*mut UnsafeCell<usize>);
 
 impl GameLocation {
     /// Finds the game offset specified by this location.
@@ -207,8 +210,8 @@ impl<T> RelocAddr<T> {
     /// will cause races/undefined behavior within get().
     pub const fn inner(
         &self
-    ) -> *mut UnsafeCell<usize> {
-        &self.0 as *const _ as *mut _
+    ) -> RelocResult {
+        RelocResult(&self.0 as *const _ as *mut _)
     }
 
     /// Reads the contained address. Only legal if the address has been set through inner().
@@ -226,8 +229,29 @@ impl<T> RelocAddr<T> {
     }
 }
 
+impl RelocResult {
+    ///
+    /// Updates the address of a RelocAddr.
+    ///
+    /// In order to use this function safely, the caller must ensure that the given address
+    /// points to a valid type T.
+    ///
+    pub unsafe fn write(
+        &self,
+        a: usize
+    ) {
+        // SAFETY: We know this came from a RelocAddr, so the pointer is valid.
+        skse_assert!(!self.0.is_null());
+        let res = (*self.0).get();
+        skse_assert!(*res == 0);
+        skse_assert!(a != 0);
+        *res = a;
+    }
+}
+
 // Lie.
 unsafe impl<T> Sync for RelocAddr<T> {}
+unsafe impl Sync for RelocResult {}
 
 // TODO
 pub unsafe fn apply() -> Result<(), ()> {

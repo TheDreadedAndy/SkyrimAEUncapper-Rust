@@ -7,29 +7,33 @@
 
 use std::ffi::c_char;
 
-use super::{PlayerCharacter, SettingsCollectionMap, ActorAttribute, Setting};
+use skse64::errors::skse_assert;
+
+use super::{PlayerCharacter, ActorValueOwner, SettingCollectionMap, ActorAttribute, Setting};
 use crate::patcher::{RelocAddr, RelocPatch, GameLocation};
+use crate::hook_wrappers::player_avo_get_current_original_wrapper;
+use crate::settings;
 
 // Game objects.
 static PLAYER_OBJECT: RelocAddr<*mut *mut PlayerCharacter> = RelocAddr::new();
-static GAME_SETTINGS_OBJECT: RelocAddr<*mut *mut SettingsCollectionMap> = RelocAddr::new();
+static GAME_SETTINGS_OBJECT: RelocAddr<*mut *mut SettingCollectionMap> = RelocAddr::new();
 
 // Game functions. These are wrapped by safe implementations later.
-static GET_LEVEL_ENTRY: RelocAddr<fn(*mut ()) -> u16> = RelocAddr::new();
+static GET_LEVEL_ENTRY: RelocAddr<fn(*mut PlayerCharacter) -> u16> = RelocAddr::new();
 static GET_GAME_SETTING_ENTRY: RelocAddr<
-    fn(*mut SettingsCollectionMap, *const c_char) -> *mut Setting
+    fn(*mut SettingCollectionMap, *const c_char) -> *mut Setting
 > = RelocAddr::new();
 static PLAYER_AVO_GET_BASE_ENTRY: RelocAddr<
-    fn(*mut PlayerCharacter, ActorAttribute) -> f32
+    fn(*mut ActorValueOwner, ActorAttribute) -> f32
 > = RelocAddr::new();
 static PLAYER_AVO_GET_CURRENT_ENTRY: RelocAddr<
-    fn(*mut PlayerCharacter, ActorAttribute) -> f32
+    fn(*mut ActorValueOwner, ActorAttribute) -> f32
 > = RelocAddr::new();
 static PLAYER_AVO_MOD_BASE_ENTRY: RelocAddr<
-    fn(*mut PlayerCharacter, ActorAttribute, f32)
+    fn(*mut ActorValueOwner, ActorAttribute, f32)
 > = RelocAddr::new();
 static PLAYER_AVO_MOD_CURRENT_ENTRY: RelocAddr<
-    fn(*mut PlayerCharacter, u32, ActorAttribute, f32)
+    fn(*mut ActorValueOwner, u32, ActorAttribute, f32)
 > = RelocAddr::new();
 
 ///
@@ -37,7 +41,7 @@ static PLAYER_AVO_MOD_CURRENT_ENTRY: RelocAddr<
 ///
 /// Used by the patcher to locate our objects/functions.
 ///
-pub const GAME_SIGNATURES: &'static [&'static RelocPatch] = &[
+pub static GAME_SIGNATURES: &'static [&'static RelocPatch] = &[
     &RelocPatch::Object {
         name: "g_thePlayer",
         loc: GameLocation::Id { id: 403521, offset: 0 },
@@ -86,3 +90,73 @@ pub const GAME_SIGNATURES: &'static [&'static RelocPatch] = &[
         result: PLAYER_AVO_MOD_CURRENT_ENTRY.inner()
     }
 ];
+
+/// Gets the player actor value owner structure.
+fn get_player_avo() -> *mut ActorValueOwner {
+    unsafe {
+        // SAFETY: The RelocAddr struct ensures our player pointer is valid.
+        (*(PLAYER_OBJECT.get())).as_ref().unwrap().get_avo()
+    }
+}
+
+/// Gets the current level of the player.
+pub fn get_player_level() -> u16 {
+    let player = unsafe { *(PLAYER_OBJECT.get()) };
+    (GET_LEVEL_ENTRY.get())(player)
+}
+
+/// Gets the game setting associated with the null-terminated c-string.
+pub fn get_game_setting(
+    var: &[c_char]
+) -> &Setting {
+    skse_assert!(var[var.len() - 1] == b'\0' as c_char);
+
+    let settings = unsafe { *(GAME_SETTINGS_OBJECT.get()) };
+    unsafe {
+        // SAFETY: We have ensured our var string and settings map are valid.
+        (GET_GAME_SETTING_ENTRY.get())(settings, var.as_ptr()).as_ref().unwrap()
+    }
+}
+
+/// Gets the base value of a player attribute.
+pub fn player_avo_get_base(
+    attr: ActorAttribute
+) -> f32 {
+    (PLAYER_AVO_GET_BASE_ENTRY.get())(get_player_avo(), attr)
+}
+
+///
+/// Gets the current value of a player attribute, ignoring any skill formula caps.
+///
+/// In order to use this function safely, the given AVO must be valid.
+///
+pub unsafe fn player_avo_get_current_original(
+    av: *mut ActorValueOwner,
+    attr: ActorAttribute
+) -> f32 {
+    if settings::is_skill_formula_cap_enabled() {
+        // Patch installed, so we need to use the wrapper.
+        player_avo_get_current_original_wrapper(av, attr)
+    } else {
+        // No patch, so we can just call the og function
+        // (and must, since we don't have a trampoline).
+        (PLAYER_AVO_GET_CURRENT_ENTRY.get())(av, attr)
+    }
+}
+
+/// Modifies the base value of a player attribute.
+pub fn player_avo_mod_base(
+    attr: ActorAttribute,
+    val: f32
+) {
+    (PLAYER_AVO_MOD_BASE_ENTRY.get())(get_player_avo(), attr, val)
+}
+
+/// Modifies the current value of a player attribute.
+pub fn player_avo_mod_current(
+    attr: ActorAttribute,
+    val: f32
+) {
+    // No idea what second arg does; just match game calls.
+    (PLAYER_AVO_MOD_CURRENT_ENTRY.get())(get_player_avo(), 0, attr, val)
+}

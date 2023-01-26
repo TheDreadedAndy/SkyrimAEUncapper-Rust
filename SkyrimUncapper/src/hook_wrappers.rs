@@ -5,12 +5,15 @@
 //! @bug No known bugs.
 //!
 
-use crate::skyrim::{ActorAttribute, PlayerSkills};
+use crate::skyrim::{ActorAttribute, ActorValueOwner, PlayerSkills};
 
 extern "system" {
     pub fn skill_cap_patch_wrapper();
     pub fn calculate_charge_points_per_use_wrapper();
-    pub fn player_avo_get_current_original_wrapper();
+    pub fn player_avo_get_current_original_wrapper(
+        av: *mut ActorValueOwner,
+        attr: ActorAttribute
+    ) -> f32;
     pub fn display_true_skill_level_hook();
     pub fn display_true_skill_Color_hook();
     pub fn improve_level_exp_by_skill_level_wrapper();
