@@ -331,7 +331,7 @@ pub mod reloc {
         }
 
         /// Creates a reloc addr from an offset.
-        pub fn from_offset(
+        pub const fn from_offset(
             offset: usize
         ) -> Self {
             Self(offset)
@@ -342,11 +342,11 @@ pub mod reloc {
             addr: usize
         ) -> Self {
             skse_assert!(Self::base() <= addr);
-            Self(Self::base() + addr)
+            Self(addr - Self::base())
         }
 
         /// Gets the underlying offset of the RelocAddr.
-        pub fn offset(
+        pub const fn offset(
             self
         ) -> usize {
             self.0

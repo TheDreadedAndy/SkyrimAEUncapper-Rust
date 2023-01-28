@@ -15,7 +15,7 @@ extern "system" {
         attr: ActorAttribute
     ) -> f32;
     pub fn display_true_skill_level_hook();
-    pub fn display_true_skill_Color_hook();
+    pub fn display_true_skill_color_hook();
     pub fn improve_level_exp_by_skill_level_wrapper();
     pub fn improve_player_skill_points_original(
         skill_data: *mut PlayerSkills,

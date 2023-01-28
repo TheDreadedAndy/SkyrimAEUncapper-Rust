@@ -43,6 +43,7 @@ pub enum GameLocation {
 }
 
 /// Encodes the type of hook which is being used by a patch.
+#[allow(dead_code)]
 pub enum Hook {
     None,
     Jump5(HookFn),
