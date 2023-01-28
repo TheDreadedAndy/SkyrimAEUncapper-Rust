@@ -5,8 +5,6 @@
 //! @bug No known bugs.
 //!
 
-use std::ffi::{c_void, c_int};
-
 use skse64::errors::skse_assert;
 
 ///

@@ -13,7 +13,6 @@
 use std::ffi::c_int;
 
 use skse64::errors::skse_assert;
-use skse64::reloc::RelocAddr;
 
 use crate::settings;
 use crate::hook_wrappers::*;
@@ -45,7 +44,7 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "GetSkillCap",
             enabled: settings::is_skill_cap_enabled,
-            hook: Hook::Call6(unsafe { HookFn::new(&get_skill_cap_hook) }),
+            hook: Hook::Call6(unsafe { HookFn::new(&skill_cap_patch_wrapper) }),
             loc: GameLocation::Id { id: 41561, offset: 0x76 },
             sig: signature![0xf3, 0x44, 0x0f, 0x10, 0x15, ?, ?, ?, ?],
             trampoline: None
@@ -260,36 +259,78 @@ extern "system" fn player_avo_get_current_hook(
     av: *mut ActorValueOwner,
     attr: c_int
 ) -> f32 {
-    0.0
+    skse_assert!(settings::is_skill_formula_cap_enabled());
+    let attr = ActorAttribute::from_raw(attr).unwrap();
+
+    let mut val = unsafe {
+        // SAFETY: We are passing through the original arguments.
+        player_avo_get_current_original(av, attr)
+    };
+
+    if attr.is_skill() {
+        val = val.min(settings::get_skill_formula_cap(attr)).max(0.0);
+    }
+
+    return val;
 }
 
 /// Applies a multiplier to the exp gain for the given skill.
 extern "system" fn improve_player_skill_points_hook(
     skill_data: *mut PlayerSkills,
     attr: c_int,
-    exp: f32,
+    mut exp: f32,
     unk1: u64,
     unk2: u32,
     unk3: u8,
     unk4: bool
 ) {
+    skse_assert!(settings::is_skill_exp_enabled());
+    let attr = ActorAttribute::from_raw(attr).unwrap();
+
+    if attr.is_skill() {
+        exp *= settings::get_skill_exp_mult(
+            attr,
+            player_avo_get_base(attr) as u32,
+            get_player_level()
+        );
+    }
+
+    unsafe {
+        // SAFETY: We give it the same args, except the modified exp.
+        improve_player_skill_points_original(skill_data, attr, exp, unk1, unk2, unk3, unk4);
+    }
 }
 
 /// Adjusts the number of perks the player recieves at level-up.
 #[no_mangle]
 extern "system" fn modify_perk_pool_hook(
     points: u8,
-    delta: i8
+    count: i8
 ) -> u8 {
-    0
+    skse_assert!(settings::is_perk_points_enabled());
+    let delta = std::cmp::min(0xFF, settings::get_perk_delta(get_player_level()));
+    let res = (points as i16) + (if count > 0 { delta as i16 } else { count as i16 });
+    std::cmp::max(0, std::cmp::min(0xff, res)) as u8
 }
 
 /// Multiplies the exp gain of a level-up by the configured multiplier.
 #[no_mangle]
 extern "system" fn improve_level_exp_by_skill_level_hook(
-    exp: f32,
+    mut exp: f32,
     attr: c_int
-) {
+) -> f32 {
+    skse_assert!(settings::is_level_exp_enabled());
+    let attr = ActorAttribute::from_raw(attr).unwrap();
+
+    if attr.is_skill() {
+        exp *= settings::get_level_exp_mult(
+            attr,
+            player_avo_get_base(attr) as u32,
+            get_player_level()
+        );
+    }
+
+    exp
 }
 
 ///

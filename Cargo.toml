@@ -11,8 +11,14 @@ members = [
 ]
 
 [profile.release]
+panic = "abort"
+debug = false
+incremental = false
 opt-level = 'z'
 
 [profile.dev]
+panic = "abort"
+debug = true
+incremental = false
 # O0 is just impossible to read.
 opt-level = 1

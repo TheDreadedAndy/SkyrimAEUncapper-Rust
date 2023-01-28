@@ -18,16 +18,16 @@ abstract_type! {
 
 /// The union of valid settings data types within the game.
 pub union SettingData {
-    u: u32,
-    i: i32,
+    _u: u32,
+    _i: i32,
     f: f32,
-    b: u8,
-    s: *mut c_char
+    _b: u8,
+    _s: *mut c_char
 }
 
 /// The settings structure, as defined by skyrim.
 pub struct Setting {
-    vtbl: *const (),
+    _vtbl: *const (),
     data: UnsafeCell<SettingData>,
     name: *mut c_char
 }

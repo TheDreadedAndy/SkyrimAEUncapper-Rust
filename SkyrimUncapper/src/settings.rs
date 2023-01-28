@@ -255,14 +255,14 @@ pub fn get_skill_cap(
 pub fn get_skill_formula_cap(
     skill: ActorAttribute
 ) -> f32 {
-    SETTINGS.skill_formula_caps.get(skill).get() as f32
-}
+    let mut cap = SETTINGS.skill_formula_caps.get(skill).get() as f32;
 
-/// Gets the formula cap for magnitude enchantments.
-pub fn get_enchant_magnitude_cap() -> f32 {
-    (SETTINGS.enchant.magnitude_cap.get() as f32).min(
-        get_skill_formula_cap(ActorAttribute::Enchanting)
-    )
+    // Enforce magnitude cap here. Charge formula doesn't call this function.
+    if skill == ActorAttribute::Enchanting {
+        cap = cap.min(SETTINGS.enchant.magnitude_cap.get() as f32);
+    }
+
+    return cap;
 }
 
 /// Gets the formula cap for weapon-charge enchantments.
