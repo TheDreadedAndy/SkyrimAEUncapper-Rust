@@ -439,12 +439,16 @@ pub fn apply() -> Result<(), ()> {
     for (i, sig) in HOOK_SIGNATURES.iter().enumerate() {
         let res = sig.find(&db);
         sig.report(&res);
-        alloc_size += sig.hook().unwrap().alloc_size();
 
-        if let Ok(addr) = res {
-            res_addrs[i] = addr.addr();
-        } else {
-            fails += 1;
+        match res {
+            Ok(addr) => {
+                res_addrs[i] = addr.addr();
+                alloc_size += sig.hook().unwrap().alloc_size();
+            },
+            Err(DescriptorError::Disabled) => (),
+            _ => {
+                fails += 1;
+            }
         }
     }
 
