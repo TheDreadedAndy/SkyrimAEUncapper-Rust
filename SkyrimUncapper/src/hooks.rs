@@ -20,25 +20,17 @@ use crate::hook_wrappers::*;
 use crate::patcher::{Descriptor, Hook, HookFn, GameLocation, GameRef};
 use crate::safe::signature;
 use crate::skyrim::{ActorAttribute, ActorValueOwner, PlayerSkills};
-use crate::skyrim::{player_avo_get_current_original, get_game_setting};
-
-/// Formats a string as a game variable string.
-macro_rules! game_var {
-    ( $str:literal ) => {
-        ::std::concat!($str, "\0").as_bytes()
-    }
-}
+use crate::skyrim::{player_avo_get_base, player_avo_get_current_original, game_setting};
+use crate::skyrim::{player_avo_mod_base, player_avo_mod_current, get_player_level};
 
 ///
 /// Trampolines used by hooks to return to game code.
 ///
 /// Boing!
 ///
-///@{
 #[no_mangle] static improve_player_skill_points_return_trampoline: GameRef<usize> = GameRef::new();
 #[no_mangle] static modify_perk_pool_return_trampoline: GameRef<usize> = GameRef::new();
 #[no_mangle] static player_avo_get_current_return_trampoline: GameRef<usize> = GameRef::new();
-///@}
 
 disarray::disarray! {
     /// The hooks which must be installed by the game patcher.
@@ -222,7 +214,7 @@ disarray::disarray! {
             name: "CheckConditionForLegendarySkillAlt",
             enabled: settings::is_legendary_enabled,
             hook: Hook::Call6(unsafe { HookFn::new(&check_condition_for_legendary_skill_wrapper) }),
-            loc: GameLocation::Offset { base: RelocAddr::from_offset(0x900d60), offset: 0x4de },
+            loc: GameLocation::Id { id: 52510, offset: 0x4de },
             sig: signature![0xff, 0x53, 0x18, 0x0f, 0x2f, 0x05, ?, ?, ?, ?],
             trampoline: None
         },
@@ -308,34 +300,52 @@ extern "system" fn improve_level_exp_by_skill_level_hook(
 /// the carry weight level-up code.
 ///
 extern "system" fn improve_attribute_when_level_up_hook(
-    av: *mut ActorValueOwner,
+    _av: *mut ActorValueOwner,
     choice: c_int
 ) {
+    skse_assert!(settings::is_attr_points_enabled());
+    let choice = ActorAttribute::from_raw(choice).unwrap();
+
+    let (hp, mp, sp, cw) = settings::get_attribute_level_up(get_player_level(), choice);
+    player_avo_mod_base(ActorAttribute::Health, hp);
+    player_avo_mod_base(ActorAttribute::Magicka, mp);
+    player_avo_mod_base(ActorAttribute::Stamina, sp);
+    player_avo_mod_current(ActorAttribute::CarryWeight, cw);
 }
 
 /// Determines what level a skill should take on after being legendary'd.
-///
-/// FIXME: Breaks legendarying with the space bar? Or is that the next one?
 #[no_mangle]
 extern "system" fn legendary_reset_skill_level_hook(
     base_level: f32
 ) {
+    skse_assert!(settings::is_legendary_enabled());
+    skse_assert!(base_level >= 0.0);
+
+    let reset_val = game_setting!("fLegendarySkillResetValue");
+    reset_val.set_float(settings::get_post_legendary_skill_level(
+            reset_val.get_float(),
+            base_level
+    ));
 }
 
 /// Overwrites the check which determines when a skill can be legendary'd.
 #[no_mangle]
 extern "system" fn check_condition_for_legendary_skill_hook(
-    _av: *mut ActorValueOwner,
     skill: c_int
 ) -> bool {
-    false
+    skse_assert!(settings::is_legendary_enabled());
+    let skill = ActorAttribute::from_raw(skill).unwrap();
+    skse_assert!(skill.is_skill());
+    settings::is_legendary_available(player_avo_get_base(skill) as u32)
 }
 
 /// Determines if the legendary button should be displayed for the given skill.
 #[no_mangle]
 extern "system" fn hide_legendary_button_hook(
-    _av: *mut ActorValueOwner,
     skill: c_int
 ) -> bool {
-    false
+    skse_assert!(settings::is_legendary_enabled());
+    let skill = ActorAttribute::from_raw(skill).unwrap();
+    skse_assert!(skill.is_skill());
+    settings::is_legendary_button_visible(player_avo_get_base(skill) as u32)
 }

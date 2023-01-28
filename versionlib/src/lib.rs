@@ -14,7 +14,7 @@ use core::ptr::NonNull;
 use skse64::version::SkseVersion;
 use skse64::reloc::RelocAddr;
 
-extern "C" {
+extern "system" {
     fn VersionLibDb__init__() -> NonNull<c_void>;
     fn VersionLibDb__destroy__(db: NonNull<c_void>);
     fn VersionLibDb__load_current__(db: NonNull<c_void>);

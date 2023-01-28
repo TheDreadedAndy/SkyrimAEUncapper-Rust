@@ -457,10 +457,12 @@ pub fn apply() -> Result<(), ()> {
 
     // Allocate our branch trampoline.
     if alloc_size > 0 {
-        skse_message!("Creating a branch trampoline buffer with {} bytes of space", alloc_size);
+        skse_message!("Creating a branch trampoline buffer with {} bytes of space...", alloc_size);
 
         // SAFETY: We're not giving an image base, so this is actually safe.
         unsafe { skse64::trampoline::create(Trampoline::Global, alloc_size, None) };
+
+        skse_message!("Applying game patches...");
     } else {
         skse_message!("Everything is disabled...");
     }
@@ -480,7 +482,7 @@ pub fn apply() -> Result<(), ()> {
         unsafe {
             // SAFETY: We have matched signatures to ensure our patch is valid.
             sig.hook().unwrap().install(res_addrs[i]);
-            safe::memset(ret_addr, 0x90, sig.size() - hook_size);
+            safe::memset(ret_addr, 0x90 /* NOP */, sig.size() - hook_size);
         }
     }
 

@@ -88,7 +88,7 @@ extern "C" {
     ) {
         try {
             ASSERT(db);
-            return db->FindOffsetById(offset, *result) ? 0 : -1;
+            return db->FindIdByOffset(offset, *result) ? 0 : -1;
         } catch(...) {
             HALT("Failed to find id by offset in version db");
         }

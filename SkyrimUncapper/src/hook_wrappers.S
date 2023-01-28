@@ -196,6 +196,7 @@ PUBLIC_FN(legendary_reset_skill_level_wrapper)
  * Since we are overwriting another fn call, we dont need to reg save.
  */
 PUBLIC_FN(check_condition_for_legendary_skill_wrapper)
+    mov %edx, %ecx
     sub $0x20, %rsp
     call check_condition_for_legendary_skill_hook
     add $0x20, %rsp
@@ -208,6 +209,7 @@ PUBLIC_FN(check_condition_for_legendary_skill_wrapper)
  * the register state.
  */
 PUBLIC_FN(hide_legendary_button_wrapper)
+    mov %edx, %ecx
     sub $0x20, %rsp
     call hide_legendary_button_hook
     add $0x20, %rsp

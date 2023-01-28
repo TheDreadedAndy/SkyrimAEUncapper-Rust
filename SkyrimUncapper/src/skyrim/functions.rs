@@ -14,6 +14,21 @@ use crate::patcher::{GameRef, Descriptor, GameLocation};
 use crate::hook_wrappers::player_avo_get_current_original_wrapper;
 use crate::settings;
 
+/// Gets a game setting, given a string literal.
+macro_rules! game_setting {
+    ( $str:literal ) => {{
+        let s = ::std::concat!($str, "\0").as_bytes();
+        let s = unsafe {
+            ::std::slice::from_raw_parts::<'static, ::std::ffi::c_char>(
+                s.as_ptr() as *const ::std::ffi::c_char,
+                s.len()
+            )
+        };
+        $crate::skyrim::get_game_setting(s)
+    }}
+}
+pub (in crate) use game_setting;
+
 // Game objects.
 static PLAYER_OBJECT: GameRef<*mut *mut PlayerCharacter> = GameRef::new();
 static GAME_SETTINGS_OBJECT: GameRef<*mut *mut SettingCollectionMap> = GameRef::new();
@@ -102,9 +117,9 @@ fn get_player_avo() -> *mut ActorValueOwner {
 }
 
 /// Gets the current level of the player.
-pub fn get_player_level() -> u16 {
+pub fn get_player_level() -> u32 {
     let player = unsafe { *(PLAYER_OBJECT.get()) };
-    (GET_LEVEL_ENTRY.get())(player)
+    (GET_LEVEL_ENTRY.get())(player) as u32
 }
 
 /// Gets the game setting associated with the null-terminated c-string.
