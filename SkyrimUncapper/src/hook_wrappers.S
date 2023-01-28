@@ -150,7 +150,7 @@ PUBLIC_FN(modify_perk_pool_wrapper)
     add $0x20, %rsp
     END_INJECTED_CALL
     mov %al, %cl // We'll return to an instruction that'll store this in the player
-    jmp *modify_perk_pool_return_trampoline(%rip)
+    ret
 
 /*
  * Passes the EXP gain to our function for further modification.

@@ -28,7 +28,6 @@ use crate::skyrim::{player_avo_mod_base, player_avo_mod_current, get_player_leve
 /// Boing!
 ///
 #[no_mangle] static improve_player_skill_points_return_trampoline: GameRef<usize> = GameRef::new();
-#[no_mangle] static modify_perk_pool_return_trampoline: GameRef<usize> = GameRef::new();
 #[no_mangle] static player_avo_get_current_return_trampoline: GameRef<usize> = GameRef::new();
 
 disarray::disarray! {
@@ -44,9 +43,11 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "GetSkillCap",
             enabled: settings::is_skill_cap_enabled,
-            hook: Hook::Call6(unsafe { HookFn::new(skill_cap_patch_wrapper as *const u8) }),
+            hook: Hook::Call6(unsafe {
+                HookFn::new(skill_cap_patch_wrapper as *const u8)
+            }),
             loc: GameLocation::Id { id: 41561, offset: 0x76 },
-            sig: signature![0xf3, 0x44, 0x0f, 0x10, 0x15, ?, ?, ?, ?],
+            sig: signature![0xf3, 0x44, 0x0f, 0x10, 0x15, ?, ?, ?, ?; 9],
             trampoline: None
         },
 
@@ -62,11 +63,13 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "CalculateChargePointsPerUse",
             enabled: settings::is_enchant_patch_enabled,
-            hook: Hook::Call6(unsafe { HookFn::new(calculate_charge_points_per_use_wrapper as *const u8) }),
+            hook: Hook::Call6(unsafe {
+                HookFn::new(calculate_charge_points_per_use_wrapper as *const u8)
+            }),
             loc: GameLocation::Id { id: 51449, offset: 0x32a },
             sig: signature![
                 0xff, 0x50, 0x08, 0x0f, 0x28, 0xc8, 0x0f, 0x28,
-                0xc7, 0xe8, 0x08, 0x6f, 0xb2, 0xff
+                0xc7, 0xe8, 0x08, 0x6f, 0xb2, 0xff; 14
             ],
             trampoline: None
         },
@@ -77,9 +80,11 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "PlayerAVOGetCurrent",
             enabled: settings::is_skill_formula_cap_enabled,
-            hook: Hook::Jump6(unsafe { HookFn::new(player_avo_get_current_hook as *const u8) }),
+            hook: Hook::Jump6(unsafe {
+                HookFn::new(player_avo_get_current_hook as *const u8)
+            }),
             loc: GameLocation::Id { id: 38462, offset: 0 },
-            sig: signature![0x4c, 0x8b, 0xdc, 0x55, 0x56, 0x57],
+            sig: signature![0x4c, 0x8b, 0xdc, 0x55, 0x56, 0x57; 6],
             trampoline: Some(player_avo_get_current_return_trampoline.inner())
         },
 
@@ -92,9 +97,11 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "DisplayTrueSkillLevel",
             enabled: settings::is_skill_formula_cap_enabled,
-            hook: Hook::Call6(unsafe { HookFn::new(display_true_skill_level_hook as *const u8) }),
+            hook: Hook::Call6(unsafe {
+                HookFn::new(display_true_skill_level_hook as *const u8)
+            }),
             loc: GameLocation::Id { id: 52525, offset: 0x120 },
-            sig: signature![0xff, 0x50, 0x08, 0xf3, 0x0f, 0x2c, 0xc8],
+            sig: signature![0xff, 0x50, 0x08, 0xf3, 0x0f, 0x2c, 0xc8; 7],
             trampoline: None
         },
 
@@ -107,9 +114,11 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "DisplayTrueSkillColor",
             enabled: settings::is_skill_formula_cap_enabled,
-            hook: Hook::Call6(unsafe { HookFn::new(display_true_skill_color_hook as *const u8) }),
+            hook: Hook::Call6(unsafe {
+                HookFn::new(display_true_skill_color_hook as *const u8)
+            }),
             loc: GameLocation::Id { id: 52945, offset: 0x32 },
-            sig: signature![0xff, 0x50, 0x08, 0x48, 0x8b, 0x86, ?, 0x00, 0x00, 0x00],
+            sig: signature![0xff, 0x50, 0x08, 0x48, 0x8b, 0x86, ?, 0x00, 0x00, 0x00; 10],
             trampoline: None
         },
 
@@ -117,9 +126,11 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "ImproveSkillByTraining",
             enabled: settings::is_skill_exp_enabled,
-            hook: Hook::Call5(unsafe { HookFn::new(improve_player_skill_points_original as *const u8) }),
+            hook: Hook::Call5(unsafe {
+                HookFn::new(improve_player_skill_points_original as *const u8)
+            }),
             loc: GameLocation::Id { id: 41562, offset: 0x98 },
-            sig: signature![0xe8, ?, ?, ?, ?],
+            sig: signature![0xe8, ?, ?, ?, ?; 5],
             trampoline: None
         },
 
@@ -127,9 +138,11 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "ImprovePlayerSkillPoints",
             enabled: settings::is_skill_exp_enabled,
-            hook: Hook::Jump6(unsafe { HookFn::new(improve_player_skill_points_hook as *const u8) }),
+            hook: Hook::Jump6(unsafe {
+                HookFn::new(improve_player_skill_points_hook as *const u8)
+            }),
             loc: GameLocation::Id { id: 41561, offset: 0 },
-            sig: signature![0x48, 0x8b, 0xc4, 0x57, 0x41, 0x54],
+            sig: signature![0x48, 0x8b, 0xc4, 0x57, 0x41, 0x54; 6],
             trampoline: Some(improve_player_skill_points_return_trampoline.inner())
         },
 
@@ -140,10 +153,12 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "ModifyPerkPool",
             enabled: settings::is_perk_points_enabled,
-            hook: Hook::Jump6(unsafe { HookFn::new(modify_perk_pool_wrapper as *const u8) }),
+            hook: Hook::Call6(unsafe {
+                HookFn::new(modify_perk_pool_wrapper as *const u8)
+            }),
             loc: GameLocation::Id { id: 52538, offset: 0x70 },
-            sig: signature![0x8b, 0xc1, 0x03, 0xc7, 0x78, 0x09, 0x40, 0x02, 0xcf],
-            trampoline: Some(modify_perk_pool_return_trampoline.inner())
+            sig: signature![0x8b, 0xc1, 0x03, 0xc7, 0x78, 0x09, 0x40, 0x02, 0xcf; 9],
+            trampoline: None
         },
 
         //
@@ -153,9 +168,11 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "ImproveLevelExpBySkillLevel",
             enabled: settings::is_level_exp_enabled,
-            hook: Hook::Call6(unsafe { HookFn::new(improve_level_exp_by_skill_level_wrapper as *const u8) }),
+            hook: Hook::Call6(unsafe {
+                HookFn::new(improve_level_exp_by_skill_level_wrapper as *const u8)
+            }),
             loc: GameLocation::Id { id: 41561, offset: 0x2d7 },
-            sig: signature![0xf3, 0x0f, 0x58, 0x08, 0xf3, 0x0f, 0x11, 0x08],
+            sig: signature![0xf3, 0x0f, 0x58, 0x08, 0xf3, 0x0f, 0x11, 0x08; 8],
             trampoline: None
         },
 
@@ -175,7 +192,9 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "ImproveAttributeWhenLevelUp",
             enabled: settings::is_attr_points_enabled,
-            hook: Hook::Call6(unsafe { HookFn::new(improve_attribute_when_level_up_hook as *const u8) }),
+            hook: Hook::Call6(unsafe {
+                HookFn::new(improve_attribute_when_level_up_hook as *const u8)
+            }),
             loc: GameLocation::Id { id: 51917, offset: 0x93 },
             sig: signature![
                 0xff, 0x50, 0x28, 0x83, 0x7f, 0x18, 0x1a, 0x75,
@@ -183,7 +202,7 @@ disarray::disarray! {
                 0x48, 0x81, 0xc1,    ?, 0x00, 0x00, 0x00, 0x48,
                 0x8b, 0x01, 0xf3, 0x0f, 0x10, 0x1d,    ?,    ?,
                    ?,    ?, 0x33, 0xd2, 0x44, 0x8d, 0x42, 0x20,
-                0xff, 0x50, 0x30
+                0xff, 0x50, 0x30; 0x2b
             ],
             trampoline: None
         },
@@ -192,9 +211,11 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "LegendaryResetSkillLevel",
             enabled: settings::is_legendary_enabled,
-            hook: Hook::Call6(unsafe { HookFn::new(legendary_reset_skill_level_wrapper as *const u8) }),
+            hook: Hook::Call6(unsafe {
+                HookFn::new(legendary_reset_skill_level_wrapper as *const u8)
+            }),
             loc: GameLocation::Id { id: 52591, offset: 0x1d7 },
-            sig: signature![0x0f, 0x82, ?, ?, ?, ?],
+            sig: signature![0x0f, 0x82, ?, ?, ?, ?; 6],
             trampoline: None
         },
 
@@ -202,9 +223,11 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "CheckConditionForLegendarySkill",
             enabled: settings::is_legendary_enabled,
-            hook: Hook::Call6(unsafe { HookFn::new(check_condition_for_legendary_skill_wrapper as *const u8) }),
+            hook: Hook::Call6(unsafe {
+                HookFn::new(check_condition_for_legendary_skill_wrapper as *const u8)
+            }),
             loc: GameLocation::Id { id: 52520, offset: 0x157 },
-            sig: signature![0xff, 0x53, 0x18, 0x0f, 0x2f, 0x05, ?, ?, ?, ?],
+            sig: signature![0xff, 0x53, 0x18, 0x0f, 0x2f, 0x05, ?, ?, ?, ?; 10],
             trampoline: None
         },
 
@@ -212,9 +235,11 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "CheckConditionForLegendarySkillAlt",
             enabled: settings::is_legendary_enabled,
-            hook: Hook::Call6(unsafe { HookFn::new(check_condition_for_legendary_skill_wrapper as *const u8) }),
+            hook: Hook::Call6(unsafe {
+                HookFn::new(check_condition_for_legendary_skill_wrapper as *const u8)
+            }),
             loc: GameLocation::Id { id: 52510, offset: 0x4de },
-            sig: signature![0xff, 0x53, 0x18, 0x0f, 0x2f, 0x05, ?, ?, ?, ?],
+            sig: signature![0xff, 0x53, 0x18, 0x0f, 0x2f, 0x05, ?, ?, ?, ?; 10],
             trampoline: None
         },
 
@@ -222,9 +247,11 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "HideLegendaryButton",
             enabled: settings::is_legendary_enabled,
-            hook: Hook::Call6(unsafe { HookFn::new(hide_legendary_button_wrapper as *const u8) }),
+            hook: Hook::Call6(unsafe {
+                HookFn::new(hide_legendary_button_wrapper as *const u8)
+            }),
             loc: GameLocation::Id { id: 52527, offset: 0x167 },
-            sig: signature![0xff, 0x50, 0x18, 0x0f, 0x2f, 0x05, ?, ?, ?, ?],
+            sig: signature![0xff, 0x50, 0x18, 0x0f, 0x2f, 0x05, ?, ?, ?, ?; 10],
             trampoline: None
         }
     ];

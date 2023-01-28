@@ -25,9 +25,13 @@ pub struct Signature(&'static [Opcode]);
 
 /// @brief Generates a new signature out of hex digits and question marks.
 macro_rules! signature {
-    ( $($sig:tt),* ) => {
+    ( $($sig:tt),+; $size:literal ) => {{
+        let psize = [ $($crate::safe::signature!(@munch $sig)),* ].len();
+        if $size != psize {
+            ::std::panic!("Patch size is incorrect.");
+        }
         $crate::safe::Signature::new(&[ $($crate::safe::signature!(@munch $sig)),* ])
-    };
+    }};
 
     ( @munch $op:literal ) => {
         $crate::safe::Opcode::Code($op)
