@@ -287,15 +287,16 @@ extern "system" fn player_avo_get_current_hook(
     attr: c_int
 ) -> f32 {
     skse_assert!(settings::is_skill_formula_cap_enabled());
-    let attr = ActorAttribute::from_raw(attr).unwrap();
 
     let mut val = unsafe {
         // SAFETY: We are passing through the original arguments.
         player_avo_get_current_original(av, attr)
     };
 
-    if attr.is_skill() {
-        val = val.min(settings::get_skill_formula_cap(attr)).max(0.0);
+    if let Ok(attr) = ActorAttribute::from_raw(attr) {
+        if attr.is_skill() {
+            val = val.min(settings::get_skill_formula_cap(attr)).max(0.0);
+        }
     }
 
     return val;

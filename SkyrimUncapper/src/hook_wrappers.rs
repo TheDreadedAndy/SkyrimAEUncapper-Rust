@@ -5,6 +5,8 @@
 //! @bug No known bugs.
 //!
 
+use std::ffi::c_int;
+
 use crate::skyrim::{ActorAttribute, ActorValueOwner, PlayerSkills};
 
 extern "system" {
@@ -12,7 +14,7 @@ extern "system" {
     pub fn calculate_charge_points_per_use_wrapper();
     pub fn player_avo_get_current_original_wrapper(
         av: *mut ActorValueOwner,
-        attr: ActorAttribute
+        attr: c_int
     ) -> f32;
     pub fn display_true_skill_level_hook();
     pub fn display_true_skill_color_hook();

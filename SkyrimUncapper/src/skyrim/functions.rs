@@ -5,7 +5,7 @@
 //! @bug No known bugs.
 //!
 
-use std::ffi::c_char;
+use std::ffi::{c_char, c_int};
 
 use skse64::errors::skse_assert;
 
@@ -42,7 +42,7 @@ static PLAYER_AVO_GET_BASE_ENTRY: GameRef<
     fn(*mut ActorValueOwner, ActorAttribute) -> f32
 > = GameRef::new();
 static PLAYER_AVO_GET_CURRENT_ENTRY: GameRef<
-    fn(*mut ActorValueOwner, ActorAttribute) -> f32
+    fn(*mut ActorValueOwner, c_int) -> f32
 > = GameRef::new();
 static PLAYER_AVO_MOD_BASE_ENTRY: GameRef<
     fn(*mut ActorValueOwner, ActorAttribute, f32)
@@ -145,11 +145,11 @@ pub fn player_avo_get_base(
 ///
 /// Gets the current value of a player attribute, ignoring any skill formula caps.
 ///
-/// In order to use this function safely, the given AVO must be valid.
+/// In order to use this function safely, the given AVO and attr must be valid.
 ///
 pub unsafe fn player_avo_get_current_original(
     av: *mut ActorValueOwner,
-    attr: ActorAttribute
+    attr: c_int
 ) -> f32 {
     if settings::is_skill_formula_cap_enabled() {
         // Patch installed, so we need to use the wrapper.
