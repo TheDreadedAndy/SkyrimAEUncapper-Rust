@@ -233,13 +233,13 @@ pub mod log {
         fn glog_error(msg: *const c_char);
     }
 
-    /// @brief Opens the file pointed to by the path as the log file for the plugin.
+    /// @brief Opens a log file with the given name in the SKSE log directory.
     pub (in crate) fn open(
-        path: &Path
+        log: &str
     ) {
         unsafe {
             // SAFETY: We are giving this function a valid C string.
-            glog_open(CString::new(path.to_str().unwrap()).unwrap().as_c_str().as_ptr());
+            glog_open(CString::new(log).unwrap().as_c_str().as_ptr());
         }
     }
 
@@ -480,11 +480,9 @@ pub unsafe extern "system" fn SKSEPlugin_Load(
     skse: *const SKSEInterface
 ) -> bool {
     // Before we do anything else, we try and open up a log file.
-    log::open(&dirs_next::document_dir().unwrap().join(
-        format!(
-            "My Games/Skyrim Special Edition/SKSE/{}.log",
-            CStr::from_ptr(SKSEPlugin_Version.name.as_ptr()).to_str().unwrap()
-        )
+    log::open(&format!(
+        "{}.log",
+        CStr::from_ptr(SKSEPlugin_Version.name.as_ptr()).to_str().unwrap()
     ));
 
     // Prevent reinit.

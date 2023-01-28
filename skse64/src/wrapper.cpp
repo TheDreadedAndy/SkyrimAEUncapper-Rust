@@ -12,6 +12,8 @@
 #include <cstdlib>
 
 #include <common/IPrefix.h>
+#include <Shlobj.h>
+#include <skse_version.h>
 #include <Utilities.h>
 #include <SafeWrite.h>
 #include <Relocation.h>
@@ -52,10 +54,12 @@ extern "C" {
 
     void
     SKSE64_DebugLog__open__(
-        const char *path
+        const char *log
     ) {
         try {
-            gLog.Open(path);
+            auto s = std::string("\\My Games\\" SAVE_FOLDER_NAME "\\SKSE\\");
+            s += log;
+            gLog.OpenRelative(CSIDL_MYDOCUMENTS, s.c_str());
         } catch(...) {
             HALT("Failed to open log file");
         }
