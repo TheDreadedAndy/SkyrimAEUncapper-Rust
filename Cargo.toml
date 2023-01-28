@@ -4,6 +4,7 @@ members = [
     "vsprofile",
     "ctypes",
     "disarray",
+    "later",
     "skse64",
     "versionlib",
     "SkyrimUncapper"

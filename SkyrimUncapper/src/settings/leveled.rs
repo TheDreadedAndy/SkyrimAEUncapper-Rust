@@ -8,7 +8,7 @@
 use std::vec::Vec;
 use std::str::FromStr;
 
-use ini::Ini;
+use configparser::ini::Ini;
 use skse64::errors::skse_assert;
 
 use crate::skyrim::ActorAttribute;
@@ -132,9 +132,12 @@ impl<T: Copy + FromStr> IniNamedReadable for LeveledIniSection<T>
         section: &str,
         default: Self::Value
     ) {
-        if let Some(sec) = ini.section(Some(section)) {
+        if let Some(sec) = ini.get_map_ref().get(section) {
             for (level, item) in sec.iter() {
-                self.add(u32::from_str(level).unwrap(), T::from_str(item).unwrap());
+                self.add(
+                    u32::from_str(level).unwrap(),
+                    T::from_str(item.as_ref().unwrap()).unwrap()
+                );
             }
         }
 

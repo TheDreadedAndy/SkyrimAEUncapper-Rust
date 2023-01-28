@@ -17,7 +17,7 @@ pub use core;
 ///
 pub mod version {
     use std::fmt::{Display, Formatter, Error};
-    use once_cell::sync::OnceCell;
+    use later::Later;
 
     pub use crate::bind::{SKSE_VERSION_INTEGER, SKSE_VERSION_INTEGER_MINOR};
     pub use crate::bind::{SKSE_VERSION_INTEGER_BETA, SKSE_VERSION_VERSTRING};
@@ -91,8 +91,8 @@ pub mod version {
     );
 
     /// Holds the running game/skse version. Initialized by the entry point.
-    pub (in super) static RUNNING_GAME_VERSION: OnceCell<SkseVersion> = OnceCell::new();
-    pub (in super) static RUNNING_SKSE_VERSION: OnceCell<SkseVersion> = OnceCell::new();
+    pub (in super) static RUNNING_GAME_VERSION: Later<SkseVersion> = Later::new();
+    pub (in super) static RUNNING_SKSE_VERSION: Later<SkseVersion> = Later::new();
 
     impl SkseVersion {
         const fn new(
@@ -164,12 +164,12 @@ pub mod version {
 
     /// Gets the currently running game version.
     pub fn current_runtime() -> SkseVersion {
-        *RUNNING_GAME_VERSION.get().unwrap()
+        *RUNNING_GAME_VERSION
     }
 
     /// Gets the currently running SKSE version.
     pub fn current_skse() -> SkseVersion {
-        *RUNNING_SKSE_VERSION.get().unwrap()
+        *RUNNING_SKSE_VERSION
     }
 }
 
@@ -312,14 +312,62 @@ pub mod plugin_api {
 
 /// Exposes a method to get the base address of the game binary.
 pub mod reloc {
+    use crate::errors::skse_assert;
+
     extern "system" {
         fn SKSE64_Reloc__base__() -> usize;
     }
 
-    /// Gets the base address of the skyrim binary.
-    pub fn base() -> usize {
-        // SAFETY: Not actually unsafe lol.
-        unsafe { SKSE64_Reloc__base__() }
+    /// Holds a game address, which can be accessed by offset or address.
+    #[repr(transparent)]
+    #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+    pub struct RelocAddr(usize);
+
+    impl RelocAddr {
+        /// Gets the base address of the skyrim binary.
+        pub fn base() -> usize {
+            // SAFETY: Not actually unsafe lol.
+            unsafe { SKSE64_Reloc__base__() }
+        }
+
+        /// Creates a reloc addr from an offset.
+        pub fn from_offset(
+            offset: usize
+        ) -> Self {
+            Self(offset)
+        }
+
+        /// Creates a reloc addr from an address.
+        pub fn from_addr(
+            addr: usize
+        ) -> Self {
+            skse_assert!(Self::base() <= addr);
+            Self(Self::base() + addr)
+        }
+
+        /// Gets the underlying offset of the RelocAddr.
+        pub fn offset(
+            self
+        ) -> usize {
+            self.0
+        }
+
+        /// Gets the actual address of the RelocAddr.
+        pub fn addr(
+            self
+        ) -> usize {
+            Self::base() + self.0
+        }
+    }
+
+    impl std::ops::Add<usize> for RelocAddr {
+        type Output = Self;
+        fn add(
+            self,
+            rhs: usize
+        ) -> Self::Output {
+            Self(self.0 + rhs)
+        }
     }
 }
 
@@ -452,8 +500,8 @@ pub unsafe extern "system" fn SKSEPlugin_Load(
     if (*skse).isEditor != 0 { return false; }
 
     // Set running version to the given value.
-    skse_assert!(RUNNING_SKSE_VERSION.set(SkseVersion::from_raw((*skse).skseVersion)).is_ok());
-    skse_assert!(RUNNING_GAME_VERSION.set(SkseVersion::from_raw((*skse).runtimeVersion)).is_ok());
+    RUNNING_SKSE_VERSION.init(SkseVersion::from_raw((*skse).skseVersion));
+    RUNNING_GAME_VERSION.init(SkseVersion::from_raw((*skse).runtimeVersion));
 
     // Call the rust entry point.
     return skse_plugin_rust_entry(skse.as_ref().unwrap()).is_ok();

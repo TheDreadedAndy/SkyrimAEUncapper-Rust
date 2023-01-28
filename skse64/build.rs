@@ -23,15 +23,7 @@ fn main() {
     println!("cargo:rerun-if-changed={}", SKSE_SOLUTION);
 
     // Compile our wrapper.
-    let mut builder = cc::Build::new();
-    builder.cpp(true)
-        .file(WRAPPER_FILE)
-        .flag("-Isrc/")
-        .flag("-I../skse64_src/common/")
-        .flag("-I../skse64_src/skse64/")
-        .flag("-I../skse64_src/skse64/skse64_common/");
-    vs_profile.config_builder(&mut builder);
-    builder.compile("wrapper");
+    vs_profile.cc_builder().file(WRAPPER_FILE).flag("-Isrc/").compile("wrapper");
 
     // Generate the bindings.
     let bindings = bindgen::Builder::default()

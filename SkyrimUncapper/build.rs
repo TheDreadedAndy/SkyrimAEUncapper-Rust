@@ -27,6 +27,5 @@ fn main() {
 
     // Compile our assembly hooks.
     println!("cargo:rerun-if-changed={}", HOOKS_FILE);
-    let clang = std::path::PathBuf::from(std::env::var("LIBCLANG_PATH").unwrap()).join("clang.exe");
-    cc::Build::new().file(HOOKS_FILE).compiler(clang).compile("hooks");
+    vsprofile::VsProfile::get().cc_builder().file(HOOKS_FILE).compile("hooks");
 }

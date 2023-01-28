@@ -102,6 +102,6 @@ pub unsafe fn memset(
     if n == 0 { return; }
 
     skse64::safe::use_region(a, n, || {
-        libc::memset(a as *mut c_void, c as c_int, n);
+        ::std::ptr::write_bytes::<u8>(a as *mut u8, c, n);
     });
 }

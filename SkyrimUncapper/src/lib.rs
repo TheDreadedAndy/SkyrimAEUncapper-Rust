@@ -56,7 +56,7 @@ pub fn skse_plugin_rust_entry(
         CURRENT_RELEASE_RUNTIME,
         SkseVersion::from_raw(skse.skseVersion),
         SkseVersion::from_raw(skse.runtimeVersion),
-        skse64::reloc::base()
+        skse64::reloc::RelocAddr::base()
     );
 
     settings::init(&get_runtime_dir().join("data\\SKSE\\Plugins\\SkyrimUncapper.ini"))?;

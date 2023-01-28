@@ -8,9 +8,8 @@ name = "SkyrimUncapper"
 crate-type = ["cdylib"]
 
 [dependencies]
-rust-ini = "0.18.0"
-once_cell = "1.17.0"
-libc = "0.2.139"
+configparser = "3.0.2"
+later = { path = "../later" }
 ctypes = { path = "../ctypes" }
 disarray = { path = "../disarray" }
 skse64 = { path = "../skse64" }
@@ -18,4 +17,4 @@ versionlib = { path = "../versionlib" }
 
 [build-dependencies]
 winres = "0.1.12"
-cc = "1.0.78"
+vsprofile = { path = "../vsprofile" }

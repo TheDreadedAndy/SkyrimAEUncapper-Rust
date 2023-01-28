@@ -102,9 +102,11 @@ PUBLIC_FN(player_avo_get_current_original_wrapper)
  * true skill level instead of the damaged value by calling the OG function.
  */
 PUBLIC_FN(display_true_skill_level_hook)
+    sub $0x20, %rsp
     call player_avo_get_current_original_wrapper // Replacing a call, no need to save.
+    add $0x20, %rsp
     cvttss2si %xmm0, %ecx
-    jmp display_true_skill_level_return_trampoline
+    ret
 
 /*
  * Forces the code which displays skill color in the skills menu to show the
@@ -194,9 +196,11 @@ PUBLIC_FN(legendary_reset_skill_level_wrapper)
  * Since we are overwriting another fn call, we dont need to reg save.
  */
 PUBLIC_FN(check_condition_for_legendary_skill_wrapper)
+    sub $0x20, %rsp
     call check_condition_for_legendary_skill_hook
+    add $0x20, %rsp
     cmp $1, %al
-    jmp check_condition_for_legendary_skill_return_trampoline
+    ret
 
 /*
  * Allows the legendary button to be hidden based on an INI setting.
@@ -204,6 +208,8 @@ PUBLIC_FN(check_condition_for_legendary_skill_wrapper)
  * the register state.
  */
 PUBLIC_FN(hide_legendary_button_wrapper)
+    sub $0x20, %rsp
     call hide_legendary_button_hook
+    add $0x20, %rsp
     cmp $1, %al
-    jmp hide_legendary_button_return_trampoline
+    ret

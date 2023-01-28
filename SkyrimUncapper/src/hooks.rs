@@ -15,7 +15,8 @@ use std::ffi::c_int;
 use skse64::errors::skse_assert;
 
 use crate::settings;
-use crate::patcher::{RelocPatch, Hook, HookFn, GameLocation};
+use crate::hook_wrappers::calculate_charge_points_per_use_wrapper;
+use crate::patcher::{Descriptor, Hook, HookFn, GameLocation};
 use crate::safe::signature;
 use crate::skyrim::{ActorAttribute, ActorValueOwner, PlayerSkills};
 use crate::skyrim::{player_avo_get_current_original, get_game_setting};
@@ -27,9 +28,20 @@ macro_rules! game_var {
     }
 }
 
+///
+/// Trampolines used by hooks to return to game code.
+///
+/// Boing!
+///
+///@{
+#[no_mangle] static improve_player_skill_points_return_trampoline: GameRef<usize> = GameRef::new();
+#[no_mangle] static modify_perk_pool_return_trampoline: GameRef<usize> = GameRef::new();
+#[no_mangle] static player_avo_get_current_return_trampoline: GameRef<usize> = GameRef::new();
+///@}
+
 disarray::disarray! {
     /// The hooks which must be installed by the game patcher.
-    pub static HOOK_SIGNATURES: [RelocPatch; NUM_HOOK_SIGNATURES] = [
+    pub static HOOK_SIGNATURES: [Descriptor; NUM_HOOK_SIGNATURES] = [
         //
         // Injects the code which alters the real skill cap of each skill.
         //
@@ -37,12 +49,183 @@ disarray::disarray! {
         // and returned to, at the request of the author of the eXPerience mod (17751).
         // This is handled by the patcher, we need only make our signature long enough.
         //
-        RelocPatch::Patch {
+        Descriptor::Patch {
             name: "GetSkillCap",
             enabled: settings::is_skill_cap_enabled,
             hook: Hook::Call6(unsafe { HookFn::new(&get_skill_cap_hook) }),
             loc: GameLocation::Id { id: 41561, offset: 0x76 },
             sig: signature![0xf3, 0x44, 0x0f, 0x10, 0x15, ?, ?, ?, ?],
+            trampoline: None
+        },
+
+        //
+        // Replaces the original charge point calculation function call with a call
+        // to our modified implementation, which caps the enchant level at 199.
+        //
+        // This fixes an issue with the games original equation for level values above 199.
+        //
+        // Note that we also replace the player_avo_get_current() call, so that we
+        // can enforce a different formula cap for enchanting charge and magnitude.
+        //
+        Descriptor::Patch {
+            name: "CalculateChargePointsPerUse",
+            enabled: settings::is_enchant_patch_enabled,
+            hook: Hook::Call6(unsafe { HookFn::new(&calculate_charge_points_per_use_wrapper) }),
+            loc: GameLocation::Id { id: 51449, offset: 0x32a },
+            sig: signature![
+                0xff, 0x50, 0x08, 0x0f, 0x28, 0xc8, 0x0f, 0x28,
+                0xc7, 0xe8, 0x08, 0x6f, 0xb2, 0xff
+            ],
+            trampoline: None
+        },
+
+        //
+        // Caps the effective skill level in calculations by always returning a damaged result.
+        //
+        Descriptor::Patch {
+            name: "PlayerAVOGetCurrent",
+            enabled: settings::is_skill_formula_cap_enabled,
+            hook: Hook::Jump6(unsafe { HookFn::new(&player_ave_get_current_hook) }),
+            loc: GameLocation::Id { id: 38462, offset: 0 },
+            sig: // size 6
+            trampoline: Some(&player_avo_get_current_return_trampoline)
+        },
+
+        //
+        // Overwrites the skill display player_avo_get_current() call to display the
+        // actual, non-damaged, skill level.
+        //
+        // This patch doesn't serve a real purpose other than to avoid confusing players.
+        //
+        Descriptor::Patch {
+            name: "DisplayTrueSkillLevel",
+            enabled: settings::is_skill_formula_cap_enabled,
+            hook: Hook::Jump6(unsafe { HookFn::new(&display_true_skill_level_hook) }),
+            loc: GameLocation::Id { id: 52525, offset: 0x120 },
+            sig: // 7
+            trampoline: None
+        },
+
+        //
+        // Overwrites the skill color displays call to player_avo_get_current() to
+        // call the original function.
+        //
+        // This patch exists for the same reason as the above patch.
+        //
+        Descriptor::Patch {
+            name: "DisplayTrueSkillColor",
+            enabled: settings::is_skill_formula_cap_enabled,
+            hook: Hook::Call6(unsafe { HookFn::new(&display_true_skill_color_hook) }),
+            loc: GameLocation::Id { id: 52945, offset: 0x32 },
+            sig: // 10
+            trampoline: None
+        },
+
+        // Prevents the skill training function from applying our multipliers.
+        Descriptor::Patch {
+            name: "ImproveSkillByTraining",
+            enabled: settings::is_skill_exp_enabled,
+            hook: Hook::Call5(unsafe { HookFn::new(&improve_player_skill_points_original) }),
+            loc: GameLocation::Id { id: 41562, offset: 0x98 },
+            sig: // 5
+            trampoline: None
+        },
+
+        // Applies the multipliers from the INI file to skill experience.
+        Descriptor::Patch {
+            name: "ImprovePlayerSkillPoints",
+            enabled: settings::is_skill_exp_enabled,
+            hook: Hook::Jump6(unsafe { HookFn::new(&improve_player_skill_points_hook) }),
+            loc: GameLocation::Id { id: 41561, offset: 0 },
+            sig: // 6
+            trampoline: Some(&improve_player_skill_points_return_trampoline)
+        },
+
+        //
+        // Modifies the number of perk points obtained after the game has performed its
+        // original calculation.
+        //
+        Descriptor::Patch {
+            name: "ModifyPerkPool",
+            enabled: settings::is_perk_points_enabled,
+            hook: Hook::Jump6(unsafe { HookFn::new(&modify_perk_pool_wrapper) }),
+            loc: GameLocation::Id { id: 52538, offset: 0x70 },
+            sig: // 9
+            trampoline: Some(&modify_perk_pool_return_trampoline)
+        },
+
+        //
+        // Passes the EXP gain original calculated by the game to our hook for further
+        // modification.
+        //
+        Descriptor::Patch {
+            name: "ImproveLevelExpBySkillLevel",
+            enabled: settings::is_level_exp_enabled,
+            hook: Hook::Call6(unsafe { HookFn::new(&improve_level_exp_by_skill_level_wrapper) }),
+            loc: GameLocation::Id { id: 41561, offset: 0x2d7 },
+            sig: // 8
+            trampoline: None
+        },
+
+        //
+        // Overwrites the attribute level-up function to adjust the gains based on the players
+        // attribute selection.
+        //
+        // We inject this patch just after the player has made their attribute selection, and
+        // replace what would have been a call to player_avo->ModBase(...). Then, we manually
+        // invoke ModBase and ModCurrent for the attributes and carry weight specified in the INI
+        // file.
+        //
+        // Note that this patch overwrites the carry weight change done in the games code as well.
+        // It also means the game settings which would usually control these attributes are
+        // ignored.
+        //
+        Descriptor::Patch {
+            name: "ImproveAttributeWhenLevelUp",
+            enabled: settings::is_attribute_points_enabled,
+            hook: Hook::Call6(unsafe { HookFn::new(&improve_attribute_when_level_up_hook) }),
+            loc: GameLocation::Id { id: 51917, offset: 0x93 },
+            sig: // 0x2b
+            trampoline: None
+        },
+
+        // Alters the reset level of legendarying a skill.
+        Descriptor::Patch {
+            name: "LegendaryResetSkillLevel",
+            enabled: settings::is_legendary_enabled,
+            hook: Hook::Call6(unsafe { HookFn::new(&legendary_reset_skill_level_wrapper) }),
+            loc: GameLocation::Id { id: 52591, offset: 0x1d7 },
+            sig: // 6
+            trampoline: None
+        },
+
+        // Replaces the call to the legendary condition check function with our own.
+        Descriptor::Patch {
+            name: "CheckConditionForLegendarySkill",
+            enabled: settings::is_legendary_enabled,
+            hook: Hook::Call6(unsafe { HookFn::new(&check_condition_for_legendary_skill_wrapper) }),
+            loc: GameLoctation::Id { id: 52520, offset: 0x157 },
+            sig: // 10
+            trampoline: None
+        },
+
+        // As above, except this is for the function where the jump key is remapped.
+        Descriptor::Patch {
+            name: "CheckConditionForLegendarySkillAlt",
+            enabled: settings::is_legendary_enabled,
+            hook: Hook::Call6(unsafe { HookFn::new(&check_condition_for_legendary_skill_wrapper) }),
+            loc: GameLocation::Offset { base: 0x900d60, offset: 0x4de },
+            sig: // 10
+            trampoline: None
+        },
+
+        // As above, except this is for the UI button display.
+        Descriptor::Patch {
+            name: "HideLegendaryButton",
+            enabled: settings::is_legendary_enabled,
+            hook: Hook::Call6(unsafe { HookFn::new(&hide_legendary_button_wrapper) }),
+            loc: GameLocation::Id { id: 52527, offset: 0x167 },
+            sig: // 10
             trampoline: None
         }
     ];

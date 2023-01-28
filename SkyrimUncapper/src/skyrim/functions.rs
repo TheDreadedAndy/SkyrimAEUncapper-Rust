@@ -10,31 +10,31 @@ use std::ffi::c_char;
 use skse64::errors::skse_assert;
 
 use super::{PlayerCharacter, ActorValueOwner, SettingCollectionMap, ActorAttribute, Setting};
-use crate::patcher::{RelocAddr, RelocPatch, GameLocation};
+use crate::patcher::{GameRef, Descriptor, GameLocation};
 use crate::hook_wrappers::player_avo_get_current_original_wrapper;
 use crate::settings;
 
 // Game objects.
-static PLAYER_OBJECT: RelocAddr<*mut *mut PlayerCharacter> = RelocAddr::new();
-static GAME_SETTINGS_OBJECT: RelocAddr<*mut *mut SettingCollectionMap> = RelocAddr::new();
+static PLAYER_OBJECT: GameRef<*mut *mut PlayerCharacter> = GameRef::new();
+static GAME_SETTINGS_OBJECT: GameRef<*mut *mut SettingCollectionMap> = GameRef::new();
 
 // Game functions. These are wrapped by safe implementations later.
-static GET_LEVEL_ENTRY: RelocAddr<fn(*mut PlayerCharacter) -> u16> = RelocAddr::new();
-static GET_GAME_SETTING_ENTRY: RelocAddr<
+static GET_LEVEL_ENTRY: GameRef<fn(*mut PlayerCharacter) -> u16> = GameRef::new();
+static GET_GAME_SETTING_ENTRY: GameRef<
     fn(*mut SettingCollectionMap, *const c_char) -> *mut Setting
-> = RelocAddr::new();
-static PLAYER_AVO_GET_BASE_ENTRY: RelocAddr<
+> = GameRef::new();
+static PLAYER_AVO_GET_BASE_ENTRY: GameRef<
     fn(*mut ActorValueOwner, ActorAttribute) -> f32
-> = RelocAddr::new();
-static PLAYER_AVO_GET_CURRENT_ENTRY: RelocAddr<
+> = GameRef::new();
+static PLAYER_AVO_GET_CURRENT_ENTRY: GameRef<
     fn(*mut ActorValueOwner, ActorAttribute) -> f32
-> = RelocAddr::new();
-static PLAYER_AVO_MOD_BASE_ENTRY: RelocAddr<
+> = GameRef::new();
+static PLAYER_AVO_MOD_BASE_ENTRY: GameRef<
     fn(*mut ActorValueOwner, ActorAttribute, f32)
-> = RelocAddr::new();
-static PLAYER_AVO_MOD_CURRENT_ENTRY: RelocAddr<
+> = GameRef::new();
+static PLAYER_AVO_MOD_CURRENT_ENTRY: GameRef<
     fn(*mut ActorValueOwner, u32, ActorAttribute, f32)
-> = RelocAddr::new();
+> = GameRef::new();
 
 disarray::disarray! {
     ///
@@ -42,50 +42,50 @@ disarray::disarray! {
     ///
     /// Used by the patcher to locate our objects/functions.
     ///
-    pub static GAME_SIGNATURES: [RelocPatch] = [
-        RelocPatch::Object {
+    pub static GAME_SIGNATURES: [Descriptor] = [
+        Descriptor::Object {
             name: "g_thePlayer",
             loc: GameLocation::Id { id: 403521, offset: 0 },
             result: PLAYER_OBJECT.inner()
         },
 
-        RelocPatch::Object {
+        Descriptor::Object {
             name: "g_gameSettingCollection",
             loc: GameLocation::Id { id: 400782, offset: 0 },
             result: GAME_SETTINGS_OBJECT.inner()
         },
 
-        RelocPatch::Function {
+        Descriptor::Function {
             name: "GetLevel",
             loc: GameLocation::Id { id: 37334, offset: 0 },
             result: GET_LEVEL_ENTRY.inner()
         },
 
-        RelocPatch::Function {
+        Descriptor::Function {
             name: "GetGameSetting",
             loc: GameLocation::Id { id: 22788, offset: 0 },
             result: GET_GAME_SETTING_ENTRY.inner()
         },
 
-        RelocPatch::Function {
+        Descriptor::Function {
             name: "PlayerAVOGetBase",
             loc: GameLocation::Id { id: 38464, offset: 0 },
             result: PLAYER_AVO_GET_BASE_ENTRY.inner()
         },
 
-        RelocPatch::Function {
+        Descriptor::Function {
             name: "PlayerAVOGetCurrent",
             loc: GameLocation::Id { id: 38462, offset: 0 },
             result: PLAYER_AVO_GET_CURRENT_ENTRY.inner()
         },
 
-        RelocPatch::Function {
+        Descriptor::Function {
             name: "PlayerAVOModBase",
             loc: GameLocation::Id { id: 38466, offset: 0 },
             result: PLAYER_AVO_MOD_BASE_ENTRY.inner()
         },
 
-        RelocPatch::Function {
+        Descriptor::Function {
             name: "PlayerAVOModCurrent",
             loc: GameLocation::Id { id: 38467, offset: 0 },
             result: PLAYER_AVO_MOD_CURRENT_ENTRY.inner()
@@ -96,7 +96,7 @@ disarray::disarray! {
 /// Gets the player actor value owner structure.
 fn get_player_avo() -> *mut ActorValueOwner {
     unsafe {
-        // SAFETY: The RelocAddr struct ensures our player pointer is valid.
+        // SAFETY: The GameRef struct ensures our player pointer is valid.
         (*(PLAYER_OBJECT.get())).as_ref().unwrap().get_avo()
     }
 }

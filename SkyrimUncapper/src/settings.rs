@@ -13,9 +13,9 @@ mod leveled;
 
 use std::path::Path;
 
-use once_cell::sync::OnceCell;
-use ini::Ini;
-use skse64::errors::{skse_assert, skse_halt};
+use later::Later;
+use configparser::ini::Ini;
+use skse64::errors::skse_halt;
 use skse64::log::skse_message;
 
 use field::IniField;
@@ -77,7 +77,7 @@ struct Settings {
 }
 
 /// Holds the global settings configuration, which is created when init() is called.
-static SETTINGS: OnceCell<Settings> = OnceCell::new();
+static SETTINGS: Later<Settings> = Later::new();
 
 impl Settings {
     /// Creates a new settings structure, with default values for missing fields.
@@ -195,9 +195,10 @@ pub fn init(
     skse_message!("Loading config file: {}", path.display());
 
     let mut settings = Settings::new();
-    let ini = Ini::load_from_file(path).map_err(|_| ())?;
+    let mut ini = Ini::new();
+    ini.load(path).map_err(|_| ())?;
     settings.read_ini(&ini);
-    skse_assert!(SETTINGS.set(settings).is_ok());
+    SETTINGS.init(settings);
 
     skse_message!("Successfully loaded config file.");
     Ok(())
@@ -205,75 +206,75 @@ pub fn init(
 
 /// Checks if the skill cap patches are enabled.
 pub fn is_skill_cap_enabled() -> bool {
-    SETTINGS.get().unwrap().general.skill_caps_en.get()
+    SETTINGS.general.skill_caps_en.get()
 }
 
 /// Checks if the skill formula cap patches are enabled.
 pub fn is_skill_formula_cap_enabled() -> bool {
-    SETTINGS.get().unwrap().general.skill_formula_caps_en.get()
+    SETTINGS.general.skill_formula_caps_en.get()
 }
 
 /// Checks if the enchanting patches are enabled.
 pub fn is_enchant_patch_enabled() -> bool {
-    SETTINGS.get().unwrap().general.enchanting_patch_en.get()
+    SETTINGS.general.enchanting_patch_en.get()
 }
 
 /// Checks if the skill exp patches are enabled.
 pub fn is_skill_exp_enabled() -> bool {
-    SETTINGS.get().unwrap().general.skill_exp_mults_en.get()
+    SETTINGS.general.skill_exp_mults_en.get()
 }
 
 /// Checks if the level exp patches are enabled.
 pub fn is_level_exp_enabled() -> bool {
-    SETTINGS.get().unwrap().general.level_exp_mults_en.get()
+    SETTINGS.general.level_exp_mults_en.get()
 }
 
 /// Checks if the perk point patches are enabled.
 pub fn is_perk_points_enabled() -> bool {
-    SETTINGS.get().unwrap().general.perk_points_en.get()
+    SETTINGS.general.perk_points_en.get()
 }
 
 /// Checks if the attribute point patches are enabled.
 pub fn is_attr_points_enabled() -> bool {
-    SETTINGS.get().unwrap().general.attr_points_en.get()
+    SETTINGS.general.attr_points_en.get()
 }
 
 /// Checks if the legendary skill patches are enabled.
 pub fn is_legendary_enabled() -> bool {
-    SETTINGS.get().unwrap().general.legendary_en.get()
+    SETTINGS.general.legendary_en.get()
 }
 
 /// Gets the level cap for the given skill.
 pub fn get_skill_cap(
     skill: ActorAttribute
 ) -> f32 {
-    SETTINGS.get().unwrap().skill_caps.get(skill).get() as f32
+    SETTINGS.skill_caps.get(skill).get() as f32
 }
 
 /// Gets the formula cap for the given skill.
 pub fn get_skill_formula_cap(
     skill: ActorAttribute
 ) -> f32 {
-    SETTINGS.get().unwrap().skill_formula_caps.get(skill).get() as f32
+    SETTINGS.skill_formula_caps.get(skill).get() as f32
 }
 
 /// Gets the formula cap for magnitude enchantments.
 pub fn get_enchant_magnitude_cap() -> f32 {
-    (SETTINGS.get().unwrap().enchant.magnitude_cap.get() as f32).min(
+    (SETTINGS.enchant.magnitude_cap.get() as f32).min(
         get_skill_formula_cap(ActorAttribute::Enchanting)
     )
 }
 
 /// Gets the formula cap for weapon-charge enchantments.
 pub fn get_enchant_charge_cap() -> f32 {
-    (SETTINGS.get().unwrap().enchant.charge_cap.get() as f32).min(199.0).min(
+    (SETTINGS.enchant.charge_cap.get() as f32).min(199.0).min(
         get_skill_formula_cap(ActorAttribute::Enchanting)
     )
 }
 
 /// Checks if the weapon charge equation should use a linear charge amount increase per level.
 pub fn is_enchant_charge_linear() -> bool {
-    SETTINGS.get().unwrap().enchant.use_linear_charge.get()
+    SETTINGS.enchant.use_linear_charge.get()
 }
 
 /// Calculates the skill exp gain multiplier for the given skill, skill level, and player level.
@@ -282,10 +283,9 @@ pub fn get_skill_exp_mult(
     skill_level: u32,
     player_level: u32
 ) -> f32 {
-    let s = SETTINGS.get().unwrap();
-    let base_mult = s.skill_exp_mults.get(skill).get();
-    let skill_mult = s.skill_exp_mults_with_skills.get(skill).get_nearest(skill_level);
-    let pc_mult = s.skill_exp_mults_with_pc_lvl.get(skill).get_nearest(player_level);
+    let base_mult = SETTINGS.skill_exp_mults.get(skill).get();
+    let skill_mult = SETTINGS.skill_exp_mults_with_skills.get(skill).get_nearest(skill_level);
+    let pc_mult = SETTINGS.skill_exp_mults_with_pc_lvl.get(skill).get_nearest(player_level);
     return base_mult * skill_mult * pc_mult;
 }
 
@@ -295,10 +295,9 @@ pub fn get_level_exp_mult(
     skill_level: u32,
     player_level: u32
 ) -> f32 {
-    let s = SETTINGS.get().unwrap();
-    let base_mult = s.level_exp_mults.get(skill).get();
-    let skill_mult = s.level_exp_mults_with_skills.get(skill).get_nearest(skill_level);
-    let pc_mult = s.level_exp_mults_with_pc_lvl.get(skill).get_nearest(player_level);
+    let base_mult = SETTINGS.level_exp_mults.get(skill).get();
+    let skill_mult = SETTINGS.level_exp_mults_with_skills.get(skill).get_nearest(skill_level);
+    let pc_mult = SETTINGS.level_exp_mults_with_pc_lvl.get(skill).get_nearest(player_level);
     return base_mult * skill_mult * pc_mult;
 }
 
@@ -306,7 +305,7 @@ pub fn get_level_exp_mult(
 pub fn get_perk_delta(
     player_level: u32
 ) -> u32 {
-    SETTINGS.get().unwrap().perks_at_lvl_up.get_cumulative_delta(player_level)
+    SETTINGS.perks_at_lvl_up.get_cumulative_delta(player_level)
 }
 
 /// Gets the number of (hp, mp, sp, cw) points the player should get for the given level and
@@ -315,25 +314,24 @@ pub fn get_attribute_level_up(
     player_level: u32,
     attr: ActorAttribute
 ) -> (f32, f32, f32, f32) {
-    let s = SETTINGS.get().unwrap();
     match attr {
         ActorAttribute::Health => (
-            s.hp_at_lvl_up.get_nearest(player_level) as f32,
-            s.mp_at_hp_lvl_up.get_nearest(player_level) as f32,
-            s.sp_at_hp_lvl_up.get_nearest(player_level) as f32,
-            s.cw_at_hp_lvl_up.get_nearest(player_level) as f32
+            SETTINGS.hp_at_lvl_up.get_nearest(player_level) as f32,
+            SETTINGS.mp_at_hp_lvl_up.get_nearest(player_level) as f32,
+            SETTINGS.sp_at_hp_lvl_up.get_nearest(player_level) as f32,
+            SETTINGS.cw_at_hp_lvl_up.get_nearest(player_level) as f32
         ),
         ActorAttribute::Magicka => (
-            s.hp_at_mp_lvl_up.get_nearest(player_level) as f32,
-            s.mp_at_lvl_up.get_nearest(player_level) as f32,
-            s.sp_at_mp_lvl_up.get_nearest(player_level) as f32,
-            s.cw_at_mp_lvl_up.get_nearest(player_level) as f32
+            SETTINGS.hp_at_mp_lvl_up.get_nearest(player_level) as f32,
+            SETTINGS.mp_at_lvl_up.get_nearest(player_level) as f32,
+            SETTINGS.sp_at_mp_lvl_up.get_nearest(player_level) as f32,
+            SETTINGS.cw_at_mp_lvl_up.get_nearest(player_level) as f32
         ),
         ActorAttribute::Stamina => (
-            s.hp_at_sp_lvl_up.get_nearest(player_level) as f32,
-            s.mp_at_sp_lvl_up.get_nearest(player_level) as f32,
-            s.sp_at_lvl_up.get_nearest(player_level) as f32,
-            s.cw_at_sp_lvl_up.get_nearest(player_level) as f32
+            SETTINGS.hp_at_sp_lvl_up.get_nearest(player_level) as f32,
+            SETTINGS.mp_at_sp_lvl_up.get_nearest(player_level) as f32,
+            SETTINGS.sp_at_lvl_up.get_nearest(player_level) as f32,
+            SETTINGS.cw_at_sp_lvl_up.get_nearest(player_level) as f32
         ),
         _ => skse_halt!("Cannot get the attribute level up with an invalid choice.")
     }
@@ -343,15 +341,15 @@ pub fn get_attribute_level_up(
 pub fn is_legendary_button_visible(
     skill_level: u32
 ) -> bool {
-    let s = SETTINGS.get().unwrap();
-    (skill_level >= s.legendary.skill_level_en.get()) && !(s.legendary.hide_button.get())
+    (skill_level >= SETTINGS.legendary.skill_level_en.get())
+        && !(SETTINGS.legendary.hide_button.get())
 }
 
 /// Checks if the given skill level is high enough to legendary.
 pub fn is_legendary_available(
     skill_level: u32
 ) -> bool {
-    skill_level >= SETTINGS.get().unwrap().legendary.skill_level_en.get()
+    skill_level >= SETTINGS.legendary.skill_level_en.get()
 }
 
 /// Gets the level a skill should be set to after being legendaried.
@@ -359,15 +357,13 @@ pub fn get_post_legendary_skill_level(
     default_reset: f32,
     base_level: f32
 ) -> f32 {
-    let s = SETTINGS.get().unwrap();
-
     // Check if legendarying should reset the level at all.
-    if s.legendary.keep_skill_level.get() {
+    if SETTINGS.legendary.keep_skill_level.get() {
         return base_level;
     }
 
     // 0 in the conf file means we should use the default value.
-    let mut reset_level = s.legendary.skill_level_after.get() as f32;
+    let mut reset_level = SETTINGS.legendary.skill_level_after.get() as f32;
     if reset_level == 0.0 {
         reset_level = default_reset;
     }

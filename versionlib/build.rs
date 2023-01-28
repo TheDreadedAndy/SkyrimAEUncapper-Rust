@@ -12,11 +12,5 @@ fn main() {
     println!("cargo:rerun-if-changed={}", WRAPPER_FILE);
 
     // Compile our wrapper.
-    let mut builder = cc::Build::new();
-    builder.cpp(true)
-        .file(WRAPPER_FILE)
-        .flag("-Isrc/")
-        .flag("-I../skse64_src/common/");
-    vsprofile::VsProfile::get().config_builder(&mut builder);
-    builder.compile("wrapper");
+    vsprofile::VsProfile::get().cc_builder().file(WRAPPER_FILE).flag("-Isrc/").compile("wrapper");
 }

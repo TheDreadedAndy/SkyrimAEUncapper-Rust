@@ -32,21 +32,38 @@ impl VsProfile {
         }
     }
 
-    /// @brief Configures a cc builder for compatibility with the VS profile.
-    pub fn config_builder(
+    ///
+    /// Configures a cc builder for compatibility with the VS profile.
+    ///
+    /// Additionally prepares build settings which vs2019 would otherwise have.
+    ///
+    pub fn cc_builder(
         self,
-        builder: &mut cc::Build
-    ) {
+    ) -> cc::Build {
+        let mut builder = cc::Build::new();
+        let clang_path = std::env::var("LIBCLANG_PATH").unwrap();
+        let clang = std::path::PathBuf::from(clang_path).join("clang-cl.exe");
+        builder.compiler(clang)
+            .cpp(true)
+            .flag("/EHs")
+            .static_crt(false)
+            .include("../skse64_src/common/")
+            .include("../skse64_src/skse64/")
+            .include("../skse64_src/skse64/skse64_common/");
+
         match self {
             Self::Debug => {
-                builder.flag("-D_DEBUG").flag("-D_ITERATOR_DEBUG_LEVEL=2");
-                builder.opt_level_str("1");
-                builder.cpp_link_stdlib("msvcrtd"); // Debug dynamic windows stdc++ lib.
+                builder.define("_DEBUG", None)
+                    .define("_ITERATOR_DEBUG_LEVEL", Some("2"))
+                    .opt_level_str("1")
+                    .cpp_link_stdlib("msvcrtd"); // Debug dynamic windows stdc++ lib.
             }
             Self::Release => {
-                builder.opt_level_str("z");
-                builder.cpp_link_stdlib("msvcrt"); // Release dynamic windows stdc++ lib.
+                builder.opt_level_str("z")
+                    .cpp_link_stdlib("msvcrt"); // Release dynamic windows stdc++ lib.
             }
         }
+
+        return builder;
     }
 }

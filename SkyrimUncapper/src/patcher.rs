@@ -6,12 +6,11 @@
 //! @brief Locates and applies pre-defined patches to game functions and objects.
 //! @bug No known bugs.
 //!
-//! This file includes the patcher implementation, which reads in arrays of patches
-//! from the skyrim and patches modules, and then applies them to the game. Note
-//! that even though I say "patches" here, I really mean any relocatable function
-//! or object as well, which is what the "patches" in the skyrim module are.
+//! This file includes the patcher implementation, which reads in arrays of descriptor
+//! from the skyrim and patches modules, and then applies them to the game. A descriptor
+//! is either the location of a game function/object or a modification to a game function.
 //!
-//! Note that patches which modify the games code must also provide a signature of the code
+//! Note that descriptors which modify the games code must also provide a signature of the code
 //! they expect to be at the modification site for the length of the patch, to ensure the
 //! mod is doing the intended modification on every version.
 //!
@@ -19,8 +18,9 @@
 use std::cell::UnsafeCell;
 
 use skse64::errors::{skse_assert, skse_halt};
-use skse64::log::{skse_message, skse_error};
+use skse64::log::skse_message;
 use skse64::trampoline::Trampoline;
+use skse64::reloc::RelocAddr;
 use versionlib::VersionDb;
 
 use crate::safe;
@@ -32,7 +32,7 @@ use crate::hooks::{HOOK_SIGNATURES, NUM_HOOK_SIGNATURES};
 #[allow(dead_code)]
 pub enum GameLocation {
     Offset {
-        base: usize,
+        base: RelocAddr,
         offset: usize
     },
 
@@ -54,17 +54,17 @@ pub enum Hook {
 }
 
 /// Describes a location in code to be parsed and acted on by the patcher.
-pub enum RelocPatch {
+pub enum Descriptor {
     Function {
         name: &'static str,
         loc: GameLocation,
-        result: RelocResult
+        result: GameRefResult
     },
 
     Object {
         name: &'static str,
         loc: GameLocation,
-        result: RelocResult
+        result: GameRefResult
     },
 
     Patch {
@@ -73,19 +73,19 @@ pub enum RelocPatch {
         hook: Hook,
         loc: GameLocation,
         sig: Signature,
-        trampoline: Option<RelocResult>
+        trampoline: Option<GameRefResult>
     }
 }
 
-/// Describes error reasons for why a patch could not be located.
-enum PatchError {
+/// Describes error reasons for why a descriptor result could not be located.
+enum DescriptorError {
     Disabled,
     Missing,
     Mismatch
 }
 
-/// The result of an attempt to locate a patch.
-type PatchResult = Result<usize, PatchError>;
+/// The result of an attempt to locate a descriptor.
+type FindResult = Result<RelocAddr, DescriptorError>;
 
 /// Stores a function which is used by a hook.
 #[repr(transparent)]
@@ -98,33 +98,33 @@ pub struct HookFn(*const u8);
 /// This structure is a transparent usize, as some results may be visible to ASM code.
 ///
 #[repr(transparent)]
-pub struct RelocAddr<T>(UnsafeCell<usize>, std::marker::PhantomData<T>);
+pub struct GameRef<T>(UnsafeCell<usize>, std::marker::PhantomData<T>);
 
 /// Contains a pointer to the unsafe cell of a RelocAddr, to be written back to by the patcher.
 #[repr(transparent)]
 #[derive(Copy, Clone)]
-pub struct RelocResult(*mut UnsafeCell<usize>);
+pub struct GameRefResult(*mut UnsafeCell<usize>);
 
 impl GameLocation {
     /// Finds the game address specified by this location.
     fn find(
         &self,
         db: &VersionDb
-    ) -> PatchResult {
+    ) -> FindResult {
         match self {
             Self::Offset { base, offset } => {
                 if let Ok(id) = db.find_id_by_offset(*base) {
-                    skse_message!("Offset {:#x} has ID {}", base, id);
-                    Ok(skse64::reloc::base() + base + offset)
+                    skse_message!("Offset {:#x} has ID {}", base.offset(), id);
+                    Ok(*base + *offset)
                 } else {
-                    Err(PatchError::Missing)
+                    Err(DescriptorError::Missing)
                 }
             },
             Self::Id { id, offset } => {
-                if let Ok(base) = db.find_offset_by_id(*id) {
-                    Ok(skse64::reloc::base() + base + offset)
+                if let Ok(ra) = db.find_offset_by_id(*id) {
+                    Ok(ra + *offset)
                 } else {
-                    Err(PatchError::Missing)
+                    Err(DescriptorError::Missing)
                 }
             }
         }
@@ -138,10 +138,18 @@ impl std::fmt::Display for GameLocation {
     ) -> Result<(), std::fmt::Error> {
         match self {
             Self::Offset { base, offset } => {
-                write!(f, "([BASE: {:#x}] + {:#x})", base, offset)
+                if *offset == 0 {
+                    write!(f, "[BASE: {:#x}]", base.offset())
+                } else {
+                    write!(f, "([BASE: {:#x}] + {:#x})", base.offset(), offset)
+                }
             },
             Self::Id { id, offset } => {
-                write!(f, "([ID: {}] + {:#x})", id, offset)
+                if *offset == 0 {
+                    write!(f, "[ID: {}]", id)
+                } else {
+                    write!(f, "([ID: {}] + {:#x})", id, offset)
+                }
             }
         }
     }
@@ -204,51 +212,51 @@ impl Hook {
     }
 }
 
-impl RelocPatch {
+impl Descriptor {
     /// Finds the address and verifies its signature, if applicable.
     fn find(
         &self,
         db: &VersionDb
-    ) -> PatchResult {
+    ) -> FindResult {
         match self {
             Self::Object { loc, .. } => loc.find(db),
             Self::Function { loc, .. } => loc.find(db),
             Self::Patch { enabled, loc, sig, .. } => {
                 if !enabled() {
-                    return Err(PatchError::Disabled)
+                    return Err(DescriptorError::Disabled)
                 }
 
                 let addr = loc.find(db)?;
                 unsafe {
                     // SAFETY: We know addr is in the skyrim binary, since it came from the db.
-                    sig.check(addr).map_err(|_| PatchError::Mismatch)?;
+                    sig.check(addr.addr()).map_err(|_| DescriptorError::Mismatch)?;
                 }
                 Ok(addr)
             }
         }
     }
 
-    /// Reports the results of an attempt to find a signature.
+    /// Reports the results of an attempt to find a descriptor.
     fn report(
         &self,
-        res: &PatchResult
+        res: &FindResult
     ) {
         match res {
             Ok(addr) => {
                 skse_message!(
                     "[SUCCESS] {} is at offset {:#x}",
                     self,
-                    addr - skse64::reloc::base()
+                    addr.offset()
                 );
             },
-            Err(PatchError::Disabled) => {
+            Err(DescriptorError::Disabled) => {
                 skse_message!("[SKIPPED] {} is disabled", self);
             },
-            Err(PatchError::Missing) => {
-                skse_error!("[FAILURE] {} was not in the version database!", self);
+            Err(DescriptorError::Missing) => {
+                skse_message!("[FAILURE] {} was not in the version database!", self);
             },
-            Err(PatchError::Mismatch) => {
-                skse_error!("[FAILURE] {} did not match the expected code signature!", self);
+            Err(DescriptorError::Mismatch) => {
+                skse_message!("[FAILURE] {} did not match the expected code signature!", self);
             }
         }
     }
@@ -266,7 +274,7 @@ impl RelocPatch {
     /// Gets the result structure for this patch, if available
     fn result(
         &self
-    ) -> Option<RelocResult> {
+    ) -> Option<GameRefResult> {
         match self {
             Self::Object { result, .. } => Some(*result),
             Self::Function { result, .. } => Some(*result),
@@ -287,7 +295,7 @@ impl RelocPatch {
     /// Gets the trampoline for this patch, if available.
     fn trampoline(
         &self
-    ) -> Option<RelocResult> {
+    ) -> Option<GameRefResult> {
         match self {
             Self::Patch { trampoline, .. } => *trampoline,
             _ => None
@@ -305,7 +313,7 @@ impl RelocPatch {
     }
 }
 
-impl std::fmt::Display for RelocPatch {
+impl std::fmt::Display for Descriptor {
     fn fmt(
         &self,
         f: &mut std::fmt::Formatter<'_>
@@ -345,8 +353,8 @@ impl HookFn {
     }
 }
 
-impl<T> RelocAddr<T> {
-    /// Creates a new relocatable address.
+impl<T> GameRef<T> {
+    /// Creates a new game reference structure..
     pub const fn new() -> Self {
         assert!(std::mem::size_of::<T>() == std::mem::size_of::<usize>());
         Self(UnsafeCell::new(0), std::marker::PhantomData)
@@ -357,10 +365,11 @@ impl<T> RelocAddr<T> {
     ///
     /// This pointer must only be used at patch initialization time. Doing otherwise
     /// will cause races/undefined behavior within get().
+    ///
     pub const fn inner(
         &self
-    ) -> RelocResult {
-        RelocResult(&self.0 as *const _ as *mut _)
+    ) -> GameRefResult {
+        GameRefResult(&self.0 as *const _ as *mut _)
     }
 
     /// Reads the contained address. Only legal if the address has been set through inner().
@@ -378,7 +387,7 @@ impl<T> RelocAddr<T> {
     }
 }
 
-impl RelocResult {
+impl GameRefResult {
     ///
     /// Updates the address of a RelocAddr.
     ///
@@ -398,10 +407,10 @@ impl RelocResult {
     }
 }
 
-// Lie.
+// SAFETY: The patcher is protected by the single initialization of skse.
 unsafe impl Sync for HookFn {}
-unsafe impl<T> Sync for RelocAddr<T> {}
-unsafe impl Sync for RelocResult {}
+unsafe impl<T> Sync for GameRef<T> {}
+unsafe impl Sync for GameRefResult {}
 
 /// Locates any game functions/objects, and applies any code patches.
 pub fn apply() -> Result<(), ()> {
@@ -417,7 +426,7 @@ pub fn apply() -> Result<(), ()> {
 
         if let Ok(addr) = res {
             // SAFETY: The version DB ensures we obtained the correct object.
-            unsafe { sig.result().unwrap().write(addr); }
+            unsafe { sig.result().unwrap().write(addr.addr()); }
         } else {
             fails += 1;
         }
@@ -432,7 +441,7 @@ pub fn apply() -> Result<(), ()> {
         alloc_size += sig.hook().unwrap().alloc_size();
 
         if let Ok(addr) = res {
-            res_addrs[i] = addr;
+            res_addrs[i] = addr.addr();
         } else {
             fails += 1;
         }

@@ -12,6 +12,7 @@ use core::ffi::{c_void, c_int, c_ulonglong};
 use core::ptr::NonNull;
 
 use skse64::version::SkseVersion;
+use skse64::reloc::RelocAddr;
 
 extern "C" {
     fn VersionLibDb__init__() -> NonNull<c_void>;
@@ -73,10 +74,10 @@ impl VersionDb {
     ///
     pub fn find_id_by_offset(
         &self,
-        offset: usize
+        offset: RelocAddr
     ) -> Result<usize, ()> {
         let mut res: c_ulonglong = 0;
-        let offset = offset as c_ulonglong;
+        let offset = offset.offset() as c_ulonglong;
         unsafe {
             // SAFETY: We know our result pointer and version Db are valid.
             if VersionLibDb__find_id_by_offset__(self.0, offset, &mut res) >= 0 {
@@ -93,13 +94,13 @@ impl VersionDb {
     pub fn find_offset_by_id(
         &self,
         id: usize
-    ) -> Result<usize, ()> {
+    ) -> Result<RelocAddr, ()> {
         let mut res: c_ulonglong = 0;
         let id = id as c_ulonglong;
         unsafe {
             // SAFETY: We know our result pointer and version Db are valid.
             if VersionLibDb__find_offset_by_id__(self.0, id, &mut res) >= 0 {
-                Ok(res as usize)
+                Ok(RelocAddr::from_offset(res as usize))
             } else {
                 Err(())
             }

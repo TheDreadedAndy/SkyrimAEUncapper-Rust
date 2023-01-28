@@ -9,7 +9,7 @@ use std::fmt::Debug;
 use std::str::FromStr;
 use std::string::ToString;
 
-use ini::Ini;
+use configparser::ini::Ini;
 
 use crate::skyrim::ActorAttribute;
 use super::config::IniUnnamedReadable;
@@ -40,7 +40,7 @@ impl<T: Copy + FromStr + ToString + Default> IniUnnamedReadable for IniField<T>
         default: Self::Value
     ) {
         self.0 = Some(
-            T::from_str(ini.get_from_or(Some(section), name, &default.to_string())).unwrap()
+            T::from_str(&ini.get(section, name).unwrap_or(default.to_string())).unwrap()
         );
     }
 }
