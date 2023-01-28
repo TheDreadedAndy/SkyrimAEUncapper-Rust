@@ -340,10 +340,10 @@ impl HookFn {
     /// In order to use this function safely, the function type
     /// must be a valid extern "system" fn.
     ///
-    pub const unsafe fn new<F>(
-        func: &F
+    pub const unsafe fn new(
+        func: *const u8
     ) -> Self {
-        Self(unsafe { ::std::mem::transmute(func) })
+        Self(func)
     }
 
     /// Gets the underlying address of the hook function.

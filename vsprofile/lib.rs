@@ -33,18 +33,24 @@ impl VsProfile {
     }
 
     ///
+    /// Configures a asm builder for compatibility with the VS profile.
+    ///
+    pub fn asm_builder(
+        self
+    ) -> cc::Build {
+        Self::clang_builder("clang.exe")
+    }
+
+    ///
     /// Configures a cc builder for compatibility with the VS profile.
     ///
     /// Additionally prepares build settings which vs2019 would otherwise have.
     ///
     pub fn cc_builder(
-        self,
+        self
     ) -> cc::Build {
-        let mut builder = cc::Build::new();
-        let clang_path = std::env::var("LIBCLANG_PATH").unwrap();
-        let clang = std::path::PathBuf::from(clang_path).join("clang-cl.exe");
-        builder.compiler(clang)
-            .cpp(true)
+        let mut builder = Self::clang_builder("clang-cl.exe");
+        builder.cpp(true)
             .flag("/EHs")
             .static_crt(false)
             .include("../skse64_src/common/")
@@ -64,6 +70,17 @@ impl VsProfile {
             }
         }
 
+        return builder;
+    }
+
+    /// Creates a builder with the given clang compiler.
+    fn clang_builder(
+        exe: &str
+    ) -> cc::Build {
+        let mut builder = cc::Build::new();
+        let clang_path = std::env::var("LIBCLANG_PATH").unwrap();
+        let clang = std::path::PathBuf::from(clang_path).join(exe);
+        builder.compiler(clang);
         return builder;
     }
 }

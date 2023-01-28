@@ -95,7 +95,7 @@ PUBLIC_FN(player_avo_get_current_original_wrapper)
     push %rbp
     push %rsi
     push %rdi
-    jmp player_avo_get_current_return_trampoline
+    jmp *player_avo_get_current_return_trampoline(%rip)
 
 /*
  * Forces the code which displays skill values in the skills menu to show the
@@ -135,7 +135,7 @@ PUBLIC_FN(improve_player_skill_points_original)
     mov %rsp, %rax
     push %rdi
     push %r12
-    jmp improve_player_skill_points_return_trampoline
+    jmp *improve_player_skill_points_return_trampoline(%rip)
 
 /*
  * Injected after the current number of perk points is read. Returns to the
@@ -150,7 +150,7 @@ PUBLIC_FN(modify_perk_pool_wrapper)
     add $0x20, %rsp
     END_INJECTED_CALL
     mov %al, %cl // We'll return to an instruction that'll store this in the player
-    jmp modify_perk_pool_return_trampoline
+    jmp *modify_perk_pool_return_trampoline(%rip)
 
 /*
  * Passes the EXP gain to our function for further modification.

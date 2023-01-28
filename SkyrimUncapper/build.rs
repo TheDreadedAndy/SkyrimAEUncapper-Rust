@@ -27,5 +27,5 @@ fn main() {
 
     // Compile our assembly hooks.
     println!("cargo:rerun-if-changed={}", HOOKS_FILE);
-    vsprofile::VsProfile::get().cc_builder().file(HOOKS_FILE).compile("hooks");
+    vsprofile::VsProfile::get().asm_builder().file(HOOKS_FILE).compile("hooks");
 }
