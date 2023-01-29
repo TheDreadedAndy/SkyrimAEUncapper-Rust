@@ -38,7 +38,11 @@ impl VsProfile {
     pub fn asm_builder(
         self
     ) -> cc::Build {
-        Self::clang_builder("clang.exe")
+        let mut builder = Self::clang_builder("clang.exe");
+        if let Self::Debug = self {
+            builder.flag("-g");
+        }
+        return builder
     }
 
     ///

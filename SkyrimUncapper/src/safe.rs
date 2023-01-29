@@ -61,17 +61,15 @@ impl Signature {
         &self,
         a: usize
     ) -> Result<(), usize> {
+        skse_assert!(a != 0);
         if self.0.len() == 0 { return Ok(()); }
 
         let mut diff = 0;
         skse64::safe::use_region(a, self.0.len(), || {
-            let mut addr = a as *mut u8;
-            skse_assert!(!addr.is_null());
-            for op in self.0.iter() {
+            for (i, op) in self.0.iter().enumerate() {
                 if let Opcode::Code(b) = *op {
-                    diff += if b == *addr { 0 } else { 1 };
+                    diff += if b == *(a as *mut u8).add(i) { 0 } else { 1 };
                 }
-                addr = addr.add(1);
             }
         });
 

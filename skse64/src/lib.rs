@@ -415,7 +415,7 @@ pub mod safe {
         fn SKSE64_SafeWrite__safe_write_call__(src: usize, dst: usize) -> c_int;
     }
 
-    /// @brief Temporarily marks the given memory region for read/write, then call the given fn.
+    /// Temporarily marks the given memory region for read/write, then calls the given fn.
     pub unsafe fn use_region(
         addr: usize,
         size: usize,
@@ -428,7 +428,7 @@ pub mod safe {
         SKSE64_SafeWrite__virtual_protect__(addr, size, old_prot, &mut old_prot);
     }
 
-    /// @brief Writes a 5-byte jump to the given address.
+    /// Writes a 5-byte jump to the given address.
     pub unsafe fn write_jump(
         src: usize,
         dst: usize
@@ -440,7 +440,7 @@ pub mod safe {
         }
     }
 
-    /// @brief Writes a 5-byte call to the given address.
+    /// Writes a 5-byte call to the given address.
     pub unsafe fn write_call(
         src: usize,
         dst: usize
