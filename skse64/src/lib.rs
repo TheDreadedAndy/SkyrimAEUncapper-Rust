@@ -220,7 +220,6 @@ pub mod errors {
 /// @brief Wraps the SKSE logging API.
 pub mod log {
     use std::ffi::{c_char, CString};
-    use std::path::Path;
 
     extern "system" {
         #[link_name = "SKSE64_DebugLog__open__"]

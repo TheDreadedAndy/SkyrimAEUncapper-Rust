@@ -268,7 +268,7 @@ pub fn get_skill_formula_cap(
 /// Gets the formula cap for weapon-charge enchantments.
 pub fn get_enchant_charge_cap() -> f32 {
     (SETTINGS.enchant.charge_cap.get() as f32).min(199.0).min(
-        get_skill_formula_cap(ActorAttribute::Enchanting)
+        SETTINGS.skill_formula_caps.get(ActorAttribute::Enchanting).get() as f32
     )
 }
 

@@ -278,7 +278,32 @@ extern "system" fn calculate_charge_points_per_use_hook(
     base_points: f32,
     max_charge: f32
 ) -> f32 {
-    0.0
+    skse_assert!(settings::is_enchant_patch_enabled());
+
+    let cost_exponent = game_setting!("fEnchantingCostExponent").get_float();
+    let cost_base = game_setting!("fEnchantingSkillCostBase").get_float();
+    let cost_scale = game_setting!("fEnchantingSkillCostScale").get_float();
+    let cost_mult = game_setting!("fEnchantingSkillCostMult").get_float();
+    let cap = settings::get_enchant_charge_cap();
+    let enchanting_level = cap.min(unsafe {
+        // SAFETY: We know we were given the player AV, and that the enchanting actor
+        //         attribute is valid.
+        player_avo_get_current_original(av, ActorAttribute::Enchanting as c_int)
+    });
+
+    let base = cost_mult * base_points.powf(cost_exponent);
+    if settings::is_enchant_charge_linear() {
+        // Linearly scale between current min/max of charge points. Max scales with skills/perks,
+        // so this isn't perfectly linear. It still smooths the EQ a lot, though.
+        let max_level_scale = (cap * cost_base).powf(cost_scale);
+        let slope = (max_charge * max_level_scale) / (base * (1.0 - max_level_scale) * cap);
+        let intercept = max_charge / base;
+        let linear_charge = slope * enchanting_level + intercept;
+        max_charge / linear_charge
+    } else {
+        // Original game equation.
+        base * (1.0 - (enchanting_level * cost_base).powf(cost_scale))
+    }
 }
 
 /// Caps the formula results for each skill.
