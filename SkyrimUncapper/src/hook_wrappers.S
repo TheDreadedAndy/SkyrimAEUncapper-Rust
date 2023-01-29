@@ -219,6 +219,8 @@ PUBLIC_FN(legendary_reset_skill_level_wrapper)
  *
  * Note that we have to use jumps and not call/ret here, as putting the
  * comparison after the rsp add violates the epilogue calling convention.
+ * We can't use leaq to stop the flags from being wiped, either, as that
+ * would also violate calling convention.
  */
 PUBLIC_FN(check_condition_for_legendary_skill_wrapper)
     mov %edx, %ecx
