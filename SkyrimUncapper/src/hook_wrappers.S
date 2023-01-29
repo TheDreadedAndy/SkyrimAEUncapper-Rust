@@ -102,11 +102,9 @@ PUBLIC_FN(player_avo_get_current_original_wrapper)
  * true skill level instead of the damaged value by calling the OG function.
  */
 PUBLIC_FN(display_true_skill_level_hook)
-    sub $0x20, %rsp
     call player_avo_get_current_original_wrapper // Replacing a call, no need to save.
-    add $0x20, %rsp
     cvttss2si %xmm0, %ecx
-    ret
+    jmp *display_true_skill_level_return_trampoline(%rip)
 
 /*
  * Forces the code which displays skill color in the skills menu to show the

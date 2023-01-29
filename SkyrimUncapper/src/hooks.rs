@@ -29,6 +29,7 @@ use crate::skyrim::{player_avo_mod_base, player_avo_mod_current, get_player_leve
 ///
 #[no_mangle] static improve_player_skill_points_return_trampoline: GameRef<usize> = GameRef::new();
 #[no_mangle] static player_avo_get_current_return_trampoline: GameRef<usize> = GameRef::new();
+#[no_mangle] static display_true_skill_level_return_trampoline: GameRef<usize> = GameRef::new();
 
 disarray::disarray! {
     /// The hooks which must be installed by the game patcher.
@@ -97,12 +98,12 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "DisplayTrueSkillLevel",
             enabled: settings::is_skill_formula_cap_enabled,
-            hook: Hook::Call6(unsafe {
+            hook: Hook::Jump6(unsafe {
                 HookFn::new(display_true_skill_level_hook as *const u8)
             }),
             loc: GameLocation::Id { id: 52525, offset: 0x120 },
             sig: signature![0xff, 0x50, 0x08, 0xf3, 0x0f, 0x2c, 0xc8; 7],
-            trampoline: None
+            trampoline: Some(display_true_skill_level_return_trampoline.inner())
         },
 
         //
