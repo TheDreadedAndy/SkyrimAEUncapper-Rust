@@ -31,5 +31,6 @@ extern "system" {
     pub fn modify_perk_pool_wrapper();
     pub fn legendary_reset_skill_level_wrapper();
     pub fn check_condition_for_legendary_skill_wrapper();
+    pub fn check_condition_for_legendary_skill_alt_wrapper();
     pub fn hide_legendary_button_wrapper();
 }

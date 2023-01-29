@@ -22,14 +22,21 @@ use crate::skyrim::{ActorAttribute, ActorValueOwner, PlayerSkills};
 use crate::skyrim::{player_avo_get_base, player_avo_get_current_original, game_setting};
 use crate::skyrim::{player_avo_mod_base, player_avo_mod_current, get_player_level};
 
-///
-/// Trampolines used by hooks to return to game code.
-///
-/// Boing!
-///
-#[no_mangle] static improve_player_skill_points_return_trampoline: GameRef<usize> = GameRef::new();
-#[no_mangle] static player_avo_get_current_return_trampoline: GameRef<usize> = GameRef::new();
-#[no_mangle] static display_true_skill_level_return_trampoline: GameRef<usize> = GameRef::new();
+//
+// Trampolines used by hooks to return to game code.
+//
+// Boing!
+//
+#[no_mangle]
+static improve_player_skill_points_return_trampoline: GameRef<usize> = GameRef::new();
+#[no_mangle]
+static player_avo_get_current_return_trampoline: GameRef<usize> = GameRef::new();
+#[no_mangle]
+static check_condition_for_legendary_skill_return_trampoline: GameRef<usize> = GameRef::new();
+#[no_mangle]
+static check_condition_for_legendary_skill_alt_return_trampoline: GameRef<usize> = GameRef::new();
+#[no_mangle]
+static hide_legendary_button_return_trampoline: GameRef<usize> = GameRef::new();
 
 disarray::disarray! {
     /// The hooks which must be installed by the game patcher.
@@ -98,12 +105,12 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "DisplayTrueSkillLevel",
             enabled: settings::is_skill_formula_cap_enabled,
-            hook: Hook::Jump6(unsafe {
+            hook: Hook::Call6(unsafe {
                 HookFn::new(display_true_skill_level_hook as *const u8)
             }),
             loc: GameLocation::Id { id: 52525, offset: 0x120 },
             sig: signature![0xff, 0x50, 0x08, 0xf3, 0x0f, 0x2c, 0xc8; 7],
-            trampoline: Some(display_true_skill_level_return_trampoline.inner())
+            trampoline: None
         },
 
         //
@@ -224,36 +231,36 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "CheckConditionForLegendarySkill",
             enabled: settings::is_legendary_enabled,
-            hook: Hook::Call6(unsafe {
+            hook: Hook::Jump6(unsafe {
                 HookFn::new(check_condition_for_legendary_skill_wrapper as *const u8)
             }),
             loc: GameLocation::Id { id: 52520, offset: 0x157 },
             sig: signature![0xff, 0x53, 0x18, 0x0f, 0x2f, 0x05, ?, ?, ?, ?; 10],
-            trampoline: None
+            trampoline: Some(check_condition_for_legendary_skill_return_trampoline.inner())
         },
 
         // As above, except this is for the function where the jump key is remapped.
         Descriptor::Patch {
             name: "CheckConditionForLegendarySkillAlt",
             enabled: settings::is_legendary_enabled,
-            hook: Hook::Call6(unsafe {
-                HookFn::new(check_condition_for_legendary_skill_wrapper as *const u8)
+            hook: Hook::Jump6(unsafe {
+                HookFn::new(check_condition_for_legendary_skill_alt_wrapper as *const u8)
             }),
             loc: GameLocation::Id { id: 52510, offset: 0x4de },
             sig: signature![0xff, 0x53, 0x18, 0x0f, 0x2f, 0x05, ?, ?, ?, ?; 10],
-            trampoline: None
+            trampoline: Some(check_condition_for_legendary_skill_alt_return_trampoline.inner())
         },
 
         // As above, except this is for the UI button display.
         Descriptor::Patch {
             name: "HideLegendaryButton",
             enabled: settings::is_legendary_enabled,
-            hook: Hook::Call6(unsafe {
+            hook: Hook::Jump6(unsafe {
                 HookFn::new(hide_legendary_button_wrapper as *const u8)
             }),
             loc: GameLocation::Id { id: 52527, offset: 0x167 },
             sig: signature![0xff, 0x50, 0x18, 0x0f, 0x2f, 0x05, ?, ?, ?, ?; 10],
-            trampoline: None
+            trampoline: Some(hide_legendary_button_return_trampoline.inner())
         }
     ];
 }
