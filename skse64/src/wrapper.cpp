@@ -13,6 +13,7 @@
 
 #include <common/IPrefix.h>
 #include <Shlobj.h>
+#include <skse_stop.h>
 #include <skse_version.h>
 #include <Utilities.h>
 #include <SafeWrite.h>
@@ -33,7 +34,7 @@ GetTrampoline(
         case Trampoline::Local:
             return &g_localTrampoline;
         default:
-            HALT("Invalid trampoline selection");
+            STOP("Invalid trampoline selection");
     }
 }
 
@@ -61,7 +62,7 @@ extern "C" {
             s += log;
             gLog.OpenRelative(CSIDL_MYDOCUMENTS, s.c_str());
         } catch(...) {
-            HALT("Failed to open log file");
+            STOP("Failed to open log file");
         }
     }
 
@@ -72,7 +73,7 @@ extern "C" {
         try {
             _MESSAGE(msg);
         } catch(...) {
-            HALT("Failed to write message to log.");
+            STOP("Failed to write message to log.");
         }
     }
 
@@ -83,7 +84,7 @@ extern "C" {
         try {
             _ERROR(msg);
         } catch(...) {
-            HALT("Failed to write error to log.");
+            STOP("Failed to write error to log.");
         }
     }
 
@@ -92,7 +93,7 @@ extern "C" {
         try {
             return GetRuntimeDirectory().c_str();
         } catch(...) {
-            HALT("Failed to get runtime directory.");
+            STOP("Failed to get runtime directory.");
         }
     }
 
@@ -110,7 +111,7 @@ extern "C" {
         try {
             ASSERT(GetTrampoline(t)->Create(len, module));
         } catch(...) {
-            HALT("Unable to allocate trampoline buffer");
+            STOP("Unable to allocate trampoline buffer");
         }
     }
 
@@ -121,7 +122,7 @@ extern "C" {
         try {
             GetTrampoline(t)->Destroy();
         } catch(...) {
-            HALT("Failed to destroy trampoline");
+            STOP("Failed to destroy trampoline");
         }
     }
 
@@ -134,7 +135,7 @@ extern "C" {
         try {
             ASSERT(GetTrampoline(t)->Write6Branch(src, dst));
         } catch(...) {
-            HALT("Failed to write Jump-6 to trampoline");
+            STOP("Failed to write Jump-6 to trampoline");
         }
     }
 
@@ -147,7 +148,7 @@ extern "C" {
         try {
             ASSERT(GetTrampoline(t)->Write6Call(src, dst));
         } catch(...) {
-            HALT("Failed to write Call-6 to trampoline");
+            STOP("Failed to write Call-6 to trampoline");
         }
     }
 
@@ -160,7 +161,7 @@ extern "C" {
         try {
             ASSERT(GetTrampoline(t)->Write5Branch(src, dst));
         } catch(...) {
-            HALT("Failed to write Jump-5 to trampoline");
+            STOP("Failed to write Jump-5 to trampoline");
         }
     }
 
@@ -173,7 +174,7 @@ extern "C" {
         try {
             ASSERT(GetTrampoline(t)->Write5Call(src, dst));
         } catch(...) {
-            HALT("Failed to write Call-5 to trampoline");
+            STOP("Failed to write Call-5 to trampoline");
         }
     }
 
@@ -192,7 +193,7 @@ extern "C" {
                 reinterpret_cast<PDWORD>(old_prot)
             ));
         } catch(...) {
-            HALT("Failed to protect memory region");
+            STOP("Failed to protect memory region");
         }
     }
 
@@ -204,7 +205,7 @@ extern "C" {
         try {
             return SafeWriteJump(src, dst) ? 0 : -1;
         } catch(...) {
-            HALT("Exception while writing direct jump.");
+            STOP("Exception while writing direct jump.");
         }
     }
 
@@ -216,7 +217,7 @@ extern "C" {
         try {
             return SafeWriteCall(src, dst) ? 0 : -1;
         } catch(...) {
-            HALT("Exception while writing direct call.");
+            STOP("Exception while writing direct call.");
         }
     }
 }

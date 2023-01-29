@@ -53,6 +53,7 @@ impl VsProfile {
         builder.cpp(true)
             .flag("/EHs")
             .static_crt(false)
+            .include("../skse64/inc/")
             .include("../skse64_src/common/")
             .include("../skse64_src/skse64/")
             .include("../skse64_src/skse64/skse64_common/");

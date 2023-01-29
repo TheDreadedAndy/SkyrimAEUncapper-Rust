@@ -13,6 +13,7 @@
  */
 
 #include <common/IErrors.h>
+#include <skse_stop.h>
 
 #include <versionlibdb.h>
 
@@ -22,7 +23,7 @@ extern "C" {
         try {
             return new VersionDb();
         } catch(...) {
-            HALT("Failed to construct version database");
+            STOP("Failed to construct version database");
         }
     }
 
@@ -34,7 +35,7 @@ extern "C" {
             ASSERT(db);
             delete db;
         } catch(...) {
-            HALT("Failed to destroy version database");
+            STOP("Failed to destroy version database");
         }
     }
 
@@ -46,7 +47,7 @@ extern "C" {
             ASSERT(db);
             ASSERT(db->Load());
         } catch(...) {
-            HALT("Failed to load database into version db");
+            STOP("Failed to load database into version db");
         }
     }
 
@@ -62,7 +63,7 @@ extern "C" {
             ASSERT(db);
             ASSERT(db->Load(major, minor, build, sub));
         } catch(...) {
-            HALT("Failed to load specific release into db");
+            STOP("Failed to load specific release into db");
         }
     }
 
@@ -76,7 +77,7 @@ extern "C" {
             ASSERT(db);
             return db->FindOffsetById(id, *result) ? 0 : -1;
         } catch(...) {
-            HALT("Failed to find offset by id in version db");
+            STOP("Failed to find offset by id in version db");
         }
     }
 
@@ -90,7 +91,7 @@ extern "C" {
             ASSERT(db);
             return db->FindIdByOffset(offset, *result) ? 0 : -1;
         } catch(...) {
-            HALT("Failed to find id by offset in version db");
+            STOP("Failed to find id by offset in version db");
         }
     }
 }
