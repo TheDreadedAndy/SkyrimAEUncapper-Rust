@@ -82,7 +82,7 @@ pub enum Descriptor {
 enum DescriptorError {
     Disabled,
     Missing,
-    Mismatch
+    Mismatch(RelocAddr)
 }
 
 /// The result of an attempt to locate a descriptor.
@@ -230,7 +230,7 @@ impl Descriptor {
                 let addr = loc.find(db)?;
                 unsafe {
                     // SAFETY: We know addr is in the skyrim binary, since it came from the db.
-                    sig.check(addr.addr()).map_err(|_| DescriptorError::Mismatch)?;
+                    sig.check(addr.addr()).map_err(|_| DescriptorError::Mismatch(addr))?;
                 }
                 Ok(addr)
             }
@@ -256,8 +256,12 @@ impl Descriptor {
             Err(DescriptorError::Missing) => {
                 skse_message!("[FAILURE] {} was not in the version database!", self);
             },
-            Err(DescriptorError::Mismatch) => {
-                skse_message!("[FAILURE] {} did not match the expected code signature!", self);
+            Err(DescriptorError::Mismatch(addr)) => {
+                skse_message!(
+                    "[FAILURE] {} at offset {:#x} did not match the expected code signature!",
+                    self,
+                    addr.offset()
+                );
             }
         }
     }

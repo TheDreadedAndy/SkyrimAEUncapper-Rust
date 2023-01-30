@@ -77,7 +77,7 @@ disarray::disarray! {
             loc: GameLocation::Id { id: 51449, offset: 0x32a },
             sig: signature![
                 0xff, 0x50, 0x08, 0x0f, 0x28, 0xc8, 0x0f, 0x28,
-                0xc7, 0xe8, 0x08, 0x6f, 0xb2, 0xff; 14
+                0xc7, 0xe8, ?, ?, ?, ?; 14
             ],
             trampoline: None
         },
