@@ -10,6 +10,7 @@ use std::str::FromStr;
 
 use configparser::ini::Ini;
 use skse64::errors::skse_assert;
+use skse64::log::skse_message;
 
 use crate::skyrim::ActorAttribute;
 use super::config::IniNamedReadable;
@@ -132,6 +133,7 @@ impl<T: Copy + FromStr> IniNamedReadable for LeveledIniSection<T>
         section: &str,
         default: Self::Value
     ) {
+        // FIXME: Something isn't loading correctly.
         if let Some(sec) = ini.get_map_ref().get(section) {
             for (level, item) in sec.iter() {
                 self.add(
@@ -142,6 +144,7 @@ impl<T: Copy + FromStr> IniNamedReadable for LeveledIniSection<T>
         }
 
         if self.0.len() == 0 {
+            skse_message!("[WARNING]: No values for in INI file for section {}", section);
             self.add(0, default);
         }
         self.0.shrink_to_fit();

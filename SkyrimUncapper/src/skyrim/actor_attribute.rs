@@ -9,6 +9,35 @@ use std::ffi::c_int;
 
 use skse64::errors::skse_assert;
 
+macro_rules! attr_name {
+    ( $pre:literal, $attr:expr ) => {
+        match $attr {
+            ActorAttribute::OneHanded   => ::std::concat!($pre, "OneHanded"),
+            ActorAttribute::TwoHanded   => ::std::concat!($pre, "TwoHanded"),
+            ActorAttribute::Marksman    => ::std::concat!($pre, "Marksman"),
+            ActorAttribute::Block       => ::std::concat!($pre, "Block"),
+            ActorAttribute::Smithing    => ::std::concat!($pre, "Smithing"),
+            ActorAttribute::HeavyArmor  => ::std::concat!($pre, "HeavyArmor"),
+            ActorAttribute::LightArmor  => ::std::concat!($pre, "LightArmor"),
+            ActorAttribute::Pickpocket  => ::std::concat!($pre, "Pickpocket"),
+            ActorAttribute::LockPicking => ::std::concat!($pre, "LockPicking"),
+            ActorAttribute::Sneak       => ::std::concat!($pre, "Sneak"),
+            ActorAttribute::Alchemy     => ::std::concat!($pre, "Alchemy"),
+            ActorAttribute::Speechcraft => ::std::concat!($pre, "SpeechCraft"), // Legacy: case.
+            ActorAttribute::Alteration  => ::std::concat!($pre, "Alteration"),
+            ActorAttribute::Conjuration => ::std::concat!($pre, "Conjuration"),
+            ActorAttribute::Destruction => ::std::concat!($pre, "Destruction"),
+            ActorAttribute::Illusion    => ::std::concat!($pre, "Illusion"),
+            ActorAttribute::Restoration => ::std::concat!($pre, "Restoration"),
+            ActorAttribute::Enchanting  => ::std::concat!($pre, "Enchanting"),
+            ActorAttribute::Health      => ::std::concat!($pre, "Health"),
+            ActorAttribute::Magicka     => ::std::concat!($pre, "Magicka"),
+            ActorAttribute::Stamina     => ::std::concat!($pre, "Stamina"),
+            ActorAttribute::CarryWeight => ::std::concat!($pre, "CarryWeight")
+        }
+    };
+}
+
 /// @brief The number of skills the player has.
 pub const SKILL_COUNT: usize = 18;
 
@@ -47,6 +76,17 @@ pub enum ActorAttribute {
 
 /// @brief Iterates over the skills of an actor.
 pub struct SkillIterator(Option<ActorAttribute>);
+
+// Private module for sealed hungarian type trait.
+mod _private {
+    pub trait Sealed {}
+    impl Sealed for f32 {}
+    impl Sealed for u32 {}
+}
+
+pub trait HungarianAttribute: _private::Sealed + Copy {
+    fn hungarian_attr(attr: ActorAttribute) -> &'static str;
+}
 
 impl ActorAttribute {
     /// @brief Converts a c_int into an ActorAttribute, if it has a known value.
@@ -89,30 +129,23 @@ impl ActorAttribute {
     pub fn name(
         self
     ) -> &'static str {
-        match self {
-            ActorAttribute::OneHanded => "OneHanded",
-            ActorAttribute::TwoHanded => "TwoHanded",
-            ActorAttribute::Marksman => "Marksman",
-            ActorAttribute::Block => "Block",
-            ActorAttribute::Smithing => "Smithing",
-            ActorAttribute::HeavyArmor => "HeavyArmor",
-            ActorAttribute::LightArmor => "LightArmor",
-            ActorAttribute::Pickpocket => "Pickpocket",
-            ActorAttribute::LockPicking => "LockPicking",
-            ActorAttribute::Sneak => "Sneak",
-            ActorAttribute::Alchemy => "Alchemy",
-            ActorAttribute::Speechcraft => "SpeechCraft", // Legacy: case.
-            ActorAttribute::Alteration => "Alteration",
-            ActorAttribute::Conjuration => "Conjuration",
-            ActorAttribute::Destruction => "Destruction",
-            ActorAttribute::Illusion => "Illusion",
-            ActorAttribute::Restoration => "Restoration",
-            ActorAttribute::Enchanting => "Enchanting",
-            ActorAttribute::Health => "Health",
-            ActorAttribute::Magicka => "Magicka",
-            ActorAttribute::Stamina => "Stamina",
-            ActorAttribute::CarryWeight => "CarryWeight"
-        }
+        attr_name!("", self)
+    }
+}
+
+impl HungarianAttribute for f32 {
+    fn hungarian_attr(
+        attr: ActorAttribute
+    ) -> &'static str {
+        attr_name!("f", attr)
+    }
+}
+
+impl HungarianAttribute for u32 {
+    fn hungarian_attr(
+        attr: ActorAttribute
+    ) -> &'static str {
+        attr_name!("i", attr)
     }
 }
 

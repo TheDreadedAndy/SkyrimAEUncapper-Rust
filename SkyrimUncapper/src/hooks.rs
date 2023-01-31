@@ -28,6 +28,8 @@ use crate::skyrim::{player_avo_mod_base, player_avo_mod_current, get_player_leve
 // Boing!
 //
 #[no_mangle]
+static improve_skill_by_training_return_trampoline: GameRef<usize> = GameRef::new();
+#[no_mangle]
 static improve_player_skill_points_return_trampoline: GameRef<usize> = GameRef::new();
 #[no_mangle]
 static player_avo_get_current_return_trampoline: GameRef<usize> = GameRef::new();
@@ -56,6 +58,36 @@ disarray::disarray! {
             }),
             loc: GameLocation::Id { id: 41561, offset: 0x76 },
             sig: signature![0xf3, 0x44, 0x0f, 0x10, 0x15, ?, ?, ?, ?; 9],
+            trampoline: None
+        },
+
+        //
+        // Injects a function call to alter the behavior of player_avo_get_current()
+        // for enchanting during the region of the patch and the following patch.
+        // This allows us to ensure that the charge cap is used within this region,
+        // thus ensuring that the charge and magnitude cap can be configured independently.
+        //
+        Descriptor::Patch {
+            name: "BeginMaxChargeCalculation",
+            enabled: settings::is_enchant_patch_enabled,
+            hook: Hook::Call6(unsafe {
+                HookFn::new(max_charge_begin_wrapper as *const u8)
+            }),
+            loc: GameLocation::Id { id: 51449, offset: 0xe9 },
+            sig: signature![0xf3, 0x0f, 0x11, 0x84, 0x24, 0xa0, 0x00, 0x00, 0x00; 9],
+            trampoline: None
+        },
+        Descriptor::Patch {
+            name: "EndMaxChargeCalculation",
+            enabled: settings::is_enchant_patch_enabled,
+            hook: Hook::Call6(unsafe {
+                HookFn::new(max_charge_end_wrapper as *const u8)
+            }),
+            loc: GameLocation::Id { id: 51449, offset: 0x179 },
+            sig: signature![
+                0xf3, 0x0f, 0x10, 0x84, 0x24, 0xa0, 0x00, 0x00, 0x00,
+                0xf3, 0x41, 0x0f, 0x5f, 0xc1; 14
+            ],
             trampoline: None
         },
 
@@ -134,12 +166,12 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "ImproveSkillByTraining",
             enabled: settings::is_skill_exp_enabled,
-            hook: Hook::Call5(unsafe {
-                HookFn::new(improve_player_skill_points_original as *const u8)
+            hook: Hook::Jump6(unsafe {
+                HookFn::new(improve_skill_by_training_hook as *const u8)
             }),
             loc: GameLocation::Id { id: 41562, offset: 0x98 },
-            sig: signature![0xe8, ?, ?, ?, ?; 5],
-            trampoline: None
+            sig: signature![0xe8, ?, ?, ?, ?, 0xff, 0xc6; 7],
+            trampoline: Some(improve_skill_by_training_return_trampoline.inner())
         },
 
         // Applies the multipliers from the INI file to skill experience.
@@ -272,6 +304,23 @@ extern "system" fn get_skill_cap_hook(
 ) -> f32 {
     skse_assert!(settings::is_skill_cap_enabled());
     settings::get_skill_cap(ActorAttribute::from_raw(skill).unwrap())
+}
+
+/// Begins a calculation for weapon charge by setting the enchant cap to use the charge value.
+#[no_mangle]
+extern "system" fn max_charge_begin_hook(
+    enchant_type: u32
+) {
+    const WEAPON_ENCHANT_TYPE: u32 = 0x29; // Defined by the game.
+    if enchant_type == WEAPON_ENCHANT_TYPE {
+        settings::use_enchant_charge_cap();
+    }
+}
+
+/// Ends a calculation for weapon charge by returning the cap mode to magnitude, if necessary.
+#[no_mangle]
+extern "system" fn max_charge_end_hook() {
+    settings::use_enchant_magnitude_cap();
 }
 
 ///

@@ -7,11 +7,11 @@
 
 use std::fmt::Debug;
 use std::str::FromStr;
-use std::string::ToString;
 
 use configparser::ini::Ini;
+use skse64::log::skse_message;
 
-use crate::skyrim::ActorAttribute;
+use crate::skyrim::{ActorAttribute, HungarianAttribute};
 use super::config::IniUnnamedReadable;
 use super::skills::IniSkillReadable;
 
@@ -28,7 +28,7 @@ impl<T: Copy + Default> IniField<T> {
     }
 }
 
-impl<T: Copy + FromStr + ToString + Default> IniUnnamedReadable for IniField<T>
+impl<T: Copy + FromStr + Default> IniUnnamedReadable for IniField<T>
     where <T as FromStr>::Err: Debug
 {
     type Value = T;
@@ -39,13 +39,16 @@ impl<T: Copy + FromStr + ToString + Default> IniUnnamedReadable for IniField<T>
         name: &str,
         default: Self::Value
     ) {
-        self.0 = Some(
-            T::from_str(&ini.get(section, name).unwrap_or(default.to_string())).unwrap()
-        );
+        let val = ini.get(section, name).and_then(|s| T::from_str(&s).ok()).unwrap_or_else(|| {
+            skse_message!("[WARNING] Failed to load INI value {}: {}", section, name);
+            default
+        });
+
+        self.0 = Some(val);
     }
 }
 
-impl<T: Copy + FromStr + ToString + Default> IniSkillReadable for IniField<T>
+impl<T: Copy + FromStr + Default + HungarianAttribute> IniSkillReadable for IniField<T>
     where <T as FromStr>::Err: std::fmt::Debug
 {
     type Value = T;
@@ -56,6 +59,6 @@ impl<T: Copy + FromStr + ToString + Default> IniSkillReadable for IniField<T>
         skill: ActorAttribute,
         default: Self::Value
     ) {
-        self.read_ini_unnamed(ini, section, skill.name(), default);
+        self.read_ini_unnamed(ini, section, T::hungarian_attr(skill), default);
     }
 }

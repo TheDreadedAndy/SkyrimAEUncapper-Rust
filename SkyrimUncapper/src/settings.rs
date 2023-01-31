@@ -12,11 +12,12 @@ mod field;
 mod leveled;
 
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use later::Later;
 use configparser::ini::Ini;
-use skse64::errors::skse_halt;
-use skse64::log::skse_message;
+use skse64::errors::{skse_halt, skse_assert};
+use skse64::log::{skse_message, skse_error};
 
 use field::IniField;
 use skills::IniSkillManager;
@@ -78,6 +79,9 @@ struct Settings {
 
 /// Holds the global settings configuration, which is created when init() is called.
 static SETTINGS: Later<Settings> = Later::new();
+
+/// Used to ensure that the max_charge critical section is not entered twice.
+static IS_USING_CHARGE_CAP: AtomicBool = AtomicBool::new(false);
 
 impl Settings {
     /// Creates a new settings structure, with default values for missing fields.
@@ -191,17 +195,18 @@ impl Settings {
 /// Attempts to load the settings structure from the given INI file.
 pub fn init(
     path: &Path
-) -> Result<(), ()> {
+) {
     skse_message!("Loading config file: {}", path.display());
 
     let mut settings = Settings::new();
     let mut ini = Ini::new();
-    ini.load(path).map_err(|_| ())?;
+    if let Err(_) = ini.load(path) {
+        skse_error!("[ERROR] Could not load INI file. Defaults will be used.");
+    }
     settings.read_ini(&ini);
     SETTINGS.init(settings);
 
-    skse_message!("Successfully loaded config file.");
-    Ok(())
+    skse_message!("Done initializing settings!");
 }
 
 /// Checks if the skill cap patches are enabled.
@@ -257,12 +262,28 @@ pub fn get_skill_formula_cap(
 ) -> f32 {
     let mut cap = SETTINGS.skill_formula_caps.get(skill).get() as f32;
 
-    // Enforce magnitude cap here. Charge formula doesn't call this function.
+    // Enforce the additional enchanting caps.
     if skill == ActorAttribute::Enchanting {
-        cap = cap.min(SETTINGS.enchant.magnitude_cap.get() as f32);
+        let specific_cap = if IS_USING_CHARGE_CAP.load(Ordering::Relaxed) {
+            SETTINGS.enchant.charge_cap.get() as f32
+        } else {
+            SETTINGS.enchant.magnitude_cap.get() as f32
+        };
+
+        cap = cap.min(specific_cap);
     }
 
     return cap;
+}
+
+/// Enables the use of the charge cap for the skill formula cap. It must be disabled when invoked.
+pub fn use_enchant_charge_cap() {
+    skse_assert!(!IS_USING_CHARGE_CAP.swap(true, Ordering::Relaxed));
+}
+
+/// Disables the use of the charge cap for the skill formula cap, if it was enabled.
+pub fn use_enchant_magnitude_cap() {
+    let _ = IS_USING_CHARGE_CAP.compare_exchange(true, false, Ordering::Relaxed, Ordering::Relaxed);
 }
 
 /// Gets the formula cap for weapon-charge enchantments.

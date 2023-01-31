@@ -59,7 +59,7 @@ pub fn skse_plugin_rust_entry(
         skse64::reloc::RelocAddr::base()
     );
 
-    settings::init(&get_runtime_dir().join("data\\SKSE\\Plugins\\SkyrimUncapper.ini"))?;
+    settings::init(&get_runtime_dir().join("data\\SKSE\\Plugins\\SkyrimUncapper.ini"));
     patcher::apply()?;
     skse_message!("Initialization complete!");
     Ok(())
