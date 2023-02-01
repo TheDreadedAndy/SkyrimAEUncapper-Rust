@@ -253,7 +253,7 @@ PUBLIC_FN(modify_perk_pool_wrapper)
     mov %rdi, %rdx // Get modification count.
     call modify_perk_pool_hook
     mov %al, %cl // We'll return to an instruction that'll store this in the player
-    mov %rcx, 0x108(%rsp) // Overwrite the restore value of rcx for cl.
+    mov %rcx, 0xa8(%rsp) // Overwrite the restore value of rcx for cl.
     RESTOREALL
     ret
 
@@ -269,7 +269,7 @@ PUBLIC_FN(improve_level_exp_by_skill_level_wrapper)
     mov %rsi, %rdx // rsi contains skill_id.
     call improve_level_exp_by_skill_level_hook
 
-    mov 0x110(%rsp), %rax // Get the saved value for rax.
+    mov 0xb0(%rsp), %rax // Get the saved value for rax.
     addss (%rax), %xmm0 // This is the code we overwrote, except we
     movss %xmm0, (%rax) // now use xmm0 instead of xmm1.
 
