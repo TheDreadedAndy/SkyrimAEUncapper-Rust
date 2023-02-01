@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 const WRAPPER_FILE: &str = "src/wrapper.cpp";
+const STOP_ASM_FILE: &str = "src/stop_plugin.S";
 const BINDGEN_FILE: &str = "bindgen_wrapper.h";
 const SKSE_SOLUTION: &str = "../skse64_src/skse64/skse64.sln";
 const MSBUILD: &str = "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Community\\MSBuild\\Current\\Bin\\MSBuild.exe";
@@ -24,6 +25,7 @@ fn main() {
 
     // Compile our wrapper.
     vs_profile.cc_builder().file(WRAPPER_FILE).flag("-Isrc/").compile("wrapper");
+    vs_profile.asm_builder().file(STOP_ASM_FILE).compile("stop_plugin");
 
     // Generate the bindings.
     let bindings = bindgen::Builder::default()

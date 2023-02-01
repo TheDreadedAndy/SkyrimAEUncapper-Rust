@@ -11,15 +11,15 @@
 #include <cstdlib>
 #include <common/IErrors.h>
 
-__declspec(noreturn) void StopPlugin();
+extern "C" __declspec(noreturn) void SKSE64_Errors__stop_plugin__();
 
 #define STOP(s)\
 do {\
     try {\
         HALT(s);\
-        StopPlugin();\
+        SKSE64_Errors__stop_plugin__();\
     } catch(...) {\
-        StopPlugin();\
+        SKSE64_Errors__stop_plugin__();\
     }\
 } while (0)
 

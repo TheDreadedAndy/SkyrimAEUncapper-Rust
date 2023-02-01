@@ -38,12 +38,6 @@ GetTrampoline(
     }
 }
 
-/// @brief Stops the plugin. This is literally how skse does it.
-__declspec(noreturn) void
-StopPlugin() {
-    *((volatile int*)0) = 0xDEADBEEF;
-}
-
 extern "C" {
     void
     SKSE64_Errors__assert_failed__(
@@ -55,7 +49,7 @@ extern "C" {
             _AssertionFailed(file, line, msg);
         } catch(...) {
             // What are we gonna do, panic harder?
-            StopPlugin();
+            SKSE64_Errors__stop_plugin__();
         }
     }
 
@@ -69,9 +63,9 @@ extern "C" {
     ) {
         try {
             _FATALERROR("%.*s:%zu: `%.*s'", file_len, file, line, msg_len, msg);
-            StopPlugin();
+            SKSE64_Errors__stop_plugin__();
         } catch(...) {
-            StopPlugin();
+            SKSE64_Errors__stop_plugin__();
         }
     }
 
