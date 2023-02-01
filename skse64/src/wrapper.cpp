@@ -40,20 +40,6 @@ GetTrampoline(
 
 extern "C" {
     void
-    SKSE64_Errors__assert_failed__(
-        const char *file,
-        unsigned long line,
-        const char *msg
-    ) {
-        try {
-            _AssertionFailed(file, line, msg);
-        } catch(...) {
-            // What are we gonna do, panic harder?
-            SKSE64_Errors__stop_plugin__();
-        }
-    }
-
-    void
     SKSE64_Errors__rust_panic__(
         const uint8_t *file,
         size_t file_len,

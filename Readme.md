@@ -11,6 +11,7 @@ https://github.com/TheDreadedAndy/SkyrimAEUncapper
     * clang++.
     * MSBuild.
 3) Install SKSE64 src as skse64\_src to the workspace directory.
+    * Note that, due to limitations with bindgen, the version constants in skse64/src/version.rs must be updated manually.
 4) Configure SKSE64 (both release and debug profiles).
     * Retarget to latest version (DO THIS FIRST).
     * Change all compile types to static libs.

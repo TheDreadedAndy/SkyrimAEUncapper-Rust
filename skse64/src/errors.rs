@@ -5,19 +5,13 @@
 //! @bug No known bugs.
 //!
 
-use std::ffi::{c_ulong, c_char};
 use std::panic::PanicInfo;
 
-pub use ctypes::cstr;
-
 extern "system" {
-    /// SKSE panic function.
-    #[link_name = "SKSE64_Errors__assert_failed__"]
-    pub fn skse_halt_impl(file: *const c_char, line: c_ulong, msg: *const c_char) -> !;
-
-    /// SKSE panic function for rust code.
+    // SKSE panic function for rust code.
+    #[doc(hidden)]
     #[link_name = "SKSE64_Errors__rust_panic__"]
-    fn skse_rust_halt_impl(
+    pub fn skse_rust_halt_impl(
         file: *const u8,
         file_len: usize,
         line: usize,
@@ -30,12 +24,13 @@ extern "system" {
 #[macro_export]
 macro_rules! skse_halt {
     ( $s:expr ) => {{
-        let s = $crate::errors::cstr!($s);
-        let file = $crate::errors::cstr!($crate::core::file!());
-        let line = $crate::core::line!();
+        let (msg, msg_len) = ($s.as_bytes().as_ptr(), $s.len());
+        let file = $crate::core::file!();
+        let (file, file_len) = (file.as_bytes().as_ptr(), file.len());
+        let line = $crate::core::line!() as usize;
 
         unsafe {
-            $crate::errors::skse_halt_impl(file, line as $crate::core::ffi::c_ulong, s);
+            $crate::errors::skse_rust_halt_impl(file, file_len, line, msg, msg_len);
         }
     }};
 }
