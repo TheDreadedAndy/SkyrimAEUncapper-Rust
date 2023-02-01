@@ -56,9 +56,11 @@ pub unsafe extern "system" fn SKSEPlugin_Load(
         CStr::from_ptr(SKSEPlugin_Version.name.as_ptr()).to_str().unwrap()
     ));
 
-    skse_assert!(!(skse.is_null()));
+    // Now that we have a log, set panics to print to it.
+    std::panic::set_hook(Box::new(errors::skse_panic));
 
-    // "yup, no more editor" ~ianpatt
+    // "yup, no more editor. obscript is gone (mostly)" ~ianpatt
+    skse_assert!(!(skse.is_null()));
     if (*skse).isEditor != 0 { return false; }
 
     // Set running version to the given value.

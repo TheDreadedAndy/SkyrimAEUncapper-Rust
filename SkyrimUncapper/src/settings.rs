@@ -96,7 +96,7 @@ impl Settings {
                 skill_formula_caps_en: DefaultIniField::new(GEN_SEC, "bUseSkillFormulaCaps", true),
                 enchanting_patch_en: DefaultIniField::new(GEN_SEC, "bUseEnchanterCaps", true),
                 skill_exp_mults_en: DefaultIniField::new(GEN_SEC, "bUseSkillExpGainMults", true),
-                level_exp_mults_en: DefaultIniField::new(GEN_SEC, "bUsePcLevelSkillExpMults", true),
+                level_exp_mults_en: DefaultIniField::new(GEN_SEC, "bUsePCLevelSkillExpMults", true),
                 perk_points_en: DefaultIniField::new(GEN_SEC, "bUsePerksAtLevelUp", true),
                 attr_points_en: DefaultIniField::new(GEN_SEC, "bUseAttributesAtLevelUp", true),
                 legendary_en: DefaultIniField::new(GEN_SEC, "bUseLegendarySettings", true)
@@ -199,7 +199,7 @@ pub fn init(
     skse_message!("Loading config file: {}", path.display());
 
     let mut settings = Settings::new();
-    let mut ini = Ini::new();
+    let mut ini = Ini::new_cs();
     if let Err(_) = ini.load(path) {
         skse_error!("[ERROR] Could not load INI file. Defaults will be used.");
     }

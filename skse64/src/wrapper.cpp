@@ -38,6 +38,12 @@ GetTrampoline(
     }
 }
 
+/// @brief Stops the plugin. This is literally how skse does it.
+__declspec(noreturn) void
+StopPlugin() {
+    *((volatile int*)0) = 0xDEADBEEF;
+}
+
 extern "C" {
     void
     SKSE64_Errors__assert_failed__(
@@ -49,7 +55,23 @@ extern "C" {
             _AssertionFailed(file, line, msg);
         } catch(...) {
             // What are we gonna do, panic harder?
-            abort();
+            StopPlugin();
+        }
+    }
+
+    void
+    SKSE64_Errors__rust_panic__(
+        const uint8_t *file,
+        size_t file_len,
+        size_t line,
+        const uint8_t *msg,
+        size_t msg_len
+    ) {
+        try {
+            _FATALERROR("%.*s:%zu: `%.*s'", file_len, file, line, msg_len, msg);
+            StopPlugin();
+        } catch(...) {
+            StopPlugin();
         }
     }
 
@@ -68,10 +90,11 @@ extern "C" {
 
     void
     SKSE64_DebugLog__message__(
-        const char *msg
+        const uint8_t *msg,
+        size_t len
     ) {
         try {
-            _MESSAGE(msg);
+            _MESSAGE("%.*s", len, msg);
         } catch(...) {
             STOP("Failed to write message to log.");
         }
@@ -79,10 +102,11 @@ extern "C" {
 
     void
     SKSE64_DebugLog__error__(
-        const char *msg
+        const uint8_t *msg,
+        size_t len
     ) {
         try {
-            _ERROR(msg);
+            _ERROR("%.*s", len, msg);
         } catch(...) {
             STOP("Failed to write error to log.");
         }

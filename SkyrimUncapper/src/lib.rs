@@ -62,5 +62,6 @@ pub fn skse_plugin_rust_entry(
     settings::init(&get_runtime_dir().join("data\\SKSE\\Plugins\\SkyrimUncapper.ini"));
     patcher::apply()?;
     skse_message!("Initialization complete!");
+    panic!("Haha! You were laboring under the misapprehension that we loaded successfully!");
     Ok(())
 }

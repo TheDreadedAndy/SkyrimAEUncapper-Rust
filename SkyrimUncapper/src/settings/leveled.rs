@@ -136,17 +136,35 @@ impl<T: Copy + FromStr> IniNamedReadable for LeveledIniSection<T>
         // FIXME: Something isn't loading correctly.
         if let Some(sec) = ini.get_map_ref().get(section) {
             for (level, item) in sec.iter() {
-                self.add(
-                    u32::from_str(level).unwrap(),
-                    T::from_str(item.as_ref().unwrap()).unwrap()
-                );
-            }
-        }
+                let level = if let Ok(l) = u32::from_str(level) {
+                    l
+                } else {
+                    skse_message!("[WARNING] Unable to convert {} to a u32; skipped", level);
+                    continue;
+                };
 
-        if self.0.len() == 0 {
-            skse_message!("[WARNING]: No values for in INI file for section {}", section);
+                let item = if let Some(i) = item.as_ref().and_then(|v| T::from_str(v).ok()) {
+                    i
+                } else {
+                    skse_message!(
+                        "[WARNING] Unabled to convert {} to value type; skipped",
+                        item.as_ref().map(|s| s.as_ref()).unwrap_or("None")
+                    );
+                    continue;
+                };
+
+                self.add(level, item);
+            }
+
+            if self.0.len() == 0 {
+                skse_message!("[WARNING] No values for in INI file for section {}", section);
+                self.add(0, default);
+            }
+        } else {
+            skse_message!("[WARNING] Unable to find section [{}] in INI file", section);
             self.add(0, default);
         }
+
         self.0.shrink_to_fit();
     }
 }
