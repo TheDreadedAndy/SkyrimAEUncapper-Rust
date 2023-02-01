@@ -108,7 +108,7 @@ impl Settings {
             },
             legendary: LegendarySettings {
                 keep_skill_level: DefaultIniField::new(LEG_SEC, "bLegendaryKeepSkillLevel", false),
-                hide_button: DefaultIniField::new(LEG_SEC, "bHideLegendaryButton", true),
+                hide_button: DefaultIniField::new(LEG_SEC, "bHideLegendaryButton", false),
                 skill_level_en: DefaultIniField::new(LEG_SEC, "iSkillLevelEnableLegendary", 100),
                 skill_level_after: DefaultIniField::new(LEG_SEC, "iSkillLevelAfterLegendary", 0),
             },
@@ -144,7 +144,7 @@ impl Settings {
             sp_at_mp_lvl_up: DefaultIniSection::new("StaminaAtMagickaLevelUp", 0),
             cw_at_hp_lvl_up: DefaultIniSection::new("CarryWeightAtHealthLevelUp", 0),
             cw_at_mp_lvl_up: DefaultIniSection::new("CarryWeightAtMagickaLevelUp", 0),
-            cw_at_sp_lvl_up: DefaultIniSection::new("CarryWeightAtStaminaLevelUp", 0)
+            cw_at_sp_lvl_up: DefaultIniSection::new("CarryWeightAtStaminaLevelUp", 5)
         }
     }
 
