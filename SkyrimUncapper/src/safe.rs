@@ -5,7 +5,10 @@
 //! @bug No known bugs.
 //!
 
+use std::vec::Vec;
+
 use skse64::errors::skse_assert;
+use skse64::log::skse_message;
 
 ///
 /// @brief Used to match code to pre-defined signatures.
@@ -21,7 +24,11 @@ pub enum Opcode {
 }
 
 /// Identifies a distinct string of binary code within the skyrim binary.
+#[derive(Copy, Clone)]
 pub struct Signature(&'static [Opcode]);
+
+/// Helper to print a signature in the games code.
+struct BinarySig(*const u8, usize);
 
 /// @brief Generates a new signature out of hex digits and question marks.
 macro_rules! signature {
@@ -80,11 +87,61 @@ impl Signature {
         }
     }
 
+
+    /// Prints the difference between the given signature and the signature at the given address.
+    pub unsafe fn diff(
+        &self,
+        a: usize
+    ) {
+        let bin_sig = BinarySig(a as *const u8, self.len());
+        skse_message!("\\------> [EXPECTED] {}", self);
+        skse_message!(" \\-----> [FOUND...] {}", bin_sig);
+    }
+
     /// Checks how long the signature is.
     pub fn len(
         &self
     ) -> usize {
         self.0.len()
+    }
+}
+
+impl std::fmt::Display for Signature {
+    fn fmt(
+        &self,
+        f: &mut std::fmt::Formatter<'_>
+    ) -> Result<(), std::fmt::Error> {
+        write!(f, "{{ ")?;
+        for op in self.0.iter() {
+            if let Opcode::Code(b) = op {
+                write!(f, "{:02x} ", b)?;
+            } else {
+                write!(f, "?? ")?;
+            }
+        }
+        write!(f, "}}")
+    }
+}
+
+impl std::fmt::Display for BinarySig {
+    fn fmt(
+        &self,
+        f: &mut std::fmt::Formatter<'_>
+    ) -> Result<(), std::fmt::Error> {
+        let mut sig: Vec<u8> = Vec::new();
+
+        unsafe {
+            // SAFETY: The caller of the diff function ensures this is a valid sig.
+            skse64::safe::use_region(self.0 as usize, self.1, || {
+                sig.extend_from_slice(std::slice::from_raw_parts(self.0, self.1));
+            });
+        }
+
+        write!(f, "{{ ")?;
+        for b in sig.as_slice().iter() {
+            write!(f, "{:02x} ", b)?;
+        }
+        write!(f, "}}")
     }
 }
 

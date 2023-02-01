@@ -1,7 +1,12 @@
 # Previous Versions
 
-The orignal, C++, implementation of this mod can be found here:
-https://github.com/TheDreadedAndy/SkyrimAEUncapper
+[My original, C++, implementation of this mod (versions 1.1.0 and below)](https://github.com/TheDreadedAndy/SkyrimAEUncapper)
+
+[Vadfromnu's SE/AE update to Kassents original mod](https://www.nexusmods.com/skyrimspecialedition/mods/46536?tab=files)
+
+[Kassent's original SE mod](https://github.com/kassent/SkyrimUncapper)
+
+[Elys' LE uncapper, which Kassent's mod is based on](https://www.nexusmods.com/skyrim/mods/1175/)
 
 # Building
 
