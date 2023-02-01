@@ -50,14 +50,14 @@ pub unsafe extern "system" fn SKSEPlugin_Load(
         return false;
     }
 
+    // Set panics to print to the log (if it exists) and halt the plugin.
+    std::panic::set_hook(Box::new(errors::skse_panic));
+
     // Before we do anything else, we try and open up a log file.
     log::open(format!(
         "{}.log",
         CStr::from_ptr(SKSEPlugin_Version.name.as_ptr()).to_str().unwrap()
     ));
-
-    // Now that we have a log, set panics to print to it.
-    std::panic::set_hook(Box::new(errors::skse_panic));
 
     // "yup, no more editor. obscript is gone (mostly)" ~ianpatt
     skse_assert!(!(skse.is_null()));
