@@ -34,6 +34,49 @@ enum class Trampoline { Global, Local };
 // Defined in assembly.
 extern "C" __declspec(noreturn) void SKSE64_Errors__stop_plugin__();
 
+/*
+ * These functions were originally defined in
+ * skse64_src/common/common/IErrors.cpp, however the implementation
+ * contained U.B. that clang refuses to compile as the authors intended.
+ *
+ * As such, they are reimplemented here to instead stop in a well defined way.
+ */
+__declspec(noreturn) void
+_AssertionFailed(
+    const char *file,
+    unsigned long line,
+    const char *desc
+) {
+    _FATALERROR("%s:%d: `%s'", file, line, desc);
+    SKSE64_Errors__stop_plugin__();
+}
+
+__declspec(noreturn) void
+_AssertionFailed_ErrCode(
+    const char *file,
+    unsigned long line,
+    const char *desc,
+    unsigned long long code
+) {
+    _FATALERROR("%s:%d: `%s' (code = %zx)", file, line, desc, code);
+    SKSE64_Errors__stop_plugin__();
+}
+
+__declspec(noreturn) void
+_AssertionFailed_ErrCode(
+    const char *file,
+    unsigned long line,
+    const char *desc,
+    const char *code
+) {
+    _FATALERROR("%s:%d: `%s' (code = %s)", file, line, desc, code);
+    SKSE64_Errors__stop_plugin__();
+}
+
+/*
+ * Bindings for rust code to call.
+ */
+
 extern "C" {
     __declspec(noreturn) void
     SKSE64_Errors__rust_panic__(
