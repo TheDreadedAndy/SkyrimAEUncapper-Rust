@@ -5,20 +5,25 @@
 //! @bug No known bugs.
 //!
 
-extern "system" {
-    fn SKSE64_Reloc__base__() -> usize;
-}
+use windows_sys::Win32::System::LibraryLoader::GetModuleHandleA;
+use later::Later;
 
 /// Holds a game address, which can be accessed by offset or address.
 #[repr(transparent)]
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RelocAddr(usize);
 
+/// Holds the base address of the skyrim binary.
+static BASE_ADDR: Later<usize> = Later::new();
+
 impl RelocAddr {
+    pub (in crate) fn init_manager() {
+        BASE_ADDR.init(unsafe { GetModuleHandleA(std::ptr::null_mut()) as usize });
+    }
+
     /// Gets the base address of the skyrim binary.
     pub fn base() -> usize {
-        // SAFETY: Not actually unsafe lol.
-        unsafe { SKSE64_Reloc__base__() }
+        *BASE_ADDR
     }
 
     /// Creates a reloc addr from an offset.

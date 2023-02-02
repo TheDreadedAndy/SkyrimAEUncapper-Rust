@@ -49,6 +49,8 @@ pub unsafe extern "system" fn SKSEPlugin_Load(
         return false;
     }
 
+    reloc::RelocAddr::init_manager();
+
     // Set panics to print to the log (if it exists) and halt the plugin.
     std::panic::set_hook(Box::new(errors::skse_panic));
 

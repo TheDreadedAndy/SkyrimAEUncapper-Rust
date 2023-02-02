@@ -32,7 +32,6 @@ fn main() {
         .file("../skse64_src/common/common/IDataStream.cpp")
         .file("../skse64_src/common/common/IFileStream.cpp")
         .file("../skse64_src/common/common/IDebugLog.cpp")
-        .file("../skse64_src/skse64/skse64_common/Relocation.cpp")
         .file("../skse64_src/skse64/skse64_common/SafeWrite.cpp")
         .file("../skse64_src/skse64/skse64_common/BranchTrampoline.cpp")
         .file(WRAPPER_FILE)

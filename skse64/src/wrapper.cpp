@@ -130,11 +130,6 @@ extern "C" {
             STOP("Failed to write error to log.");
         }
     }
-
-    uintptr_t
-    SKSE64_Reloc__base__() {
-        return RelocationManager::s_baseAddr;
-    }
 }
 
 /// @brief Gets a trampoline pointer from its enum.
@@ -226,25 +221,6 @@ extern "C" {
             ASSERT(GetTrampoline(t)->Write5Call(src, dst));
         } catch(...) {
             STOP("Failed to write Call-5 to trampoline");
-        }
-    }
-
-    void
-    SKSE64_SafeWrite__virtual_protect__(
-        uintptr_t addr,
-        size_t size,
-        uint32_t new_prot,
-        uint32_t *old_prot
-    ) {
-        try {
-            ASSERT(VirtualProtect(
-                reinterpret_cast<void*>(addr),
-                size,
-                new_prot,
-                reinterpret_cast<PDWORD>(old_prot)
-            ));
-        } catch(...) {
-            STOP("Failed to protect memory region");
         }
     }
 
