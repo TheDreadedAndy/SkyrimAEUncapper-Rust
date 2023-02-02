@@ -1,8 +1,6 @@
 //!
 //! @file patcher.rs
 //! @author Andrew Spaulding (Kasplat)
-//! @author Vadfromnu
-//! @author Kassent
 //! @brief Locates and applies pre-defined patches to game functions and objects.
 //! @bug No known bugs.
 //!
@@ -22,8 +20,7 @@ use skse64::trampoline::Trampoline;
 use skse64::reloc::RelocAddr;
 use versionlib::VersionDb;
 
-use crate::safe;
-use crate::safe::Signature;
+use crate::safe::{Signature, BinarySig};
 use crate::skyrim::GAME_SIGNATURES;
 use crate::hooks::{HOOK_SIGNATURES, NUM_HOOK_SIGNATURES};
 
@@ -81,7 +78,7 @@ pub enum Descriptor {
 enum DescriptorError {
     Disabled,
     Missing,
-    Mismatch(Signature, RelocAddr)
+    Mismatch(Signature, BinarySig)
 }
 
 /// The result of an attempt to locate a descriptor.
@@ -229,7 +226,7 @@ impl Descriptor {
                 let addr = loc.find(db)?;
                 unsafe {
                     // SAFETY: We know addr is in the skyrim binary, since it came from the db.
-                    sig.check(addr.addr()).map_err(|_| DescriptorError::Mismatch(*sig, addr))?;
+                    sig.check(addr.addr()).map_err(|e| DescriptorError::Mismatch(*sig, e))?;
                 }
                 Ok(addr)
             }
@@ -255,17 +252,14 @@ impl Descriptor {
             Err(DescriptorError::Missing) => {
                 skse_message!("[FAILURE] {} was not in the version database!", self);
             },
-            Err(DescriptorError::Mismatch(sig, addr)) => {
+            Err(DescriptorError::Mismatch(sig, bsig)) => {
                 skse_message!(
                     "[FAILURE] {} at offset {:#x} did not match the expected code signature!",
                     self,
-                    addr.offset()
+                    bsig.reloc().offset()
                 );
-
-                unsafe {
-                    // SAFETY: We know the RelocAddr is part of the skyrim game binary.
-                    sig.diff(addr.addr());
-                }
+                skse_message!("\\------> [EXPECTED] {}", sig);
+                skse_message!(" \\-----> [FOUND...] {}", bsig);
             }
         }
     }
@@ -494,7 +488,12 @@ pub fn apply() -> Result<(), ()> {
         unsafe {
             // SAFETY: We have matched signatures to ensure our patch is valid.
             sig.hook().unwrap().install(res_addrs[i]);
-            safe::memset(ret_addr, 0x90 /* NOP */, sig.size() - hook_size);
+            let remain = sig.size() - hook_size;
+            if remain > 0 {
+                skse64::safe::use_region(ret_addr, remain, || {
+                    ::std::ptr::write_bytes::<u8>(ret_addr as *mut u8, 0x90, remain);
+                });
+            }
         }
     }
 

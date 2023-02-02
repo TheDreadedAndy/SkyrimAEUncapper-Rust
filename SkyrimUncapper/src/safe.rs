@@ -7,7 +7,7 @@
 
 use std::vec::Vec;
 
-use skse64::log::skse_message;
+use skse64::reloc::RelocAddr;
 
 ///
 /// @brief Used to match code to pre-defined signatures.
@@ -27,7 +27,7 @@ pub enum Opcode {
 pub struct Signature(&'static [Opcode]);
 
 /// Helper to print a signature in the games code.
-struct BinarySig(*const u8, usize);
+pub struct BinarySig(RelocAddr, usize);
 
 /// @brief Generates a new signature out of hex digits and question marks.
 macro_rules! signature {
@@ -66,7 +66,7 @@ impl Signature {
     pub unsafe fn check(
         &self,
         a: usize
-    ) -> Result<(), usize> {
+    ) -> Result<(), BinarySig> {
         assert!(a != 0);
         if self.0.len() == 0 { return Ok(()); }
 
@@ -80,21 +80,10 @@ impl Signature {
         });
 
         if diff > 0 {
-            Err(diff)
+            Err(BinarySig(RelocAddr::from_addr(a), self.len()))
         } else {
             Ok(())
         }
-    }
-
-
-    /// Prints the difference between the given signature and the signature at the given address.
-    pub unsafe fn diff(
-        &self,
-        a: usize
-    ) {
-        let bin_sig = BinarySig(a as *const u8, self.len());
-        skse_message!("\\------> [EXPECTED] {}", self);
-        skse_message!(" \\-----> [FOUND...] {}", bin_sig);
     }
 
     /// Checks how long the signature is.
@@ -102,6 +91,14 @@ impl Signature {
         &self
     ) -> usize {
         self.0.len()
+    }
+}
+
+impl BinarySig {
+    pub (in crate) fn reloc(
+        &self
+    ) -> RelocAddr {
+        self.0
     }
 }
 
@@ -131,8 +128,10 @@ impl std::fmt::Display for BinarySig {
 
         unsafe {
             // SAFETY: The caller of the diff function ensures this is a valid sig.
-            skse64::safe::use_region(self.0 as usize, self.1, || {
-                sig.extend_from_slice(std::slice::from_raw_parts(self.0, self.1));
+            skse64::safe::use_region(self.0.addr(), self.1, || {
+                sig.extend_from_slice(
+                    std::slice::from_raw_parts(self.0.addr() as *const u8, self.1)
+                );
             });
         }
 
@@ -142,22 +141,4 @@ impl std::fmt::Display for BinarySig {
         }
         write!(f, "}}")
     }
-}
-
-///
-/// Uses the SKSE SafeWrite functions to set the given memory location.
-///
-/// In order to use this function safely, the given address range must be a valid
-/// part of the skyrim binary.
-///
-pub unsafe fn memset(
-    a: usize,
-    c: u8,
-    n: usize
-) {
-    if n == 0 { return; }
-
-    skse64::safe::use_region(a, n, || {
-        ::std::ptr::write_bytes::<u8>(a as *mut u8, c, n);
-    });
 }
