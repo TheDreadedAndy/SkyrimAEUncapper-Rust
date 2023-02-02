@@ -153,13 +153,16 @@ impl VersionDb {
         // SAFETY: This is the defined encoding of the control byte. The enum is sized to always
         //         be in range.
         let control = Self::read::<u8>(f);
-        let offset_ptr = control & 0x80 > 0;
+        assert!(control & 0x08 == 0);
         let id_enc = unsafe { std::mem::transmute::<u8, AddrEncoding>(control & 0x07) };
         let offset_enc = unsafe { std::mem::transmute::<u8, AddrEncoding>((control >> 4) & 0x07) };
 
-        let offset_mult = if offset_ptr { ptr_size } else { 1 };
-        let id = id_enc.read(f, pid, 1);
-        let offset = offset_enc.read(f, poffset, offset_mult);
+        let is_by_ptr = (control & 0x80) != 0;
+        let poffset = if is_by_ptr { poffset / (ptr_size as usize) } else { poffset };
+
+        let id = id_enc.read(f, pid);
+        let offset = offset_enc.read(f, poffset);
+        let offset = if is_by_ptr { offset * (ptr_size as usize) } else { offset };
         (id, offset)
     }
 
@@ -190,19 +193,17 @@ impl AddrEncoding {
     fn read(
         self,
         f: &mut File,
-        prev: usize,
-        mult: u32
+        prev: usize
     ) -> usize {
-        let mult = mult as usize;
         match self {
             Self::Raw64 => VersionDb::read::<u64>(f) as usize,
             Self::Raw32 => VersionDb::read::<u32>(f) as usize,
             Self::Raw16 => VersionDb::read::<u16>(f) as usize,
             Self::Inc => prev + 1,
-            Self::PosDelta8 => prev + ((VersionDb::read::<u8>(f) as usize) * mult),
-            Self::NegDelta8 => prev - ((VersionDb::read::<u8>(f) as usize) * mult),
-            Self::PosDelta16 => prev + ((VersionDb::read::<u16>(f) as usize) * mult),
-            Self::NegDelta16 => prev - ((VersionDb::read::<u16>(f) as usize) * mult)
+            Self::PosDelta8 => prev + (VersionDb::read::<u8>(f) as usize),
+            Self::NegDelta8 => prev - (VersionDb::read::<u8>(f) as usize),
+            Self::PosDelta16 => prev + (VersionDb::read::<u16>(f) as usize),
+            Self::NegDelta16 => prev - (VersionDb::read::<u16>(f) as usize)
         }
     }
 }

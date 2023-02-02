@@ -114,7 +114,7 @@ impl GameLocation {
     ) -> FindResult {
         match self {
             Self::Offset { base, offset } => {
-                if let Ok(id) = db.find_id_by_offset(*base) {
+                if let Ok(id) = db.find_id_by_addr(*base) {
                     skse_message!("Offset {:#x} has ID {}", base.offset(), id);
                     Ok(*base + *offset)
                 } else {
@@ -122,7 +122,7 @@ impl GameLocation {
                 }
             },
             Self::Id { id, offset } => {
-                if let Ok(ra) = db.find_offset_by_id(*id) {
+                if let Ok(ra) = db.find_addr_by_id(*id) {
                     Ok(ra + *offset)
                 } else {
                     Err(DescriptorError::Missing)
