@@ -12,10 +12,10 @@
 
 use std::ffi::c_int;
 
+use skyrim_patcher::{Descriptor, Hook, HookFn, GameLocation, GameRef, signature};
+
 use crate::settings;
 use crate::hook_wrappers::*;
-use crate::patcher::{Descriptor, Hook, HookFn, GameLocation, GameRef};
-use crate::safe::signature;
 use crate::skyrim::{ActorAttribute, ActorValueOwner, PlayerSkills};
 use crate::skyrim::{player_avo_get_base, player_avo_get_current_original, game_setting};
 use crate::skyrim::{player_avo_mod_base, player_avo_mod_current, get_player_level};

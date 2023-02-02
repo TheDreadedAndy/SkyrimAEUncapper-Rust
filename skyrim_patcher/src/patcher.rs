@@ -20,9 +20,7 @@ use skse64::trampoline::Trampoline;
 use skse64::reloc::RelocAddr;
 use versionlib::VersionDb;
 
-use crate::safe::{Signature, BinarySig};
-use crate::skyrim::GAME_SIGNATURES;
-use crate::hooks::{HOOK_SIGNATURES, NUM_HOOK_SIGNATURES};
+use crate::sig::{Signature, BinarySig};
 
 /// Tracks a location in the skyrim game binary.
 #[allow(dead_code)]
@@ -274,33 +272,12 @@ impl Descriptor {
         }
     }
 
-    /// Gets the result structure for this patch, if available
-    fn result(
-        &self
-    ) -> Option<GameRefResult> {
-        match self {
-            Self::Object { result, .. } => Some(*result),
-            Self::Function { result, .. } => Some(*result),
-            _ => None
-        }
-    }
-
     /// Gets the hook for this patch.
     fn hook<'a>(
         &'a self
     ) -> Option<&'a Hook> {
         match self {
             Self::Patch { hook, .. } => Some(hook),
-            _ => None
-        }
-    }
-
-    /// Gets the trampoline for this patch, if available.
-    fn trampoline(
-        &self
-    ) -> Option<GameRefResult> {
-        match self {
-            Self::Patch { trampoline, .. } => *trampoline,
             _ => None
         }
     }
@@ -349,7 +326,7 @@ impl HookFn {
     }
 
     /// Gets the underlying address of the hook function.
-    pub fn addr(
+    fn addr(
         self
     ) -> usize {
         self.0 as usize
@@ -357,7 +334,7 @@ impl HookFn {
 }
 
 impl<T> GameRef<T> {
-    /// Creates a new game reference structure..
+    /// Creates a new game reference structure.
     pub const fn new() -> Self {
         assert!(std::mem::size_of::<T>() == std::mem::size_of::<usize>());
         Self(UnsafeCell::new(0), std::marker::PhantomData)
@@ -397,7 +374,7 @@ impl GameRefResult {
     /// In order to use this function safely, the caller must ensure that the given address
     /// points to a valid type T.
     ///
-    pub unsafe fn write(
+    unsafe fn write(
         &self,
         a: usize
     ) {
@@ -416,36 +393,25 @@ unsafe impl<T> Sync for GameRef<T> {}
 unsafe impl Sync for GameRefResult {}
 
 /// Locates any game functions/objects, and applies any code patches.
-pub fn apply() -> Result<(), ()> {
+pub fn apply<const NUM_PATCHES: usize>(
+    patches: [&Descriptor; NUM_PATCHES]
+) -> Result<(), ()> {
     let db = VersionDb::new(None);
+    let mut res_addrs: [usize; NUM_PATCHES] = [0; NUM_PATCHES];
+    let mut alloc_size: usize = 0;
 
     skse_message!("---------- Game Signatures ----------");
 
-    // Locate any game signatures for objects/functions we call.
-    let mut fails = 0;
-    for sig in GAME_SIGNATURES.iter() {
-        let res = sig.find(&db);
-        sig.report(&res);
-
-        if let Ok(addr) = res {
-            // SAFETY: The version DB ensures we obtained the correct object.
-            unsafe { sig.result().unwrap().write(addr.addr()); }
-        } else {
-            fails += 1;
-        }
-    }
-
     // Attempt to locate all of the patch signatures.
-    let mut res_addrs: [usize; NUM_HOOK_SIGNATURES] = [0; NUM_HOOK_SIGNATURES];
-    let mut alloc_size: usize = 0;
-    for (i, sig) in HOOK_SIGNATURES.iter().enumerate() {
+    let mut fails = 0;
+    for (i, sig) in patches.iter().enumerate() {
         let res = sig.find(&db);
         sig.report(&res);
 
         match res {
             Ok(addr) => {
                 res_addrs[i] = addr.addr();
-                alloc_size += sig.hook().unwrap().alloc_size();
+                alloc_size += sig.hook().map(|h| h.alloc_size()).unwrap_or(0);
             },
             Err(DescriptorError::Disabled) => (),
             _ => {
@@ -474,20 +440,33 @@ pub fn apply() -> Result<(), ()> {
     }
 
     // Install our patches.
-    for (i, sig) in HOOK_SIGNATURES.iter().enumerate() {
+    for (i, sig) in patches.iter().enumerate() {
         if sig.disabled() { continue; }
 
-        let hook_size = sig.hook().unwrap().patch_size();
+        let hook_size = sig.hook().map(|h| h.patch_size()).unwrap_or(0);
         let ret_addr = res_addrs[i] + hook_size;
-        if let Some(t) = sig.trampoline() {
-            // SAFETY: We will ensure our return address is valid by writing NOPS to any bytes
-            //         that are part of the patch and after the return address.
-            unsafe { t.write(ret_addr); }
+        match sig {
+            Descriptor::Patch { trampoline, hook, .. } => {
+                unsafe {
+                    // SAFETY: We will ensure our return address is valid by writing NOPS to any
+                    //         bytes that are part of the patch and after the return address.
+                    if let Some(t) = trampoline {
+                        t.write(ret_addr);
+                    }
+                    hook.install(res_addrs[i]);
+                }
+            },
+            Descriptor::Function { result, .. } | Descriptor::Object { result, .. } => {
+                unsafe {
+                    // SAFETY: The version DB ensures that we have the write object for
+                    //         the requested ID.
+                    result.write(res_addrs[i]);
+                }
+            }
         }
 
         unsafe {
             // SAFETY: We have matched signatures to ensure our patch is valid.
-            sig.hook().unwrap().install(res_addrs[i]);
             let remain = sig.size() - hook_size;
             if remain > 0 {
                 skse64::safe::use_region(ret_addr, remain, || {

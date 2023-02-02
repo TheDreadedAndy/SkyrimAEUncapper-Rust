@@ -1,0 +1,8 @@
+[package]
+name = "skyrim_patcher"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+skse64 = { path = "../skse64" }
+versionlib = { path = "../versionlib" }

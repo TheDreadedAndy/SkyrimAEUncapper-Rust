@@ -7,6 +7,7 @@ members = [
     "later",
     "skse64",
     "versionlib",
+    "skyrim_patcher",
     "SkyrimUncapper"
 ]
 

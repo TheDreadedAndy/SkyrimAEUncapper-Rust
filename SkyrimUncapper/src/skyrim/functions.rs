@@ -7,8 +7,9 @@
 
 use std::ffi::{c_char, c_int};
 
+use skyrim_patcher::{GameRef, Descriptor, GameLocation};
+
 use super::{PlayerCharacter, ActorValueOwner, SettingCollectionMap, ActorAttribute, Setting};
-use crate::patcher::{GameRef, Descriptor, GameLocation};
 use crate::hook_wrappers::player_avo_get_current_original_wrapper;
 use crate::settings;
 
@@ -55,7 +56,7 @@ disarray::disarray! {
     ///
     /// Used by the patcher to locate our objects/functions.
     ///
-    pub static GAME_SIGNATURES: [Descriptor] = [
+    pub static GAME_SIGNATURES: [Descriptor; NUM_GAME_SIGNATURES] = [
         Descriptor::Object {
             name: "g_thePlayer",
             loc: GameLocation::Id { id: 403521, offset: 0 },

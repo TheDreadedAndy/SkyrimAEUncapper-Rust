@@ -14,8 +14,6 @@ mod skyrim;
 mod hook_wrappers;
 mod hooks;
 mod settings;
-mod patcher;
-mod safe;
 
 use std::path::Path;
 
@@ -26,6 +24,12 @@ use skse64::plugin_api::{SKSEPluginVersionData, SKSEInterface};
 use skse64::plugin_api::SKSEPluginVersionData_kVersion;
 use skse64::plugin_api::SKSEPluginVersionData_kVersionIndependentEx_NoStructUse;
 use skse64::plugin_api::SKSEPluginVersionData_kVersionIndependent_AddressLibraryPostAE;
+use skyrim_patcher::flatten_patch_groups;
+
+use skyrim::{GAME_SIGNATURES, NUM_GAME_SIGNATURES};
+use hooks::{HOOK_SIGNATURES, NUM_HOOK_SIGNATURES};
+
+const NUM_PATCHES: usize = NUM_GAME_SIGNATURES + NUM_HOOK_SIGNATURES;
 
 /// @brief SKSE version structure (post-AE).
 #[no_mangle]
@@ -61,7 +65,10 @@ pub fn skse_plugin_rust_entry(
     );
 
     settings::init(Path::new("Data\\SKSE\\Plugins\\SkyrimUncapper.ini"));
-    patcher::apply()?;
+    skyrim_patcher::apply(flatten_patch_groups::<NUM_PATCHES>(&[
+        &GAME_SIGNATURES,
+        &HOOK_SIGNATURES
+    ]))?;
     skse_message!("Initialization complete!");
     Ok(())
 }

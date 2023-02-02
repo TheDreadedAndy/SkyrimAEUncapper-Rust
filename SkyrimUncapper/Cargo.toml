@@ -13,7 +13,7 @@ later = { path = "../later" }
 ctypes = { path = "../ctypes" }
 disarray = { path = "../disarray" }
 skse64 = { path = "../skse64" }
-versionlib = { path = "../versionlib" }
+skyrim_patcher = { path = "../skyrim_patcher" }
 
 [build-dependencies]
 winres = "0.1.12"

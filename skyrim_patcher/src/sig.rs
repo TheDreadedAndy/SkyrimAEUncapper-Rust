@@ -1,7 +1,7 @@
 //!
-//! @file safe.rs
+//! @file sig.rs
 //! @author Andrew Spaulding (Kasplat)
-//! @brief Provides functions for reading from/writing to the game code.
+//! @brief Provides functions for defining and checking game code signatures.
 //! @bug No known bugs.
 //!
 
@@ -27,27 +27,27 @@ pub enum Opcode {
 pub struct Signature(&'static [Opcode]);
 
 /// Helper to print a signature in the games code.
-pub struct BinarySig(RelocAddr, usize);
+pub (in crate) struct BinarySig(RelocAddr, usize);
 
 /// @brief Generates a new signature out of hex digits and question marks.
+#[macro_export]
 macro_rules! signature {
     ( $($sig:tt),+; $size:literal ) => {{
-        let psize = [ $($crate::safe::signature!(@munch $sig)),* ].len();
+        let psize = [ $($crate::signature!(@munch $sig)),* ].len();
         if $size != psize {
             ::std::panic!("Patch size is incorrect.");
         }
-        $crate::safe::Signature::new(&[ $($crate::safe::signature!(@munch $sig)),* ])
+        $crate::Signature::new(&[ $($crate::signature!(@munch $sig)),* ])
     }};
 
     ( @munch $op:literal ) => {
-        $crate::safe::Opcode::Code($op)
+        $crate::Opcode::Code($op)
     };
 
     ( @munch ? ) => {
-        $crate::safe::Opcode::Any
+        $crate::Opcode::Any
     };
 }
-pub (in crate) use signature;
 
 impl Signature {
     /// Creates a new signature structure.
@@ -63,7 +63,7 @@ impl Signature {
     /// In order to use this function safely, the address range specified must be
     /// a valid part of the Skyrim binary.
     ///
-    pub unsafe fn check(
+    pub (in crate) unsafe fn check(
         &self,
         a: usize
     ) -> Result<(), BinarySig> {
@@ -87,7 +87,7 @@ impl Signature {
     }
 
     /// Checks how long the signature is.
-    pub fn len(
+    pub (in crate) fn len(
         &self
     ) -> usize {
         self.0.len()
