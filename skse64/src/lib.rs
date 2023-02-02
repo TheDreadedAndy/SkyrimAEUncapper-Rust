@@ -7,10 +7,9 @@
 
 mod bind;
 pub mod version;
-pub mod errors;
+mod errors;
 pub mod log;
 pub mod reloc;
-pub mod utilities;
 pub mod plugin_api;
 pub mod trampoline;
 pub mod safe;
@@ -60,7 +59,7 @@ pub unsafe extern "system" fn SKSEPlugin_Load(
     ));
 
     // "yup, no more editor. obscript is gone (mostly)" ~ianpatt
-    skse_assert!(!(skse.is_null()));
+    assert!(!(skse.is_null()));
     if (*skse).isEditor != 0 { return false; }
 
     // Set running version to the given value.

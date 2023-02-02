@@ -9,7 +9,6 @@ use std::ffi::c_char;
 use std::cell::UnsafeCell;
 
 use ctypes::abstract_type;
-use skse64::errors::skse_assert;
 
 abstract_type! {
     /// Contains configuration settings exposed by the game engine.
@@ -39,7 +38,7 @@ impl Setting {
     ) -> f32 {
         unsafe {
             // SAFETY: We ensure that the underlying type is a float.
-            skse_assert!(*self.name == b'f' as i8);
+            assert!(*self.name == b'f' as i8);
             (*self.data.get()).f
         }
     }
@@ -51,7 +50,7 @@ impl Setting {
     ) {
         unsafe {
             // SAFETY: We ensure that the underlying type is a float.
-            skse_assert!(*self.name == b'f' as i8);
+            assert!(*self.name == b'f' as i8);
             (*self.data.get()).f = f;
         }
     }

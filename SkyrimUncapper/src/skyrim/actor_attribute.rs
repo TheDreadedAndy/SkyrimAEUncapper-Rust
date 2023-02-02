@@ -7,8 +7,6 @@
 
 use std::ffi::c_int;
 
-use skse64::errors::skse_assert;
-
 macro_rules! attr_name {
     ( $pre:literal, $attr:expr ) => {
         match $attr {
@@ -121,7 +119,7 @@ impl ActorAttribute {
     pub fn skill_slot(
         self
     ) -> usize {
-        skse_assert!(self.is_skill());
+        assert!(self.is_skill());
         (self as usize) - SKILL_OFFSET
     }
 

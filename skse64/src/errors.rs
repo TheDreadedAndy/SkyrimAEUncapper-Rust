@@ -8,10 +8,9 @@
 use std::panic::PanicInfo;
 
 extern "system" {
-    // SKSE panic function for rust code.
-    #[doc(hidden)]
+    /// SKSE panic function for rust code.
     #[link_name = "SKSE64_Errors__rust_panic__"]
-    pub fn skse_rust_halt_impl(
+    fn skse_rust_halt_impl(
         file: *const u8,
         file_len: usize,
         line: usize,
@@ -19,39 +18,6 @@ extern "system" {
         msg_len: usize
     ) -> !;
 }
-
-/// Uses the SKSE panic handler to terminate the application.
-#[macro_export]
-macro_rules! skse_halt {
-    ( $s:expr ) => {{
-        let (msg, msg_len) = ($s.as_bytes().as_ptr(), $s.len());
-        let file = $crate::core::file!();
-        let (file, file_len) = (file.as_bytes().as_ptr(), file.len());
-        let line = $crate::core::line!() as usize;
-
-        unsafe {
-            $crate::errors::skse_rust_halt_impl(file, file_len, line, msg, msg_len);
-        }
-    }};
-}
-pub use skse_halt;
-
-/// Uses the SKSE panic handler to assert a condition.
-#[macro_export]
-macro_rules! skse_assert {
-    ( $cond:expr ) => {
-        if !($cond) {
-            $crate::skse_halt!($crate::core::stringify!($cond));
-        }
-    };
-
-    ( $cond:expr, $lit:expr ) => {
-        if !($cond) {
-            $crate::skse_halt!($lit);
-        }
-    };
-}
-pub use skse_assert;
 
 ///
 /// Handles a Rust panic, redirecting the output to the skse_error!() macro.

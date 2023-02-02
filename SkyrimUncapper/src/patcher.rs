@@ -17,7 +17,6 @@
 
 use std::cell::UnsafeCell;
 
-use skse64::errors::{skse_assert, skse_halt};
 use skse64::log::skse_message;
 use skse64::trampoline::Trampoline;
 use skse64::reloc::RelocAddr;
@@ -208,7 +207,7 @@ impl Hook {
             Self::DirectCall(hook) => {
                 skse64::safe::write_call(addr, hook.addr()).unwrap();
             },
-            Self::None => skse_halt!("Cannot install to a None hook!")
+            Self::None => panic!("Cannot install to a None hook!")
         }
     }
 }
@@ -386,12 +385,12 @@ impl<T> GameRef<T> {
     pub fn get(
         &self
     ) -> T {
-        skse_assert!(std::mem::size_of::<T>() == std::mem::size_of::<usize>());
+        assert!(std::mem::size_of::<T>() == std::mem::size_of::<usize>());
 
         // SAFETY: We know that T is of the correct size for this transmute.
         unsafe {
             let addr = *self.0.get();
-            skse_assert!(addr != 0);
+            assert!(addr != 0);
             ::std::mem::transmute_copy::<usize, T>(&addr)
         }
     }
@@ -409,10 +408,10 @@ impl GameRefResult {
         a: usize
     ) {
         // SAFETY: We know this came from a RelocAddr, so the pointer is valid.
-        skse_assert!(!self.0.is_null());
+        assert!(!self.0.is_null());
         let res = (*self.0).get();
-        skse_assert!(*res == 0);
-        skse_assert!(a != 0);
+        assert!(*res == 0);
+        assert!(a != 0);
         *res = a;
     }
 }

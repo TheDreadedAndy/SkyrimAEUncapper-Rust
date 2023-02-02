@@ -7,7 +7,6 @@
 
 use std::vec::Vec;
 
-use skse64::errors::skse_assert;
 use skse64::log::skse_message;
 
 ///
@@ -68,7 +67,7 @@ impl Signature {
         &self,
         a: usize
     ) -> Result<(), usize> {
-        skse_assert!(a != 0);
+        assert!(a != 0);
         if self.0.len() == 0 { return Ok(()); }
 
         let mut diff = 0;

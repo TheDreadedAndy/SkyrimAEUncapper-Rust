@@ -11,7 +11,7 @@ use std::process::Command;
 
 const WRAPPER_FILE: &str = "src/wrapper.cpp";
 const STOP_ASM_FILE: &str = "src/stop_plugin.S";
-const BINDGEN_FILE: &str = "bindgen_wrapper.h";
+const BINDGEN_FILE: &str = "bindgen_wrapper.hpp";
 const SKSE_SOLUTION: &str = "../skse64_src/skse64/skse64.sln";
 const MSBUILD: &str = "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Community\\MSBuild\\Current\\Bin\\MSBuild.exe";
 

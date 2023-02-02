@@ -13,33 +13,29 @@
 
 #include <common/IPrefix.h>
 #include <Shlobj.h>
-#include <skse_stop.h>
 #include <skse_version.h>
 #include <Utilities.h>
 #include <SafeWrite.h>
 #include <Relocation.h>
 #include <BranchTrampoline.h>
 
+// Stops the plugin.
+#define STOP(s) SKSE64_Errors__rust_panic__(\
+    reinterpret_cast<const uint8_t *>(__FILE__),\
+    sizeof(__FILE__),\
+    __LINE__,\
+    reinterpret_cast<const uint8_t *>(s),\
+    sizeof(s)\
+)
+
 /// @brief The type of trampoline each function should operate on.
 enum class Trampoline { Global, Local };
 
-/// @brief Gets a trampoline pointer from its enum.
-static BranchTrampoline *
-GetTrampoline(
-    Trampoline t
-) {
-    switch (t) {
-        case Trampoline::Global:
-            return &g_branchTrampoline;
-        case Trampoline::Local:
-            return &g_localTrampoline;
-        default:
-            STOP("Invalid trampoline selection");
-    }
-}
+// Defined in assembly.
+extern "C" __declspec(noreturn) void SKSE64_Errors__stop_plugin__();
 
 extern "C" {
-    void
+    __declspec(noreturn) void
     SKSE64_Errors__rust_panic__(
         const uint8_t *file,
         size_t file_len,
@@ -92,20 +88,28 @@ extern "C" {
         }
     }
 
-    const char *
-    SKSE64_Utilities__get_runtime_dir__() {
-        try {
-            return GetRuntimeDirectory().c_str();
-        } catch(...) {
-            STOP("Failed to get runtime directory.");
-        }
-    }
-
     uintptr_t
     SKSE64_Reloc__base__() {
         return RelocationManager::s_baseAddr;
     }
+}
 
+/// @brief Gets a trampoline pointer from its enum.
+static BranchTrampoline *
+GetTrampoline(
+    Trampoline t
+) {
+    switch (t) {
+        case Trampoline::Global:
+            return &g_branchTrampoline;
+        case Trampoline::Local:
+            return &g_localTrampoline;
+        default:
+            STOP("Invalid trampoline selection");
+    }
+}
+
+extern "C" {
     void
     SKSE64_BranchTrampoline__create__(
         Trampoline t,

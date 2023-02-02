@@ -7,7 +7,6 @@
 
 use ctypes::abstract_type;
 use skse64::version::{RUNTIME_VERSION_1_6_317, RUNTIME_VERSION_1_6_629};
-use skse64::errors::skse_assert;
 
 abstract_type! {
     /// The player actor class.
@@ -26,7 +25,7 @@ impl PlayerCharacter {
         &self
     ) -> *mut ActorValueOwner {
         let version = skse64::version::current_runtime();
-        skse_assert!(version >= RUNTIME_VERSION_1_6_317); // AE.
+        assert!(version >= RUNTIME_VERSION_1_6_317); // AE.
 
         let offset: usize = if version >= RUNTIME_VERSION_1_6_629 { 0xb8 } else { 0xb0 };
         let player = self as *const Self as *mut Self;

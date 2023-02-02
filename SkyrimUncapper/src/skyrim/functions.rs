@@ -7,8 +7,6 @@
 
 use std::ffi::{c_char, c_int};
 
-use skse64::errors::skse_assert;
-
 use super::{PlayerCharacter, ActorValueOwner, SettingCollectionMap, ActorAttribute, Setting};
 use crate::patcher::{GameRef, Descriptor, GameLocation};
 use crate::hook_wrappers::player_avo_get_current_original_wrapper;
@@ -126,7 +124,7 @@ pub fn get_player_level() -> u32 {
 pub fn get_game_setting(
     var: &[c_char]
 ) -> &'static Setting {
-    skse_assert!(var[var.len() - 1] == b'\0' as c_char);
+    assert!(var[var.len() - 1] == b'\0' as c_char);
 
     let settings = unsafe { *(GAME_SETTINGS_OBJECT.get()) };
     unsafe {

@@ -12,8 +12,6 @@
 
 use std::ffi::c_int;
 
-use skse64::errors::skse_assert;
-
 use crate::settings;
 use crate::hook_wrappers::*;
 use crate::patcher::{Descriptor, Hook, HookFn, GameLocation, GameRef};
@@ -302,7 +300,7 @@ disarray::disarray! {
 extern "system" fn get_skill_cap_hook(
     skill: c_int
 ) -> f32 {
-    skse_assert!(settings::is_skill_cap_enabled());
+    assert!(settings::is_skill_cap_enabled());
     settings::get_skill_cap(ActorAttribute::from_raw(skill).unwrap())
 }
 
@@ -335,7 +333,7 @@ extern "system" fn calculate_charge_points_per_use_hook(
     base_points: f32,
     max_charge: f32
 ) -> f32 {
-    skse_assert!(settings::is_enchant_patch_enabled());
+    assert!(settings::is_enchant_patch_enabled());
 
     let cost_exponent = game_setting!("fEnchantingCostExponent").get_float();
     let cost_base = game_setting!("fEnchantingSkillCostBase").get_float();
@@ -368,7 +366,7 @@ extern "system" fn player_avo_get_current_hook(
     av: *mut ActorValueOwner,
     attr: c_int
 ) -> f32 {
-    skse_assert!(settings::is_skill_formula_cap_enabled());
+    assert!(settings::is_skill_formula_cap_enabled());
 
     let mut val = unsafe {
         // SAFETY: We are passing through the original arguments.
@@ -394,7 +392,7 @@ extern "system" fn improve_player_skill_points_hook(
     unk3: u8,
     unk4: bool
 ) {
-    skse_assert!(settings::is_skill_exp_enabled());
+    assert!(settings::is_skill_exp_enabled());
     let attr = ActorAttribute::from_raw(attr).unwrap();
 
     if attr.is_skill() {
@@ -417,7 +415,7 @@ extern "system" fn modify_perk_pool_hook(
     points: u8,
     count: i8
 ) -> u8 {
-    skse_assert!(settings::is_perk_points_enabled());
+    assert!(settings::is_perk_points_enabled());
     let delta = std::cmp::min(0xFF, settings::get_perk_delta(get_player_level()));
     let res = (points as i16) + (if count > 0 { delta as i16 } else { count as i16 });
     std::cmp::max(0, std::cmp::min(0xff, res)) as u8
@@ -429,7 +427,7 @@ extern "system" fn improve_level_exp_by_skill_level_hook(
     mut exp: f32,
     attr: c_int
 ) -> f32 {
-    skse_assert!(settings::is_level_exp_enabled());
+    assert!(settings::is_level_exp_enabled());
     let attr = ActorAttribute::from_raw(attr).unwrap();
 
     if attr.is_skill() {
@@ -454,7 +452,7 @@ extern "system" fn improve_attribute_when_level_up_hook(
     _av: *mut ActorValueOwner,
     choice: c_int
 ) {
-    skse_assert!(settings::is_attr_points_enabled());
+    assert!(settings::is_attr_points_enabled());
     let choice = ActorAttribute::from_raw(choice).unwrap();
 
     let (hp, mp, sp, cw) = settings::get_attribute_level_up(get_player_level(), choice);
@@ -469,8 +467,8 @@ extern "system" fn improve_attribute_when_level_up_hook(
 extern "system" fn legendary_reset_skill_level_hook(
     base_level: f32
 ) {
-    skse_assert!(settings::is_legendary_enabled());
-    skse_assert!(base_level >= 0.0);
+    assert!(settings::is_legendary_enabled());
+    assert!(base_level >= 0.0);
 
     let reset_val = game_setting!("fLegendarySkillResetValue");
     reset_val.set_float(settings::get_post_legendary_skill_level(
@@ -484,9 +482,9 @@ extern "system" fn legendary_reset_skill_level_hook(
 extern "system" fn check_condition_for_legendary_skill_hook(
     skill: c_int
 ) -> bool {
-    skse_assert!(settings::is_legendary_enabled());
+    assert!(settings::is_legendary_enabled());
     let skill = ActorAttribute::from_raw(skill).unwrap();
-    skse_assert!(skill.is_skill());
+    assert!(skill.is_skill());
     settings::is_legendary_available(player_avo_get_base(skill) as u32)
 }
 
@@ -495,8 +493,8 @@ extern "system" fn check_condition_for_legendary_skill_hook(
 extern "system" fn hide_legendary_button_hook(
     skill: c_int
 ) -> bool {
-    skse_assert!(settings::is_legendary_enabled());
+    assert!(settings::is_legendary_enabled());
     let skill = ActorAttribute::from_raw(skill).unwrap();
-    skse_assert!(skill.is_skill());
+    assert!(skill.is_skill());
     settings::is_legendary_button_visible(player_avo_get_base(skill) as u32)
 }

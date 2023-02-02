@@ -5,8 +5,6 @@
 //! @bug No known bugs.
 //!
 
-use crate::errors::skse_assert;
-
 extern "system" {
     fn SKSE64_Reloc__base__() -> usize;
 }
@@ -34,7 +32,7 @@ impl RelocAddr {
     pub fn from_addr(
         addr: usize
     ) -> Self {
-        skse_assert!(Self::base() <= addr);
+        assert!(Self::base() <= addr);
         Self(addr - Self::base())
     }
 

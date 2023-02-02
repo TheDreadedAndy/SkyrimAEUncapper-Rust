@@ -9,7 +9,6 @@ use std::vec::Vec;
 use std::str::FromStr;
 
 use configparser::ini::Ini;
-use skse64::errors::skse_assert;
 use skse64::log::skse_message;
 
 use crate::skyrim::ActorAttribute;
@@ -37,19 +36,19 @@ impl<T: Copy> LeveledIniSection<T> {
         &self,
         level: u32
     ) -> T {
-        skse_assert!(self.0.len() > 0);
+        assert!(self.0.len() > 0);
 
         let (mut lo, mut hi): (usize, usize) = (0, self.0.len());
         let mut mid = lo + ((hi - lo) >> 1);
         while lo < hi {
-            skse_assert!(mid < self.0.len());
+            assert!(mid < self.0.len());
             if (self.0[mid].level <= level)
                     && ((mid + 1 == self.0.len()) || (level < self.0[mid + 1].level)) {
                 return self.0[mid].item;
             } else if level < self.0[mid].level {
                 hi = mid;
             } else {
-                skse_assert!((level > self.0[mid].level) || (level >= self.0[mid + 1].level));
+                assert!((level > self.0[mid].level) || (level >= self.0[mid + 1].level));
                 lo = mid + 1;
             }
 
@@ -74,7 +73,7 @@ impl<T: Copy> LeveledIniSection<T> {
         let (mut lo, mut hi): (usize, usize) = (0, self.0.len());
         let mut mid: usize = lo + ((hi - lo) >> 1);
         while lo < hi {
-            skse_assert!(mid < self.0.len());
+            assert!(mid < self.0.len());
             if level < self.0[mid].level {
                 hi = mid;
             } else if level > self.0[mid].level {
@@ -87,7 +86,7 @@ impl<T: Copy> LeveledIniSection<T> {
         }
 
         // Insert before the final hi element.
-        skse_assert!(hi <= self.0.len());
+        assert!(hi <= self.0.len());
         self.0.insert(hi, LevelItem { level, item });
     }
 }
@@ -104,7 +103,7 @@ impl LeveledIniSection<f32> {
         &self,
         level: u32
     ) -> u32 {
-        skse_assert!(self.0.len() > 0);
+        assert!(self.0.len() > 0);
 
         let mut acc: f32 = 0.0;
         let mut i = 0;

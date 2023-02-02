@@ -17,6 +17,8 @@ mod settings;
 mod patcher;
 mod safe;
 
+use std::path::Path;
+
 use ctypes::cstr_array;
 use skse64::log::skse_message;
 use skse64::version::{SkseVersion, PACKED_SKSE_VERSION, CURRENT_RELEASE_RUNTIME};
@@ -24,7 +26,6 @@ use skse64::plugin_api::{SKSEPluginVersionData, SKSEInterface};
 use skse64::plugin_api::SKSEPluginVersionData_kVersion;
 use skse64::plugin_api::SKSEPluginVersionData_kVersionIndependentEx_NoStructUse;
 use skse64::plugin_api::SKSEPluginVersionData_kVersionIndependent_AddressLibraryPostAE;
-use skse64::utilities::get_runtime_dir;
 
 /// @brief SKSE version structure (post-AE).
 #[no_mangle]
@@ -59,7 +60,7 @@ pub fn skse_plugin_rust_entry(
         skse64::reloc::RelocAddr::base()
     );
 
-    settings::init(&get_runtime_dir().join("data\\SKSE\\Plugins\\SkyrimUncapper.ini"));
+    settings::init(Path::new("Data\\SKSE\\Plugins\\SkyrimUncapper.ini"));
     patcher::apply()?;
     skse_message!("Initialization complete!");
     Ok(())

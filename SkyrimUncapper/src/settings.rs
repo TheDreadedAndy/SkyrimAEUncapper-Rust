@@ -16,7 +16,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use later::Later;
 use configparser::ini::Ini;
-use skse64::errors::{skse_halt, skse_assert};
 use skse64::log::{skse_message, skse_error};
 
 use field::IniField;
@@ -278,7 +277,7 @@ pub fn get_skill_formula_cap(
 
 /// Enables the use of the charge cap for the skill formula cap. It must be disabled when invoked.
 pub fn use_enchant_charge_cap() {
-    skse_assert!(!IS_USING_CHARGE_CAP.swap(true, Ordering::Relaxed));
+    assert!(!IS_USING_CHARGE_CAP.swap(true, Ordering::Relaxed));
 }
 
 /// Disables the use of the charge cap for the skill formula cap, if it was enabled.
@@ -354,7 +353,7 @@ pub fn get_attribute_level_up(
             SETTINGS.sp_at_lvl_up.get_nearest(player_level) as f32,
             SETTINGS.cw_at_sp_lvl_up.get_nearest(player_level) as f32
         ),
-        _ => skse_halt!("Cannot get the attribute level up with an invalid choice.")
+        _ => panic!("Cannot get the attribute level up with an invalid choice.")
     }
 }
 
