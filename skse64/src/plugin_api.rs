@@ -63,7 +63,7 @@ pub struct SksePluginVersionData {
     pub plugin_version: SkseVersion,
     pub name: [c_char; 256], // Plugin name (can be empty).
     pub author: [c_char; 256], // Author name (can be empty).
-    pub support_email: [c_char; 256], // Not shown to users. For SKSE team to contact mod maker.
+    pub support_email: [c_char; 252], // Not shown to users. For SKSE team to contact mod maker.
     pub version_indep_ex: u32,
     pub version_indep: u32,
     pub compat_versions: [Option<SkseVersion>; 16], // None-terminated.

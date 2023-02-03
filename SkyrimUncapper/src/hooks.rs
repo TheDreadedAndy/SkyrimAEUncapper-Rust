@@ -291,6 +291,34 @@ disarray::disarray! {
             loc: GameLocation::Id { id: 52527, offset: 0x167 },
             sig: signature![0xff, 0x50, 0x18, 0x0f, 0x2f, 0x05, ?, ?, ?, ?; 10],
             trampoline: Some(hide_legendary_button_return_trampoline.inner())
+        },
+
+        //
+        // Clears the legendary skill button when the player changes the skill they are hovering
+        // over if the new skill is not a high enough level.
+        //
+        // This patch is a bit odd, because what is actually happening is that the game is
+        // calling a scaleform API function to update the description under the perk tree
+        // and that description takes in a skill level which is used, as far as I can tell,
+        // only to determine if the legendary skill button should be shown or not.
+        //
+        // To be minimally invasive, we patch it so that we pass through the value except in
+        // cases where our legendary button state conflicts with the games understood state,
+        // in which case we pass either 100 or 99, whichever will get the button to
+        // display correctly.
+        //
+        // Note that we also fix an engine bug where this function got the current skill value
+        // instead of the base value.
+        //
+        Descriptor::Patch {
+            name: "ClearLegendaryButton",
+            enabled: settings::is_legendary_enabled,
+            hook: Hook::Call6(unsafe {
+                HookFn::new(clear_legendary_button_wrapper as *const u8)
+            }),
+            loc: GameLocation::Id { id: 52527, offset: 0x16ee },
+            sig: signature![0x41, 0x8b, 0xd7, 0xff, 0x50, 0x08; 6],
+            trampoline: None
         }
     ];
 }
@@ -497,4 +525,28 @@ extern "system" fn hide_legendary_button_hook(
     let skill = ActorAttribute::from_raw(skill).unwrap();
     assert!(skill.is_skill());
     settings::is_legendary_button_visible(player_avo_get_base(skill) as u32)
+}
+
+/// Determines if we should continue to display the legendary button after moving the skill view.
+#[no_mangle]
+extern "system" fn clear_legendary_button_hook(
+    skill: c_int
+) -> f32 {
+    const BASE_LEGENDARY_THRESHOLD: u32 = 100;
+
+    assert!(settings::is_legendary_enabled());
+    let skill = ActorAttribute::from_raw(skill).unwrap();
+    assert!(skill.is_skill());
+
+    let level = player_avo_get_base(skill) as u32;
+    let game_vis = level >= BASE_LEGENDARY_THRESHOLD;
+    let mod_vis = settings::is_legendary_button_visible(level);
+
+    if game_vis == mod_vis {
+        level as f32
+    } else if game_vis { // visible, but shouldn't be.
+        (BASE_LEGENDARY_THRESHOLD - 1) as f32
+    } else { // invisible, but shouldn't be.
+        BASE_LEGENDARY_THRESHOLD as f32
+    }
 }

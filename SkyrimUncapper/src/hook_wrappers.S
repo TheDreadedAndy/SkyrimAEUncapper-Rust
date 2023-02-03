@@ -34,6 +34,7 @@
 .global check_condition_for_legendary_skill_wrapper
 .global check_condition_for_legendary_skill_alt_wrapper
 .global hide_legendary_button_wrapper
+.global clear_legendary_button_wrapper
 
 // Saves all caller saved registers.
 .macro SAVEALL
@@ -333,3 +334,11 @@ hide_legendary_button_wrapper:
     call hide_legendary_button_hook
     cmp $1, %al
     jmp *hide_legendary_button_return_trampoline(%rip)
+
+/*
+ * Forces the game to clear the legendary button in accordance with
+ * what our mod expects when scrolling in the skill menu.
+ */
+clear_legendary_button_wrapper:
+    mov %r15d, %ecx
+    jmp clear_legendary_button_hook

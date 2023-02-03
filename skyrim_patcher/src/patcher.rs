@@ -400,7 +400,7 @@ pub fn apply<const NUM_PATCHES: usize>(
     let mut res_addrs: [usize; NUM_PATCHES] = [0; NUM_PATCHES];
     let mut alloc_size: usize = 0;
 
-    skse_message!("---------- Game Signatures ----------");
+    skse_message!("--------------------- Skyrim Patcher 1.0.1 ---------------------");
 
     // Attempt to locate all of the patch signatures.
     let mut fails = 0;
@@ -411,7 +411,10 @@ pub fn apply<const NUM_PATCHES: usize>(
         match res {
             Ok(addr) => {
                 res_addrs[i] = addr.addr();
-                alloc_size += sig.hook().map(|h| h.alloc_size()).unwrap_or(0);
+                if let Some(h) = sig.hook() {
+                    alloc_size += h.alloc_size();
+                    assert!(h.patch_size() <= sig.size());
+                }
             },
             Err(DescriptorError::Disabled) => (),
             _ => {
@@ -420,23 +423,22 @@ pub fn apply<const NUM_PATCHES: usize>(
         }
     }
 
-    skse_message!("-------------------------------------");
 
     if fails > 0 {
-        skse_message!("Could not locate every game signature!");
+        skse_message!("[FAILURE] Could not locate every game signature!");
         return Err(())
     }
 
     // Allocate our branch trampoline.
     if alloc_size > 0 {
-        skse_message!("Creating a branch trampoline buffer with {} bytes of space...", alloc_size);
-
         // SAFETY: We're not giving an image base, so this is actually safe.
         unsafe { skse64::trampoline::create(Trampoline::Global, alloc_size, None) };
-
-        skse_message!("Applying game patches...");
+        skse_message!(
+            "[SUCCESS] Created branch trampoline buffer with a size of {} bytes",
+            alloc_size
+        );
     } else {
-        skse_message!("Everything is disabled...");
+        skse_message!("[SKIPPED] All patches are disabled.");
     }
 
     // Install our patches.
@@ -475,6 +477,9 @@ pub fn apply<const NUM_PATCHES: usize>(
             }
         }
     }
+
+    skse_message!("[SUCCESS] Applied game patches.");
+    skse_message!("----------------------------------------------------------------");
 
     Ok(())
 }

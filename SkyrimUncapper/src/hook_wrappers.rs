@@ -36,6 +36,7 @@ extern "system" {
     pub fn check_condition_for_legendary_skill_wrapper();
     pub fn check_condition_for_legendary_skill_alt_wrapper();
     pub fn hide_legendary_button_wrapper();
+    pub fn clear_legendary_button_wrapper();
 }
 
 core::arch::global_asm! {
