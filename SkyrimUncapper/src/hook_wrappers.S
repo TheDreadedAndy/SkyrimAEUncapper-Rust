@@ -19,7 +19,21 @@
  * happen except for that epilogue (for unwinding).
  */
 
-#define PUBLIC_FN(ident) .global ident; ident:
+.global skill_cap_patch_wrapper
+.global max_charge_begin_wrapper
+.global max_charge_end_wrapper
+.global calculate_charge_points_per_use_wrapper
+.global player_avo_get_current_original_wrapper
+.global display_true_skill_level_hook
+.global display_true_skill_color_hook
+.global improve_skill_by_training_hook
+.global improve_player_skill_points_original
+.global modify_perk_pool_wrapper
+.global improve_level_exp_by_skill_level_wrapper
+.global legendary_reset_skill_level_wrapper
+.global check_condition_for_legendary_skill_wrapper
+.global check_condition_for_legendary_skill_alt_wrapper
+.global hide_legendary_button_wrapper
 
 // Saves all caller saved registers.
 .macro SAVEALL
@@ -129,7 +143,7 @@
  * This function gets injected in the middle of another, so we must use the call
  * injection macros to protect the register state.
  */
-PUBLIC_FN(skill_cap_patch_wrapper)
+skill_cap_patch_wrapper:
     SAVEALL
     mov %esi, %ecx // pass SkillID in ecx to hook.
     call get_skill_cap_hook
@@ -141,7 +155,7 @@ PUBLIC_FN(skill_cap_patch_wrapper)
  * Begins a max_charge calculation by changing the enchanting formula cap
  * to use the weapon cap if the enchanted item is offensive.
  */
-PUBLIC_FN(max_charge_begin_wrapper)
+max_charge_begin_wrapper:
     SAVEALL
 
     // Reimplement replaced instruction.
@@ -157,7 +171,7 @@ PUBLIC_FN(max_charge_begin_wrapper)
  * Ends a max_charge calculation by returning the skill formula equation
  * to using the magnitude formula cap, if necessary.
  */
-PUBLIC_FN(max_charge_end_wrapper)
+max_charge_end_wrapper:
     SAVEALL_RETFPR
 
     call max_charge_end_hook
@@ -175,7 +189,7 @@ PUBLIC_FN(max_charge_end_wrapper)
  * argument (rsp + a0). We replace the call to the original function, so no
  * reg save. We're just adding an arg.
  */
-PUBLIC_FN(calculate_charge_points_per_use_wrapper)
+calculate_charge_points_per_use_wrapper:
     movss 0xa8(%rsp), %xmm2 // Get max_charge.
     movaps %xmm7, %xmm1 // Get base_points
     xorps %xmm3, %xmm3 // Reimplement max from original code.
@@ -187,7 +201,7 @@ PUBLIC_FN(calculate_charge_points_per_use_wrapper)
  * running the overwritten instructions and then jumping to the address after
  * our hook.
  */
-PUBLIC_FN(player_avo_get_current_original_wrapper)
+player_avo_get_current_original_wrapper:
     mov %rsp, %r11
     push %rbp
     push %rsi
@@ -198,7 +212,7 @@ PUBLIC_FN(player_avo_get_current_original_wrapper)
  * Forces the code which displays skill values in the skills menu to show the
  * true skill level instead of the damaged value by calling the OG function.
  */
-PUBLIC_FN(display_true_skill_level_hook)
+display_true_skill_level_hook:
     sub $0x28, %rsp
     call player_avo_get_current_original_wrapper // Replacing a call, no need to save.
     cvttss2si %xmm0, %ecx
@@ -210,7 +224,7 @@ PUBLIC_FN(display_true_skill_level_hook)
  * true skill color instead of the damaged color by calling the OG
  * player_avo_get_current() function.
  */
-PUBLIC_FN(display_true_skill_color_hook)
+display_true_skill_color_hook:
     /*
      * We need this later, as we overwrote an instruction which would
      * move the player AVO vtable into rax, and that offset is version
@@ -227,7 +241,7 @@ PUBLIC_FN(display_true_skill_color_hook)
  * Forces the training fn to call the original improve_player_skill_points()
  * function.
  */
-PUBLIC_FN(improve_skill_by_training_hook)
+improve_skill_by_training_hook:
     call improve_player_skill_points_original
     inc %esi // Overwritten by our hook, so we readd it.
     jmp *improve_skill_by_training_return_trampoline(%rip)
@@ -237,7 +251,7 @@ PUBLIC_FN(improve_skill_by_training_hook)
  * improve_player_skill_points() function by reimplementing the code our hook
  * replaces and then jumping to the original game code that follows our hook.
  */
-PUBLIC_FN(improve_player_skill_points_original)
+improve_player_skill_points_original:
     mov %rsp, %rax
     push %rdi
     push %r12
@@ -248,7 +262,7 @@ PUBLIC_FN(improve_player_skill_points_original)
  * instruction where the new perk count is written back. We do this to avoid
  * non-portable (across skyrim versions) accesses to the player class.
  */
-PUBLIC_FN(modify_perk_pool_wrapper)
+modify_perk_pool_wrapper:
     SAVEALL
     mov %rdi, %rdx // Get modification count.
     call modify_perk_pool_hook
@@ -262,7 +276,7 @@ PUBLIC_FN(modify_perk_pool_wrapper)
  * Note that the code here is rather different than the OG implementation
  * because the original improve_level_exp_by_skill_level() function got inlined.
  */
-PUBLIC_FN(improve_level_exp_by_skill_level_wrapper)
+improve_level_exp_by_skill_level_wrapper:
     SAVEALL
 
     movss %xmm1, %xmm0 // xmm1 contains level exp
@@ -281,7 +295,7 @@ PUBLIC_FN(improve_level_exp_by_skill_level_wrapper)
  * Modifies the rest level of legendarying a skill depending on the user
  * settings and the base level in xmm0.
  */
-PUBLIC_FN(legendary_reset_skill_level_wrapper)
+legendary_reset_skill_level_wrapper:
     SAVEALL
     call legendary_reset_skill_level_hook
     RESTOREALL
@@ -297,12 +311,13 @@ PUBLIC_FN(legendary_reset_skill_level_wrapper)
  * We can't use leaq to stop the flags from being wiped, either, as that
  * would also violate calling convention.
  */
-PUBLIC_FN(check_condition_for_legendary_skill_wrapper)
+check_condition_for_legendary_skill_wrapper:
     mov %edx, %ecx
     call check_condition_for_legendary_skill_hook
     cmp $1, %al
     jmp *check_condition_for_legendary_skill_return_trampoline(%rip)
-PUBLIC_FN(check_condition_for_legendary_skill_alt_wrapper)
+
+check_condition_for_legendary_skill_alt_wrapper:
     mov %edx, %ecx
     call check_condition_for_legendary_skill_hook
     cmp $1, %al
@@ -313,7 +328,7 @@ PUBLIC_FN(check_condition_for_legendary_skill_alt_wrapper)
  * We are overwriting another function call here, so we dont need to save
  * the register state.
  */
-PUBLIC_FN(hide_legendary_button_wrapper)
+hide_legendary_button_wrapper:
     mov %edx, %ecx
     call hide_legendary_button_hook
     cmp $1, %al

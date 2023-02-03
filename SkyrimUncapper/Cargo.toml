@@ -16,4 +16,3 @@ skyrim_patcher = { path = "../skyrim_patcher" }
 
 [build-dependencies]
 winres = "0.1.12"
-vsprofile = { path = "../vsprofile" }

@@ -6,18 +6,15 @@
 //!
 
 const WRAPPER_FILE: &str = "src/wrapper.cpp";
-const STOP_ASM_FILE: &str = "src/stop_plugin.S";
 
 fn main() {
     let vs_profile = vsprofile::VsProfile::get();
 
     // Mark our header wrapper as a dep.
-    println!("cargo:rerun-if-changed={}", STOP_ASM_FILE);
     println!("cargo:rerun-if-changed={}", WRAPPER_FILE);
 
     // Compile our wrapper files and the parts of skse that we use.
     // No need to build the whole solution, that'd be overkill.
-    vs_profile.asm_builder().file(STOP_ASM_FILE).compile("stop_plugin");
     vs_profile.cc_builder()
         .flag("-Isrc/")
         .flag("/FIcommon/IPrefix.h")

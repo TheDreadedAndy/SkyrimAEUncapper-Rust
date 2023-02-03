@@ -37,3 +37,8 @@ extern "system" {
     pub fn check_condition_for_legendary_skill_alt_wrapper();
     pub fn hide_legendary_button_wrapper();
 }
+
+core::arch::global_asm! {
+    include_str!("hook_wrappers.S"),
+    options(att_syntax)
+}

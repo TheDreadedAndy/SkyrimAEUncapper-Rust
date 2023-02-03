@@ -19,6 +19,12 @@ extern "system" {
     ) -> !;
 }
 
+// Implement skse_rust_halt_impl().
+std::arch::global_asm! {
+    include_str!("stop_plugin.S"),
+    options(att_syntax)
+}
+
 ///
 /// Handles a Rust panic, redirecting the output to the skse_error!() macro.
 ///
