@@ -15,6 +15,7 @@ mod hook_wrappers;
 mod hooks;
 mod settings;
 
+use std::ffi::CStr;
 use std::path::Path;
 
 use skse64::log::skse_message;
@@ -48,7 +49,12 @@ pub fn skse_plugin_rust_entry(
 ) -> Result<(), ()> {
     // Log runtime/skse info.
     skse_message!(
-        "Compiled: SKSE64 {}, Skyrim AE {}\nRunning: SKSE64 {}, Skyrim AE {}\nBase addr: {:#x}",
+        "{} {:?}\n\
+         Compiled: SKSE64 {}, Skyrim AE {}\n\
+         Running: SKSE64 {}, Skyrim AE {}\n\
+         Base addr: {:#x}",
+        unsafe { CStr::from_ptr(SKSEPlugin_Version.name.as_ptr()).to_str().unwrap() },
+        SKSEPlugin_Version.plugin_version,
         PACKED_SKSE_VERSION,
         CURRENT_RELEASE_RUNTIME,
         skse.skse_version.unwrap(),

@@ -8,7 +8,7 @@
 //!
 
 use std::num::NonZeroU32;
-use std::fmt::{Display, Formatter, Error};
+use std::fmt::{Display, Debug, Formatter, Error};
 use later::Later;
 
 /// @brief Wraps a skse version.
@@ -135,7 +135,6 @@ impl SkseVersion {
     }
 }
 
-/// @brief Allows a skse64 version to be printed.
 impl Display for SkseVersion {
     fn fmt(
         &self,
@@ -149,6 +148,15 @@ impl Display for SkseVersion {
         };
 
         write!(f, "{}.{}.{} ({})", self.major(), self.minor(), self.build(), runtime)
+    }
+}
+
+impl Debug for SkseVersion {
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), Error> {
+        write!(f, "{}.{}.{}.{}", self.major(), self.minor(), self.build(), self.runtime_type())
     }
 }
 

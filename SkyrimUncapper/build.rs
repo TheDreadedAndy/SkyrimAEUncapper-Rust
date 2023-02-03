@@ -7,7 +7,7 @@
 
 const RC_AUTHOR: &str = "Kasplat";
 const RC_NAME: &str = "Skyrim Uncapper AE";
-const RC_VERSION: &str = "2.0.0.0";
+const RC_VERSION: &str = "2.0.1.0";
 const RC_FILE: &str = "SkyrimUncapper.dll";
 
 const HOOKS_FILE: &str = "src/hook_wrappers.S";

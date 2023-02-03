@@ -94,9 +94,7 @@ impl SksePluginVersionData {
         let mut ret: [c_char; N] = [0; N];
 
         let s = s.as_bytes();
-        if s.len() >= N {
-            panic!("Cannot fit string in C array!");
-        }
+        assert!(s.len() <= (N - 1), "Cannot fit string in C array!");
 
         let mut i = 0;
         while i < s.len() {
@@ -113,10 +111,10 @@ impl SksePluginVersionData {
         v: &[SkseVersion]
     ) -> [Option<SkseVersion>; N] {
         let mut ret = [None; N];
+        assert!(v.len() <= (N - 1), "Too many compatible versions!");
 
         let mut i = 0;
         while i < v.len() {
-            assert!(i < (N - 1), "Too many compatible versions!");
             ret[i] = Some(v[i]);
             i += 1;
         }
