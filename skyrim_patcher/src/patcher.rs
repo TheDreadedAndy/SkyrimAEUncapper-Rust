@@ -14,6 +14,7 @@
 //!
 
 use std::cell::UnsafeCell;
+use std::ptr::NonNull;
 
 use skse64::log::skse_message;
 use skse64::trampoline::Trampoline;
@@ -40,12 +41,26 @@ pub enum GameLocation {
 #[allow(dead_code)]
 pub enum Hook {
     None,
-    Jump5(HookFn),
-    Jump6(HookFn),
-    DirectJump(HookFn),
-    Call5(HookFn),
-    Call6(HookFn),
-    DirectCall(HookFn)
+    Jump5 {
+        entry: *const u8,
+        trampoline: NonNull<UnsafeCell<usize>>
+    },
+    Jump6 {
+        entry: *const u8,
+        trampoline: NonNull<UnsafeCell<usize>>
+    },
+    Jump14 {
+        entry: *const u8,
+        trampoline: NonNull<UnsafeCell<usize>>
+    },
+    DirectJump {
+        entry: *const u8,
+        trampoline: NonNull<UnsafeCell<usize>>
+    },
+    Call5(*const u8),
+    Call6(*const u8),
+    Call14(*const u8),
+    DirectCall(*const u8)
 }
 
 /// Describes a location in code to be parsed and acted on by the patcher.
@@ -53,13 +68,13 @@ pub enum Descriptor {
     Function {
         name: &'static str,
         loc: GameLocation,
-        result: GameRefResult
+        result: NonNull<UnsafeCell<usize>>
     },
 
     Object {
         name: &'static str,
         loc: GameLocation,
-        result: GameRefResult
+        result: NonNull<UnsafeCell<usize>>
     },
 
     Patch {
@@ -68,7 +83,6 @@ pub enum Descriptor {
         hook: Hook,
         loc: GameLocation,
         sig: Signature,
-        trampoline: Option<GameRefResult>
     }
 }
 
@@ -82,11 +96,6 @@ enum DescriptorError {
 /// The result of an attempt to locate a descriptor.
 type FindResult = Result<RelocAddr, DescriptorError>;
 
-/// Stores a function which is used by a hook.
-#[repr(transparent)]
-#[derive(Copy, Clone)]
-pub struct HookFn(*const u8);
-
 ///
 /// Contains an address retrieved by the patcher.
 ///
@@ -94,11 +103,6 @@ pub struct HookFn(*const u8);
 ///
 #[repr(transparent)]
 pub struct GameRef<T>(UnsafeCell<usize>, std::marker::PhantomData<T>);
-
-/// Contains a pointer to the unsafe cell of a RelocAddr, to be written back to by the patcher.
-#[repr(transparent)]
-#[derive(Copy, Clone)]
-pub struct GameRefResult(*mut UnsafeCell<usize>);
 
 impl GameLocation {
     /// Finds the game address specified by this location.
@@ -156,8 +160,8 @@ impl Hook {
         &self
     ) -> usize {
         match self {
-            Hook::Jump5(_) | Hook::Call5(_) => 14,
-            Hook::Jump6(_) | Hook::Call6(_) => 8,
+            Hook::Jump5 { .. } | Hook::Call5(_) => 14,
+            Hook::Jump6 { .. } | Hook::Call6(_) => 8,
             _ => 0
         }
     }
@@ -168,8 +172,23 @@ impl Hook {
     ) -> usize {
         match self {
             Hook::None => 0,
-            Hook::Jump5(_) | Hook::Call5(_) | Hook::DirectJump(_) | Hook::DirectCall(_) => 5,
-            Hook::Jump6(_) | Hook::Call6(_) => 6
+            Hook::Jump5 { .. } | Hook::Call5(_) |
+            Hook::DirectJump { .. } | Hook::DirectCall(_) => 5,
+            Hook::Jump6 { .. } | Hook::Call6(_) => 6,
+            Hook::Jump14 { .. } | Hook::Call14(_) => 14,
+        }
+    }
+
+    /// Gets a pointer to the patches return trampoline, if it exists.
+    fn trampoline(
+        &self
+    ) -> Option<NonNull<UnsafeCell<usize>>> {
+        match self {
+            Hook::Jump5  { trampoline, .. } | Hook::Jump6 { trampoline, .. } |
+            Hook::Jump14 { trampoline, .. } | Hook::DirectJump { trampoline, .. } => {
+                Some(*trampoline)
+            },
+            _ => None
         }
     }
 
@@ -184,25 +203,26 @@ impl Hook {
         addr: usize
     ) {
         match self {
-            Self::Jump5(hook) => {
-                skse64::trampoline::write_jump5(Trampoline::Global, addr, hook.addr());
+            Self::Jump5 { entry, .. } => {
+                skse64::trampoline::write_jump5(Trampoline::Global, addr, *entry as usize);
             },
-            Self::Call5(hook) => {
-                skse64::trampoline::write_call5(Trampoline::Global, addr, hook.addr());
+            Self::Call5(entry) => {
+                skse64::trampoline::write_call5(Trampoline::Global, addr, *entry as usize);
             },
-            Self::Jump6(hook) => {
-                skse64::trampoline::write_jump6(Trampoline::Global, addr, hook.addr());
+            Self::Jump6 { entry, .. } => {
+                skse64::trampoline::write_jump6(Trampoline::Global, addr, *entry as usize);
             },
-            Self::Call6(hook) => {
-                skse64::trampoline::write_call6(Trampoline::Global, addr, hook.addr());
+            Self::Call6(entry) => {
+                skse64::trampoline::write_call6(Trampoline::Global, addr, *entry as usize);
             },
-            Self::DirectJump(hook) => {
-                skse64::safe::write_jump(addr, hook.addr()).unwrap();
+            Self::DirectJump { entry, .. } => {
+                skse64::safe::write_jump(addr, *entry as usize).unwrap();
             },
-            Self::DirectCall(hook) => {
-                skse64::safe::write_call(addr, hook.addr()).unwrap();
+            Self::DirectCall(entry) => {
+                skse64::safe::write_call(addr, *entry as usize).unwrap();
             },
-            Self::None => panic!("Cannot install to a None hook!")
+            Self::None => panic!("Cannot install to a None hook!"),
+            _ => todo!()
         }
     }
 }
@@ -312,27 +332,6 @@ impl std::fmt::Display for Descriptor {
     }
 }
 
-impl HookFn {
-    ///
-    /// Creates a new hook function type.
-    ///
-    /// In order to use this function safely, the function type
-    /// must be a valid extern "system" fn.
-    ///
-    pub const unsafe fn new(
-        func: *const u8
-    ) -> Self {
-        Self(func)
-    }
-
-    /// Gets the underlying address of the hook function.
-    fn addr(
-        self
-    ) -> usize {
-        self.0 as usize
-    }
-}
-
 impl<T> GameRef<T> {
     /// Creates a new game reference structure.
     pub const fn new() -> Self {
@@ -348,8 +347,8 @@ impl<T> GameRef<T> {
     ///
     pub const fn inner(
         &self
-    ) -> GameRefResult {
-        GameRefResult(&self.0 as *const _ as *mut _)
+    ) -> NonNull<UnsafeCell<usize>> {
+        unsafe { NonNull::new_unchecked(&self.0 as *const _ as *mut _) }
     }
 
     /// Reads the contained address. Only legal if the address has been set through inner().
@@ -367,30 +366,10 @@ impl<T> GameRef<T> {
     }
 }
 
-impl GameRefResult {
-    ///
-    /// Updates the address of a RelocAddr.
-    ///
-    /// In order to use this function safely, the caller must ensure that the given address
-    /// points to a valid type T.
-    ///
-    unsafe fn write(
-        &self,
-        a: usize
-    ) {
-        // SAFETY: We know this came from a RelocAddr, so the pointer is valid.
-        assert!(!self.0.is_null());
-        let res = (*self.0).get();
-        assert!(*res == 0);
-        assert!(a != 0);
-        *res = a;
-    }
-}
-
 // SAFETY: The patcher is protected by the single initialization of skse.
-unsafe impl Sync for HookFn {}
+unsafe impl Sync for Hook {}
+unsafe impl Sync for Descriptor {}
 unsafe impl<T> Sync for GameRef<T> {}
-unsafe impl Sync for GameRefResult {}
 
 /// Locates any game functions/objects, and applies any code patches.
 pub fn apply<const NUM_PATCHES: usize>(
@@ -400,7 +379,7 @@ pub fn apply<const NUM_PATCHES: usize>(
     let mut res_addrs: [usize; NUM_PATCHES] = [0; NUM_PATCHES];
     let mut alloc_size: usize = 0;
 
-    skse_message!("--------------------- Skyrim Patcher 1.0.1 ---------------------");
+    skse_message!("--------------------- Skyrim Patcher 1.0.2 ---------------------");
 
     // Attempt to locate all of the patch signatures.
     let mut fails = 0;
@@ -426,6 +405,7 @@ pub fn apply<const NUM_PATCHES: usize>(
 
     if fails > 0 {
         skse_message!("[FAILURE] Could not locate every game signature!");
+        skse_message!("----------------------------------------------------------------");
         return Err(())
     }
 
@@ -448,12 +428,12 @@ pub fn apply<const NUM_PATCHES: usize>(
         let hook_size = sig.hook().map(|h| h.patch_size()).unwrap_or(0);
         let ret_addr = res_addrs[i] + hook_size;
         match sig {
-            Descriptor::Patch { trampoline, hook, .. } => {
+            Descriptor::Patch { hook, .. } => {
                 unsafe {
                     // SAFETY: We will ensure our return address is valid by writing NOPS to any
                     //         bytes that are part of the patch and after the return address.
-                    if let Some(t) = trampoline {
-                        t.write(ret_addr);
+                    if let Some(t) = hook.trampoline() {
+                        *(t.as_ref().get()) = ret_addr;
                     }
                     hook.install(res_addrs[i]);
                 }
@@ -462,7 +442,7 @@ pub fn apply<const NUM_PATCHES: usize>(
                 unsafe {
                     // SAFETY: The version DB ensures that we have the write object for
                     //         the requested ID.
-                    result.write(res_addrs[i]);
+                    *(result.as_ref().get()) = res_addrs[i];
                 }
             }
         }
