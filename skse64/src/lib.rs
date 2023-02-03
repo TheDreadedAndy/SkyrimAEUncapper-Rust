@@ -5,7 +5,6 @@
 //! @bug No known bugs.
 //!
 
-mod bind;
 pub mod version;
 mod errors;
 pub mod log;
@@ -13,6 +12,7 @@ pub mod reloc;
 pub mod plugin_api;
 pub mod trampoline;
 pub mod safe;
+pub mod util;
 
 // For macros.
 pub use core;
@@ -21,15 +21,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::ffi::CStr;
 
 use version::{RUNNING_GAME_VERSION, RUNNING_SKSE_VERSION};
-use version::SkseVersion;
-use plugin_api::{SKSEInterface, SKSEPluginVersionData};
+use plugin_api::{SkseInterface, SksePluginVersionData};
 
 extern "Rust" {
     /// Entry point for plugins using this crate.
-    fn skse_plugin_rust_entry(skse: &SKSEInterface) -> Result<(), ()>;
+    fn skse_plugin_rust_entry(skse: &SkseInterface) -> Result<(), ()>;
 
     /// Used to name the log file.
-    static SKSEPlugin_Version: SKSEPluginVersionData;
+    static SKSEPlugin_Version: SksePluginVersionData;
 }
 
 ///
@@ -40,7 +39,7 @@ extern "Rust" {
 ///
 #[no_mangle]
 pub unsafe extern "system" fn SKSEPlugin_Load(
-    skse: *const SKSEInterface
+    skse: *const SkseInterface
 ) -> bool {
     // Prevent reinit.
     static IS_INIT: AtomicBool = AtomicBool::new(false);
@@ -62,11 +61,11 @@ pub unsafe extern "system" fn SKSEPlugin_Load(
 
     // "yup, no more editor. obscript is gone (mostly)" ~ianpatt
     assert!(!(skse.is_null()));
-    if (*skse).isEditor != 0 { return false; }
+    if (*skse).is_editor != 0 { return false; }
 
     // Set running version to the given value.
-    RUNNING_SKSE_VERSION.init(SkseVersion::from_raw((*skse).skseVersion));
-    RUNNING_GAME_VERSION.init(SkseVersion::from_raw((*skse).runtimeVersion));
+    RUNNING_SKSE_VERSION.init((*skse).skse_version.unwrap());
+    RUNNING_GAME_VERSION.init((*skse).runtime_version.unwrap());
 
     // Call the rust entry point.
     return skse_plugin_rust_entry(skse.as_ref().unwrap()).is_ok();

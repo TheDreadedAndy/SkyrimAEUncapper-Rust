@@ -7,18 +7,18 @@
 //! Bindgen can't evaluate macros, so these have to be written manually.
 //!
 
+use std::num::NonZeroU32;
 use std::fmt::{Display, Formatter, Error};
 use later::Later;
-
-pub use crate::bind::{SKSE_VERSION_INTEGER, SKSE_VERSION_INTEGER_MINOR};
-pub use crate::bind::{SKSE_VERSION_INTEGER_BETA, SKSE_VERSION_VERSTRING};
-pub use crate::bind::{SKSE_VERSION_PADDEDSTRING, SKSE_VERSION_RELEASEIDX};
-pub use crate::bind::{RUNTIME_TYPE_BETHESDA, RUNTIME_TYPE_GOG, RUNTIME_TYPE_EPIC};
 
 /// @brief Wraps a skse version.
 #[derive(Copy, Clone, PartialOrd, Ord, PartialEq, Eq)]
 #[repr(transparent)]
-pub struct SkseVersion(u32);
+pub struct SkseVersion(NonZeroU32);
+
+pub const RUNTIME_TYPE_BETHESDA: u32 = 0;
+pub const RUNTIME_TYPE_GOG: u32 = 1;
+pub const RUNTIME_TYPE_EPIC: u32 = 2;
 
 pub const RUNTIME_VERSION_1_1_47: SkseVersion =
     SkseVersion::new(1, 1, 47, RUNTIME_TYPE_BETHESDA);
@@ -74,25 +74,20 @@ pub const RUNTIME_VERSION_1_6_678_EPIC: SkseVersion =
     SkseVersion::new(1, 6, 678, RUNTIME_TYPE_EPIC);
 
 pub const CURRENT_RELEASE_RUNTIME: SkseVersion = RUNTIME_VERSION_1_6_640;
-pub const PACKED_SKSE_VERSION: SkseVersion = SkseVersion::new(
-    SKSE_VERSION_INTEGER,
-    SKSE_VERSION_INTEGER_MINOR,
-    SKSE_VERSION_INTEGER_BETA,
-    RUNTIME_TYPE_BETHESDA
-);
+pub const PACKED_SKSE_VERSION: SkseVersion = SkseVersion::new(2, 2, 3, RUNTIME_TYPE_BETHESDA);
 
 /// Holds the running game/skse version. Initialized by the entry point.
 pub (in crate) static RUNNING_GAME_VERSION: Later<SkseVersion> = Later::new();
 pub (in crate) static RUNNING_SKSE_VERSION: Later<SkseVersion> = Later::new();
 
 impl SkseVersion {
-    const fn new(
+    pub const fn new(
         major: u32,
         minor: u32,
         build: u32,
         sub: u32
     ) -> Self {
-        Self(
+        Self::from_raw(
             (major << 24) |
             (minor << 16) |
             ((build & 0xFFF) << 4) |
@@ -104,35 +99,39 @@ impl SkseVersion {
     pub const fn from_raw(
         v: u32
     ) -> Self {
-        Self(v)
+        if let Some(v) = NonZeroU32::new(v) {
+            Self(v)
+        } else {
+            panic!("Cannot create version 0.0.0.0!");
+        }
     }
 
     /// @brief Gets the versions major revision.
     pub const fn major(
         &self
     ) -> u32 {
-        self.0 >> 24
+        self.0.get() >> 24
     }
 
     /// @brief Gets the versions minor revision.
     pub const fn minor(
         &self
     ) -> u32 {
-        (self.0 >> 16) & 0xFF
+        (self.0.get() >> 16) & 0xFF
     }
 
     /// @brief Gets the versions build number.
     pub const fn build(
         &self
     ) -> u32 {
-        (self.0 >> 4) & 0xFFF
+        (self.0.get() >> 4) & 0xFFF
     }
 
     /// @brief Gets the versions runtime type.
     pub const fn runtime_type(
         &self
     ) -> u32 {
-        self.0 & 0xF
+        self.0.get() & 0xF
     }
 }
 

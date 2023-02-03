@@ -8,9 +8,7 @@
 use std::ffi::c_char;
 use std::cell::UnsafeCell;
 
-use ctypes::abstract_type;
-
-abstract_type! {
+skse64::util::abstract_type! {
     /// Contains configuration settings exposed by the game engine.
     pub type SettingCollectionMap;
 }

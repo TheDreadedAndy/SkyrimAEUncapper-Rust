@@ -5,10 +5,9 @@
 //! @bug No known bugs.
 //!
 
-use ctypes::abstract_type;
 use skse64::version::{RUNTIME_VERSION_1_6_317, RUNTIME_VERSION_1_6_629};
 
-abstract_type! {
+skse64::util::abstract_type! {
     /// The player actor class.
     pub type PlayerCharacter;
 
