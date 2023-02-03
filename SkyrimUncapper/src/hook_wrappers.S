@@ -30,11 +30,17 @@
 .global improve_player_skill_points_original
 .global modify_perk_pool_wrapper
 .global improve_level_exp_by_skill_level_wrapper
+.global improve_attribute_when_level_up_wrapper
 .global legendary_reset_skill_level_wrapper
 .global check_condition_for_legendary_skill_wrapper
 .global check_condition_for_legendary_skill_alt_wrapper
 .global hide_legendary_button_wrapper
 .global clear_legendary_button_wrapper
+
+// Fixes the return address of a call14 hook.
+.macro CALL14_PRELUDE
+    addq $0x08, (%rsp)
+.endm
 
 // Saves all caller saved registers.
 .macro SAVEALL
@@ -143,6 +149,8 @@
 /*
  * This function gets injected in the middle of another, so we must use the call
  * injection macros to protect the register state.
+ *
+ * FIXME: (0x720f9e; size 33)
  */
 skill_cap_patch_wrapper:
     SAVEALL
@@ -155,6 +163,8 @@ skill_cap_patch_wrapper:
 /*
  * Begins a max_charge calculation by changing the enchanting formula cap
  * to use the weapon cap if the enchanted item is offensive.
+ *
+ * FIXME: (0x8b37e9; size 18)
  */
 max_charge_begin_wrapper:
     SAVEALL
@@ -173,6 +183,7 @@ max_charge_begin_wrapper:
  * to using the magnitude formula cap, if necessary.
  */
 max_charge_end_wrapper:
+    CALL14_PRELUDE
     SAVEALL_RETFPR
 
     call max_charge_end_hook
@@ -191,6 +202,7 @@ max_charge_end_wrapper:
  * reg save. We're just adding an arg.
  */
 calculate_charge_points_per_use_wrapper:
+    CALL14_PRELUDE
     movss 0xa8(%rsp), %xmm2 // Get max_charge.
     movaps %xmm7, %xmm1 // Get base_points
     xorps %xmm3, %xmm3 // Reimplement max from original code.
@@ -207,11 +219,16 @@ player_avo_get_current_original_wrapper:
     push %rbp
     push %rsi
     push %rdi
+    push %r14
+    push %r15
+    sub $0x50, %rsp
     jmp *player_avo_get_current_return_trampoline(%rip)
 
 /*
  * Forces the code which displays skill values in the skills menu to show the
  * true skill level instead of the damaged value by calling the OG function.
+ *
+ * FIXME: (0x903bad; 22) (remove cvt, dont overwrite og).
  */
 display_true_skill_level_hook:
     sub $0x28, %rsp
@@ -224,6 +241,8 @@ display_true_skill_level_hook:
  * Forces the code which displays skill color in the skills menu to show the
  * true skill color instead of the damaged color by calling the OG
  * player_avo_get_current() function.
+ *
+ * FIXME: (0x91c8b4; 17) (greatly simplifies patch anyway)
  */
 display_true_skill_color_hook:
     /*
@@ -241,6 +260,8 @@ display_true_skill_color_hook:
 /*
  * Forces the training fn to call the original improve_player_skill_points()
  * function.
+ *
+ * FIXME: (0x7213bb; 18)
  */
 improve_skill_by_training_hook:
     call improve_player_skill_points_original
@@ -256,12 +277,18 @@ improve_player_skill_points_original:
     mov %rsp, %rax
     push %rdi
     push %r12
+    push %r13
+    push %r14
+    push %r15
+    sub $0x180, %rsp
     jmp *improve_player_skill_points_return_trampoline(%rip)
 
 /*
  * Injected after the current number of perk points is read. Returns to the
  * instruction where the new perk count is written back. We do this to avoid
  * non-portable (across skyrim versions) accesses to the player class.
+ *
+ * FIXME: (0x908b72; 29) <- Requires hardcoding another offset :/
  */
 modify_perk_pool_wrapper:
     SAVEALL
@@ -276,6 +303,8 @@ modify_perk_pool_wrapper:
  * Passes the EXP gain to our function for further modification.
  * Note that the code here is rather different than the OG implementation
  * because the original improve_level_exp_by_skill_level() function got inlined.
+ *
+ * FIXME: (0x721217; 17) <- Requires making a way to get g_thePlayer in ASM.
  */
 improve_level_exp_by_skill_level_wrapper:
     SAVEALL
@@ -293,8 +322,18 @@ improve_level_exp_by_skill_level_wrapper:
     ret
 
 /*
+ * Fixes the return address before jumping to the hook.
+ */
+improve_attribute_when_level_up_wrapper:
+    CALL14_PRELUDE
+    mov %edx, %ecx
+    jmp improve_attribute_when_level_up_hook
+
+/*
  * Modifies the rest level of legendarying a skill depending on the user
  * settings and the base level in xmm0.
+ *
+ * FIXME: (0x90c5e9; 36)
  */
 legendary_reset_skill_level_wrapper:
     SAVEALL
@@ -328,6 +367,8 @@ check_condition_for_legendary_skill_alt_wrapper:
  * Allows the legendary button to be hidden based on an INI setting.
  * We are overwriting another function call here, so we dont need to save
  * the register state.
+ *
+ * FIXME: (0x904743; 30)
  */
 hide_legendary_button_wrapper:
     mov %edx, %ecx
@@ -338,6 +379,8 @@ hide_legendary_button_wrapper:
 /*
  * Forces the game to clear the legendary button in accordance with
  * what our mod expects when scrolling in the skill menu.
+ *
+ * FIXME: (0x905ccd; 23)
  */
 clear_legendary_button_wrapper:
     mov %r15d, %ecx

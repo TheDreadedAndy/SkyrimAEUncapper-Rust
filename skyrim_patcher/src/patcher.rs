@@ -19,6 +19,7 @@ use std::ptr::NonNull;
 use skse64::log::skse_message;
 use skse64::trampoline::Trampoline;
 use skse64::reloc::RelocAddr;
+use skse64::safe::Flow;
 use versionlib::VersionDb;
 
 use crate::sig::{Signature, BinarySig};
@@ -215,14 +216,19 @@ impl Hook {
             Self::Call6(entry) => {
                 skse64::trampoline::write_call6(Trampoline::Global, addr, *entry as usize);
             },
+            Self::Jump14 { entry, .. } => {
+                skse64::safe::write_flow(addr, *entry as usize, Flow::JumpAbsolute).unwrap();
+            },
+            Self::Call14(entry) => {
+                skse64::safe::write_flow(addr, *entry as usize, Flow::CallAbsolute).unwrap();
+            },
             Self::DirectJump { entry, .. } => {
-                skse64::safe::write_jump(addr, *entry as usize).unwrap();
+                skse64::safe::write_flow(addr, *entry as usize, Flow::JumpRelative).unwrap();
             },
             Self::DirectCall(entry) => {
-                skse64::safe::write_call(addr, *entry as usize).unwrap();
+                skse64::safe::write_flow(addr, *entry as usize, Flow::CallRelative).unwrap();
             },
             Self::None => panic!("Cannot install to a None hook!"),
-            _ => todo!()
         }
     }
 }

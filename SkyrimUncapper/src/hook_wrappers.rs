@@ -21,6 +21,7 @@ extern "system" {
     pub fn display_true_skill_level_hook();
     pub fn display_true_skill_color_hook();
     pub fn improve_level_exp_by_skill_level_wrapper();
+    pub fn improve_attribute_when_level_up_wrapper();
     pub fn improve_skill_by_training_hook();
     pub fn improve_player_skill_points_original(
         skill_data: *mut PlayerSkills,

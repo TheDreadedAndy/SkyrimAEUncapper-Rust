@@ -72,7 +72,7 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "EndMaxChargeCalculation",
             enabled: settings::is_enchant_patch_enabled,
-            hook: Hook::Call6(max_charge_end_wrapper as *const u8),
+            hook: Hook::Call14(max_charge_end_wrapper as *const u8),
             loc: GameLocation::Id { id: 51449, offset: 0x179 },
             sig: signature![
                 0xf3, 0x0f, 0x10, 0x84, 0x24, 0xa0, 0x00, 0x00, 0x00,
@@ -92,7 +92,7 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "CalculateChargePointsPerUse",
             enabled: settings::is_enchant_patch_enabled,
-            hook: Hook::Call6(calculate_charge_points_per_use_wrapper as *const u8),
+            hook: Hook::Call14(calculate_charge_points_per_use_wrapper as *const u8),
             loc: GameLocation::Id { id: 51449, offset: 0x32a },
             sig: signature![
                 0xff, 0x50, 0x08, 0x0f, 0x28, 0xc8, 0x0f, 0x28,
@@ -106,12 +106,15 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "PlayerAVOGetCurrent",
             enabled: settings::is_skill_formula_cap_enabled,
-            hook: Hook::Jump6 {
+            hook: Hook::Jump14 {
                 entry: player_avo_get_current_hook as *const u8,
                 trampoline: player_avo_get_current_return_trampoline.inner()
             },
             loc: GameLocation::Id { id: 38462, offset: 0 },
-            sig: signature![0x4c, 0x8b, 0xdc, 0x55, 0x56, 0x57; 6]
+            sig: signature![
+                0x4c, 0x8b, 0xdc, 0x55, 0x56, 0x57, 0x41, 0x56,
+                0x41, 0x57, 0x48, 0x83, 0xec, 0x50; 14
+            ]
         },
 
         //
@@ -158,12 +161,15 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "ImprovePlayerSkillPoints",
             enabled: settings::is_skill_exp_enabled,
-            hook: Hook::Jump6 {
+            hook: Hook::Jump14 {
                 entry: improve_player_skill_points_hook as *const u8,
                 trampoline: improve_player_skill_points_return_trampoline.inner()
             },
             loc: GameLocation::Id { id: 41561, offset: 0 },
-            sig: signature![0x48, 0x8b, 0xc4, 0x57, 0x41, 0x54; 6]
+            sig: signature![
+                0x48, 0x8b, 0xc4, 0x57, 0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57,
+                0x48, 0x81, 0xec, 0x80, 0x01, 0x00, 0x00; 19
+            ]
         },
 
         //
@@ -206,7 +212,7 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "ImproveAttributeWhenLevelUp",
             enabled: settings::is_attr_points_enabled,
-            hook: Hook::Call6(improve_attribute_when_level_up_hook as *const u8),
+            hook: Hook::Call14(improve_attribute_when_level_up_wrapper as *const u8),
             loc: GameLocation::Id { id: 51917, offset: 0x93 },
             sig: signature![
                 0xff, 0x50, 0x28, 0x83, 0x7f, 0x18, 0x1a, 0x75,
@@ -231,24 +237,30 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "CheckConditionForLegendarySkill",
             enabled: settings::is_legendary_enabled,
-            hook: Hook::Jump6 {
+            hook: Hook::Jump14 {
                 entry: check_condition_for_legendary_skill_wrapper as *const u8,
                 trampoline: check_condition_for_legendary_skill_return_trampoline.inner()
             },
-            loc: GameLocation::Id { id: 52520, offset: 0x157 },
-            sig: signature![0xff, 0x53, 0x18, 0x0f, 0x2f, 0x05, ?, ?, ?, ?; 10]
+            loc: GameLocation::Id { id: 52520, offset: 0x150 },
+            sig: signature![
+                0x48, 0x8d, 0x8f, ?, 0x00, 0x00, 0x00, 0xff, 0x53, 0x18,
+                0x0f, 0x2f, 0x05, ?, ?, ?, ?; 17
+            ]
         },
 
         // As above, except this is for the function where the jump key is remapped.
         Descriptor::Patch {
             name: "CheckConditionForLegendarySkillAlt",
             enabled: settings::is_legendary_enabled,
-            hook: Hook::Jump6 {
+            hook: Hook::Jump14 {
                 entry: check_condition_for_legendary_skill_alt_wrapper as *const u8,
                 trampoline: check_condition_for_legendary_skill_alt_return_trampoline.inner()
             },
-            loc: GameLocation::Id { id: 52510, offset: 0x4de },
-            sig: signature![0xff, 0x53, 0x18, 0x0f, 0x2f, 0x05, ?, ?, ?, ?; 10]
+            loc: GameLocation::Id { id: 52510, offset: 0x4d7 },
+            sig: signature![
+                0x48, 0x8d, 0x8f, ?, 0x00, 0x00, 0x00, 0xff, 0x53, 0x18,
+                0x0f, 0x2f, 0x05, ?, ?, ?, ?; 17
+            ]
         },
 
         // As above, except this is for the UI button display.
@@ -439,12 +451,8 @@ extern "system" fn improve_level_exp_by_skill_level_hook(
 ///
 /// Adjusts the attribute gain at each level-up based on the configured settings.
 ///
-/// This function overwrites a call to player_avo->mod_base(). Since we're overwriting
-/// a call, we don't need to reg save and, thus, don't need a wrapper. We also overwrite
-/// the carry weight level-up code.
-///
+#[no_mangle]
 extern "system" fn improve_attribute_when_level_up_hook(
-    _av: *mut ActorValueOwner,
     choice: c_int
 ) {
     assert!(settings::is_attr_points_enabled());

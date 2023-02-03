@@ -223,28 +223,4 @@ extern "C" {
             STOP("Failed to write Call-5 to trampoline");
         }
     }
-
-    int
-    SKSE64_SafeWrite__safe_write_jump__(
-        uintptr_t src,
-        uintptr_t dst
-    ) {
-        try {
-            return SafeWriteJump(src, dst) ? 0 : -1;
-        } catch(...) {
-            STOP("Exception while writing direct jump.");
-        }
-    }
-
-    int
-    SKSE64_SafeWrite__safe_write_call__(
-        uintptr_t src,
-        uintptr_t dst
-    ) {
-        try {
-            return SafeWriteCall(src, dst) ? 0 : -1;
-        } catch(...) {
-            STOP("Exception while writing direct call.");
-        }
-    }
 }
