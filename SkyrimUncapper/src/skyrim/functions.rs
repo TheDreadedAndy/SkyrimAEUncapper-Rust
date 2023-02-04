@@ -4,6 +4,8 @@
 //! @brief Exposes game objects and functions which must be located at runtime.
 //! @bug No known bugs.
 //!
+//! FIXME: Every game function call needs a try-catch wrapper
+//!
 
 use std::ffi::{c_char, c_int};
 
@@ -108,7 +110,7 @@ disarray::disarray! {
 }
 
 /// Gets the player actor value owner structure.
-fn get_player_avo() -> *mut ActorValueOwner {
+pub fn get_player_avo() -> *mut ActorValueOwner {
     unsafe {
         // SAFETY: The GameRef struct ensures our player pointer is valid.
         (*(PLAYER_OBJECT.get())).as_ref().unwrap().get_avo()
@@ -135,7 +137,8 @@ pub fn get_game_setting(
 }
 
 /// Gets the base value of a player attribute.
-pub fn player_avo_get_base(
+#[no_mangle]
+pub extern "system" fn player_avo_get_base(
     attr: ActorAttribute
 ) -> f32 {
     (PLAYER_AVO_GET_BASE_ENTRY.get())(get_player_avo(), attr)

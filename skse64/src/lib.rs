@@ -1,16 +1,16 @@
 //!
 //! @file lib.rs
 //! @author Andrew Spaulding (Kasplat).
-//! @brief Top level module file for SKSE FFI.
+//! @brief Top level module file for SKSE64 reimplementation.
 //! @bug No known bugs.
 //!
 
-pub mod version;
 mod errors;
+pub mod version;
 pub mod log;
 pub mod reloc;
 pub mod plugin_api;
-#[cfg(trampoline)] pub mod trampoline;
+#[cfg(feature = "trampoline")] pub mod trampoline;
 pub mod safe;
 pub mod util;
 

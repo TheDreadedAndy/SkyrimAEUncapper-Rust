@@ -37,11 +37,6 @@
 .global hide_legendary_button_wrapper
 .global clear_legendary_button_wrapper
 
-// Fixes the return address of a call14 hook.
-.macro CALL14_PRELUDE
-    addq $0x08, (%rsp)
-.endm
-
 // Saves all caller saved registers.
 .macro SAVEALL
     push %rax
@@ -149,22 +144,25 @@
 /*
  * This function gets injected in the middle of another, so we must use the call
  * injection macros to protect the register state.
- *
- * FIXME: (0x720f9e; size 33)
  */
 skill_cap_patch_wrapper:
-    SAVEALL
+    sub $0x28, %rsp
+
     mov %esi, %ecx // pass SkillID in ecx to hook.
+    call player_avo_get_base
+    movaps %xmm0, %xmm8 // Reimplement original move.
+
+    mov %esi, %ecx // Move skill ID back into first arg.
     call get_skill_cap_hook
+    movaps %xmm8, %xmm0 // Restore xmm0, just in case (this call wasn't here before).
     movss %xmm0, %xmm10 // Replace maximum with fn result.
-    RESTOREALL
+
+    add $0x28, %rsp
     ret
 
 /*
  * Begins a max_charge calculation by changing the enchanting formula cap
  * to use the weapon cap if the enchanted item is offensive.
- *
- * FIXME: (0x8b37e9; size 18)
  */
 max_charge_begin_wrapper:
     SAVEALL
@@ -175,6 +173,12 @@ max_charge_begin_wrapper:
     mov %r14d, %ecx // Enchantment type is in r14d.
     call max_charge_begin_hook
 
+    mov 0xa8(%rsp), %rcx // Get rcx value
+    test %rcx, %rcx // Reimplement replaced test + je.
+    jne _finish_max_charge_begin_wrapper
+    addq $0x12f, 0xb8(%rsp) // Offset return address (this is a crime).
+
+_finish_max_charge_begin_wrapper:
     RESTOREALL
     ret
 
@@ -183,7 +187,13 @@ max_charge_begin_wrapper:
  * to using the magnitude formula cap, if necessary.
  */
 max_charge_end_wrapper:
-    CALL14_PRELUDE
+    // We jump here, but we also need to safe register state. We can't do that without
+    // violating calling convention, though, so we call another function which saves the
+    // state and then we use our trampoline.
+    call max_charge_end_invoker
+    jmp *max_charge_end_return_trampoline(%rip)
+
+max_charge_end_invoker:
     SAVEALL_RETFPR
 
     call max_charge_end_hook
@@ -202,11 +212,10 @@ max_charge_end_wrapper:
  * reg save. We're just adding an arg.
  */
 calculate_charge_points_per_use_wrapper:
-    CALL14_PRELUDE
-    movss 0xa8(%rsp), %xmm2 // Get max_charge.
-    movaps %xmm7, %xmm1 // Get base_points
-    xorps %xmm3, %xmm3 // Reimplement max from original code.
-    maxss %xmm3, %xmm2
+    movss 0xa8(%rsp), %xmm1 // Get max_charge.
+    movaps %xmm7, %xmm0 // Get base_points
+    xorps %xmm2, %xmm2 // Reimplement max from original code.
+    maxss %xmm2, %xmm1
     jmp calculate_charge_points_per_use_hook
 
 /*
@@ -325,7 +334,6 @@ improve_level_exp_by_skill_level_wrapper:
  * Fixes the return address before jumping to the hook.
  */
 improve_attribute_when_level_up_wrapper:
-    CALL14_PRELUDE
     mov %edx, %ecx
     jmp improve_attribute_when_level_up_hook
 

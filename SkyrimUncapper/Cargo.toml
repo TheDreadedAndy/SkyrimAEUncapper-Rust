@@ -7,12 +7,16 @@ edition = "2021"
 name = "SkyrimUncapper"
 crate-type = ["cdylib"]
 
+[features]
+alloc_trampoline = ["skyrim_patcher/alloc_trampoline"]
+by_offset = ["skyrim_patcher/by_offset"]
+
 [dependencies]
 configparser = "3.0.2"
 later = { path = "../later" }
 disarray = { path = "../disarray" }
 skse64 = { path = "../skse64" }
-skyrim_patcher = { path = "../skyrim_patcher" }
+skyrim_patcher = { path = "../skyrim_patcher", features = [ "alloc_trampoline" ] }
 
 [build-dependencies]
 winres = "0.1.12"

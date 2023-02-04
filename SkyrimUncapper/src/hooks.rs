@@ -17,6 +17,7 @@ use skyrim_patcher::{Descriptor, Hook, GameLocation, GameRef, signature};
 use crate::settings;
 use crate::hook_wrappers::*;
 use crate::skyrim::{ActorAttribute, ActorValueOwner, PlayerSkills};
+use crate::skyrim::get_player_avo;
 use crate::skyrim::{player_avo_get_base, player_avo_get_current_original, game_setting};
 use crate::skyrim::{player_avo_mod_base, player_avo_mod_current, get_player_level};
 
@@ -25,6 +26,8 @@ use crate::skyrim::{player_avo_mod_base, player_avo_mod_current, get_player_leve
 //
 // Boing!
 //
+#[no_mangle]
+static max_charge_end_return_trampoline: GameRef<usize> = GameRef::new();
 #[no_mangle]
 static improve_skill_by_training_return_trampoline: GameRef<usize> = GameRef::new();
 #[no_mangle]
@@ -51,9 +54,16 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "GetSkillCap",
             enabled: settings::is_skill_cap_enabled,
-            hook: Hook::Call6(skill_cap_patch_wrapper as *const u8),
+            hook: Hook::Call16(skill_cap_patch_wrapper as *const u8),
             loc: GameLocation::Id { id: 41561, offset: 0x76 },
-            sig: signature![0xf3, 0x44, 0x0f, 0x10, 0x15, ?, ?, ?, ?; 9]
+            sig: signature![
+                0x48, 0x8b, 0x0d, ?, ?, ?, ?,
+                0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
+                0x48, 0x8b, 0x01,
+                0xff, 0x50, 0x18,
+                0x44, 0x0f, 0x28, 0xc0,
+                0xf3, 0x44, 0x0f, 0x10, 0x15, ?, ?, ?, ?; 33
+            ]
         },
 
         //
@@ -65,14 +75,20 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "BeginMaxChargeCalculation",
             enabled: settings::is_enchant_patch_enabled,
-            hook: Hook::Call6(max_charge_begin_wrapper as *const u8),
+            hook: Hook::Call16(max_charge_begin_wrapper as *const u8),
             loc: GameLocation::Id { id: 51449, offset: 0xe9 },
-            sig: signature![0xf3, 0x0f, 0x11, 0x84, 0x24, 0xa0, 0x00, 0x00, 0x00; 9]
+            sig: signature![
+                0xf3, 0x0f, 0x11, 0x84, 0x24, 0xa0, 0x00, 0x00, 0x00,
+                0x48, 0x85, 0xc9,
+                0x0f, 0x84, 0x2f, 0x01, 0x00, 0x00; 18]
         },
         Descriptor::Patch {
             name: "EndMaxChargeCalculation",
             enabled: settings::is_enchant_patch_enabled,
-            hook: Hook::Call14(max_charge_end_wrapper as *const u8),
+            hook: Hook::Jump14 {
+                entry: max_charge_end_wrapper as *const u8,
+                trampoline: max_charge_end_return_trampoline.inner()
+            },
             loc: GameLocation::Id { id: 51449, offset: 0x179 },
             sig: signature![
                 0xf3, 0x0f, 0x10, 0x84, 0x24, 0xa0, 0x00, 0x00, 0x00,
@@ -92,11 +108,17 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "CalculateChargePointsPerUse",
             enabled: settings::is_enchant_patch_enabled,
-            hook: Hook::Call14(calculate_charge_points_per_use_wrapper as *const u8),
+            hook: Hook::Call16(calculate_charge_points_per_use_wrapper as *const u8),
             loc: GameLocation::Id { id: 51449, offset: 0x32a },
             sig: signature![
-                0xff, 0x50, 0x08, 0x0f, 0x28, 0xc8, 0x0f, 0x28,
-                0xc7, 0xe8, ?, ?, ?, ?; 14
+                0x48, 0x8b, 0x0d, ?, ?, ?, ?,
+                0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
+                0x48, 0x8b, 0x01,
+                0xba, 0x17, 0x00, 0x00, 0x00,
+                0xff, 0x50, 0x08,
+                0x0f, 0x28, 0xc8,
+                0x0f, 0x28, 0xc7,
+                0xe8, ?, ?, ?, ?; 36
             ]
         },
 
@@ -336,11 +358,12 @@ extern "system" fn max_charge_end_hook() {
 ///
 #[no_mangle]
 extern "system" fn calculate_charge_points_per_use_hook(
-    av: *mut ActorValueOwner,
     base_points: f32,
     max_charge: f32
 ) -> f32 {
     assert!(settings::is_enchant_patch_enabled());
+
+    let av = get_player_avo();
 
     let cost_exponent = game_setting!("fEnchantingCostExponent").get_float();
     let cost_base = game_setting!("fEnchantingSkillCostBase").get_float();
