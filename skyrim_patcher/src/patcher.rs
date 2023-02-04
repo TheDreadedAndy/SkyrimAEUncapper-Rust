@@ -25,8 +25,8 @@ use versionlib::VersionDb;
 use crate::sig::{Signature, BinarySig};
 
 /// Tracks a location in the skyrim game binary.
-#[allow(dead_code)]
 pub enum GameLocation {
+    #[cfg(by_offset)]
     Offset {
         base: RelocAddr,
         offset: usize
@@ -42,26 +42,38 @@ pub enum GameLocation {
 #[allow(dead_code)]
 pub enum Hook {
     None,
+
+    #[cfg(alloc_trampoline)]
     Jump5 {
         entry: *const u8,
         trampoline: NonNull<UnsafeCell<usize>>
     },
+
+    #[cfg(alloc_trampoline)]
+    Call5(*const u8),
+
+    #[cfg(alloc_trampoline)]
     Jump6 {
         entry: *const u8,
         trampoline: NonNull<UnsafeCell<usize>>
     },
-    Jump14 {
-        entry: *const u8,
-        trampoline: NonNull<UnsafeCell<usize>>
-    },
+
+    #[cfg(alloc_trampoline)]
+    Call6(*const u8),
+
     DirectJump {
         entry: *const u8,
         trampoline: NonNull<UnsafeCell<usize>>
     },
-    Call5(*const u8),
-    Call6(*const u8),
-    Call14(*const u8),
-    DirectCall(*const u8)
+
+    DirectCall(*const u8),
+
+    Jump14 {
+        entry: *const u8,
+        trampoline: NonNull<UnsafeCell<usize>>
+    },
+
+    Call16(*const u8)
 }
 
 /// Describes a location in code to be parsed and acted on by the patcher.
@@ -112,6 +124,7 @@ impl GameLocation {
         db: &VersionDb
     ) -> FindResult {
         match self {
+            #[cfg(by_offset)]
             Self::Offset { base, offset } => {
                 if let Ok(id) = db.find_id_by_addr(*base) {
                     skse_message!("Offset {:#x} has ID {}", base.offset(), id);
@@ -137,6 +150,7 @@ impl std::fmt::Display for GameLocation {
         f: &mut std::fmt::Formatter<'_>
     ) -> Result<(), std::fmt::Error> {
         match self {
+            #[cfg(by_offset)]
             Self::Offset { base, offset } => {
                 if *offset == 0 {
                     write!(f, "[BASE: {:#x}]", base.offset())
@@ -177,6 +191,7 @@ impl Hook {
             Hook::DirectJump { .. } | Hook::DirectCall(_) => 5,
             Hook::Jump6 { .. } | Hook::Call6(_) => 6,
             Hook::Jump14 { .. } | Hook::Call14(_) => 14,
+            Hook::Call16(_) => 16,
         }
     }
 
@@ -220,6 +235,13 @@ impl Hook {
                 skse64::safe::write_flow(addr, *entry as usize, Flow::JumpAbsolute).unwrap();
             },
             Self::Call14(entry) => {
+                skse64::safe::write_flow(
+                    addr,
+                    *entry as usize,
+                    Flow::CallAbsoluteUnchecked
+                ).unwrap();
+            },
+            Self::Call16(entry) => {
                 skse64::safe::write_flow(addr, *entry as usize, Flow::CallAbsolute).unwrap();
             },
             Self::DirectJump { entry, .. } => {

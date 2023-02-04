@@ -1,7 +1,8 @@
 //!
 //! @file log.rs
 //! @author Andrew Spaulding (Kasplat)
-//! @brief Wraps the SKSE logging API.
+//! @brief Implements a logging API that creates a file in the SKSE log folder based on the
+//!        name of the plugin in the version structure.
 //! @bug No known bugs.
 //!
 
@@ -133,6 +134,9 @@ pub (in crate) fn open() {
         LOG_FILE.init(RacyCell::new(
             File::create(std::str::from_utf8((*LOG_BUFFER.get()).as_bytes()).unwrap()).unwrap()
         ));
+
+        // Clear out file path.
+        (*LOG_BUFFER.get()).flush();
     }
 }
 

@@ -3,6 +3,10 @@ name = "skyrim_patcher"
 version = "1.0.2"
 edition = "2021"
 
+[features]
+by_offset = ["versionlib/by_offset"]
+alloc_trampoline = ["skse64/trampoline"]
+
 [dependencies]
 skse64 = { path = "../skse64" }
 versionlib = { path = "../versionlib" }

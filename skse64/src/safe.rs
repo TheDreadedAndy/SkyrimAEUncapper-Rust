@@ -15,16 +15,23 @@ use windows_sys::Win32::System::Memory::{VirtualProtect, PAGE_EXECUTE_READWRITE}
 ///
 /// Indirect calling methods require an address to write the trampoline to.
 ///
-/// Important: Call absolute patches must have their caller begin their function
+/// Important: Call absolute unchecked patches must have their caller begin their function
 /// by adding 0x08 to their return address to skip the absolute address.
 ///
 pub enum Flow {
     CallRelative,
     JumpRelative,
     CallAbsolute,
+    CallAbsoluteUnchecked,
     JumpAbsolute,
     CallIndirect(usize),
     JumpIndirect(usize)
+}
+
+/// Encodes the addressing mode of an instruction.
+enum AddrMode {
+    Relative(usize),
+    Absolute(usize)
 }
 
 impl Flow {
@@ -35,25 +42,28 @@ impl Flow {
         match self {
             Self::CallRelative => &[0xe8],
             Self::JumpRelative => &[0xe9],
-            Self::CallAbsolute | Self::CallIndirect(_) => &[0xff, 0x15],
-            Self::JumpAbsolute | Self::JumpIndirect(_) => &[0xff, 0x25],
+            // call 0x02(%rip); jmp 0x08 (over absolute).
+            Self::CallAbsolute => &[0xff, 0x15, 0x02, 0x00, 0x00, 0x00, 0xeb, 0x08],
+            Self::CallAbsoluteUnchecked => &[0xff, 0x15, 0x00, 0x00, 0x00, 0x00],
+            Self::CallIndirect(_) => &[0xff, 0x15],
+            Self::JumpAbsolute => &[0xff, 0x25, 0x00, 0x00, 0x00, 0x00],
+            Self::JumpIndirect(_) => &[0xff, 0x25]
         }
-    }
-
-    /// Gets the length of the control flows instruction.
-    fn instr_size(
-        &self
-    ) -> usize {
-        self.opcode().len() + size_of::<i32>()
     }
 
     /// Gets the size of the patch to be inserted at addr.
     fn patch_size(
         &self
     ) -> usize {
-        self.instr_size() + match self {
-            Self::JumpAbsolute | Self::CallAbsolute => size_of::<usize>(),
-            _ => 0
+        self.opcode().len() + match self {
+            Self::CallRelative |
+            Self::JumpRelative |
+            Self::CallIndirect(_) |
+            Self::JumpIndirect(_) => size_of::<i32>(),
+
+            Self::JumpAbsolute |
+            Self::CallAbsolute |
+            Self::CallAbsoluteUnchecked => size_of::<usize>(),
         }
     }
 }
@@ -98,18 +108,20 @@ pub unsafe fn write_flow_unchecked(
     flow: Flow
 ) -> Result<(), ()> {
     match flow {
-        Flow::CallRelative | Flow::JumpRelative => {
-            let rel: i32 = (target - (addr + flow.instr_size())).try_into().map_err(|_| ())?;
-            write_flow_instr_unchecked(addr, flow.opcode(), rel, None);
-            Ok(())
+        Flow::CallRelative |
+        Flow::JumpRelative => {
+            write_flow_instr_unchecked(addr, flow.opcode(), AddrMode::Relative(target))
         },
-        Flow::CallAbsolute | Flow::JumpAbsolute => {
-            write_flow_instr_unchecked(addr, flow.opcode(), 0, Some(target));
-            Ok(())
+
+        Flow::CallAbsolute |
+        Flow::CallAbsoluteUnchecked |
+        Flow::JumpAbsolute => {
+            write_flow_instr_unchecked(addr, flow.opcode(), AddrMode::Absolute(target))
         },
-        Flow::CallIndirect(trampoline) | Flow::JumpIndirect(trampoline) => {
-            let rel: i32 = (target - (addr + flow.instr_size())).try_into().map_err(|_| ())?;
-            write_flow_instr_unchecked(addr, flow.opcode(), rel, None);
+
+        Flow::CallIndirect(trampoline) |
+        Flow::JumpIndirect(trampoline) => {
+            write_flow_instr_unchecked(addr, flow.opcode(), AddrMode::Relative(target))?;
             std::ptr::write_unaligned(trampoline as *mut usize, target);
             Ok(())
         }
@@ -125,19 +137,22 @@ pub unsafe fn write_flow_unchecked(
 unsafe fn write_flow_instr_unchecked(
     addr: usize,
     opcode: &[u8],
-    offset: i32,
-    absolute: Option<usize>
-) -> usize {
-    let mut size = 0;
-    std::ptr::copy(opcode.as_ptr(), (addr + size) as *mut u8, opcode.len());
-    size += opcode.len();
-    std::ptr::write_unaligned((addr + size) as *mut i32, offset);
-    size += size_of::<i32>();
+    mode: AddrMode
+) -> Result<(), ()> {
+    std::ptr::copy(opcode.as_ptr(), addr as *mut u8, opcode.len());
 
-    if let Some(abs) = absolute {
-        std::ptr::write_unaligned((addr + size) as *mut usize, abs);
-        size += size_of::<usize>();
+    match mode {
+        AddrMode::Relative(target) => {
+            let rel: i32 = (
+                target - (addr + opcode.len() + size_of::<i32>())
+            ).try_into().map_err(|_| ())?;
+            std::ptr::write_unaligned((addr + opcode.len()) as *mut i32, rel);
+
+        },
+        AddrMode::Absolute(target) => {
+            std::ptr::write_unaligned((addr + opcode.len()) as *mut usize, target);
+        }
     }
 
-    return size;
+    Ok(())
 }

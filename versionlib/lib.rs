@@ -17,6 +17,7 @@ use skse64::reloc::RelocAddr;
 /// A version database, which allows for offsets/ids to be searched for by each other.
 pub struct VersionDb {
     by_id: HashMap<usize, usize>,
+    #[cfg(by_offset)]
     by_offset: HashMap<usize, usize>,
     version: SkseVersion
 }
@@ -54,8 +55,10 @@ impl VersionDb {
         version: Option<SkseVersion>
     ) -> Self {
         let mut by_id = HashMap::<usize, usize>::new();
-        let mut by_offset = HashMap::<usize, usize>::new();
         let version = version.unwrap_or(skse64::version::current_runtime());
+
+        #[cfg(by_offset)]
+        let mut by_offset = HashMap::<usize, usize>::new();
 
         let mut f = std::fs::File::open(PathBuf::from(format!(
             "Data\\SKSE\\Plugins\\versionlib-{}-{}-{}-{}.bin",
@@ -71,6 +74,8 @@ impl VersionDb {
             let (id, offset) = Self::parse_addr(&mut f, pid, poffset, ptr_size);
 
             assert!(by_id.insert(id, offset).is_none());
+
+            #[cfg(by_offset)]
             assert!(by_offset.insert(offset, id).is_none());
 
             pid = id;
@@ -79,7 +84,7 @@ impl VersionDb {
 
         Self {
             by_id,
-            by_offset,
+            #[cfg(by_offset)] by_offset,
             version
         }
     }
@@ -92,6 +97,7 @@ impl VersionDb {
     }
 
     /// Attempts to find the address independent id for the given offset.
+    #[cfg(by_offset)]
     pub fn find_id_by_addr(
         &self,
         addr: RelocAddr

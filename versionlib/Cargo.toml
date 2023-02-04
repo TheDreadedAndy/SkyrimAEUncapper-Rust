@@ -6,5 +6,8 @@ edition = "2021"
 [lib]
 path = "lib.rs"
 
+[features]
+by_offset = []
+
 [dependencies]
 skse64 = { path = "../skse64" }

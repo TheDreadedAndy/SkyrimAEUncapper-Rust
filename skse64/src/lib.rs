@@ -10,7 +10,7 @@ mod errors;
 pub mod log;
 pub mod reloc;
 pub mod plugin_api;
-pub mod trampoline;
+#[cfg(trampoline)] pub mod trampoline;
 pub mod safe;
 pub mod util;
 

@@ -3,7 +3,9 @@ name = "skse64"
 version = "2.2.3"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+trampoline = []
+
 [dependencies]
 later = { path = "../later" }
 racy_cell = { path = "../racy_cell" }
