@@ -5,15 +5,15 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
+dirs-next = "2.0.0"
 later = { path = "../later" }
+racy_cell = { path = "../racy_cell" }
 
 [dependencies.windows-sys]
 version = "0.45.0"
 features = [
     "Win32_Foundation",
     "Win32_System_Memory",
-    "Win32_System_LibraryLoader"
+    "Win32_System_LibraryLoader",
+    "Win32_UI_WindowsAndMessaging"
 ]
-
-[build-dependencies]
-vsprofile = { path = "../vsprofile" }

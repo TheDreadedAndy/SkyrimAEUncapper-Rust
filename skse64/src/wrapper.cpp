@@ -28,9 +28,6 @@
     sizeof(s)\
 )
 
-/// @brief The type of trampoline each function should operate on.
-enum class Trampoline { Global, Local };
-
 // Defined in assembly.
 extern "C" __declspec(noreturn) void SKSE64_Errors__stop_plugin__();
 
@@ -128,99 +125,6 @@ extern "C" {
             _ERROR("%.*s", len, msg);
         } catch(...) {
             STOP("Failed to write error to log.");
-        }
-    }
-}
-
-/// @brief Gets a trampoline pointer from its enum.
-static BranchTrampoline *
-GetTrampoline(
-    Trampoline t
-) {
-    switch (t) {
-        case Trampoline::Global:
-            return &g_branchTrampoline;
-        case Trampoline::Local:
-            return &g_localTrampoline;
-        default:
-            STOP("Invalid trampoline selection");
-    }
-}
-
-extern "C" {
-    void
-    SKSE64_BranchTrampoline__create__(
-        Trampoline t,
-        size_t len,
-        void *module
-    ) {
-        try {
-            ASSERT(GetTrampoline(t)->Create(len, module));
-        } catch(...) {
-            STOP("Unable to allocate trampoline buffer");
-        }
-    }
-
-    void
-    SKSE64_BranchTrampoline__destroy__(
-        Trampoline t
-    ) {
-        try {
-            GetTrampoline(t)->Destroy();
-        } catch(...) {
-            STOP("Failed to destroy trampoline");
-        }
-    }
-
-    void
-    SKSE64_BranchTrampoline__write_jump6__(
-        Trampoline t,
-        uintptr_t src,
-        uintptr_t dst
-    ) {
-        try {
-            ASSERT(GetTrampoline(t)->Write6Branch(src, dst));
-        } catch(...) {
-            STOP("Failed to write Jump-6 to trampoline");
-        }
-    }
-
-    void
-    SKSE64_BranchTrampoline__write_call6__(
-        Trampoline t,
-        uintptr_t src,
-        uintptr_t dst
-    ) {
-        try {
-            ASSERT(GetTrampoline(t)->Write6Call(src, dst));
-        } catch(...) {
-            STOP("Failed to write Call-6 to trampoline");
-        }
-    }
-
-    void
-    SKSE64_BranchTrampoline__write_jump5__(
-        Trampoline t,
-        uintptr_t src,
-        uintptr_t dst
-    ) {
-        try {
-            ASSERT(GetTrampoline(t)->Write5Branch(src, dst));
-        } catch(...) {
-            STOP("Failed to write Jump-5 to trampoline");
-        }
-    }
-
-    void
-    SKSE64_BranchTrampoline__write_call5__(
-        Trampoline t,
-        uintptr_t src,
-        uintptr_t dst
-    ) {
-        try {
-            ASSERT(GetTrampoline(t)->Write5Call(src, dst));
-        } catch(...) {
-            STOP("Failed to write Call-5 to trampoline");
         }
     }
 }

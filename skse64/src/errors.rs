@@ -7,19 +7,14 @@
 
 use std::panic::PanicInfo;
 
+use crate::log::skse_fatal;
+
 extern "system" {
-    /// SKSE panic function for rust code.
-    #[link_name = "SKSE64_Errors__rust_panic__"]
-    fn skse_rust_halt_impl(
-        file: *const u8,
-        file_len: usize,
-        line: usize,
-        msg: *const u8,
-        msg_len: usize
-    ) -> !;
+    /// Halts the execution of a SKSE plugin.
+    fn stop_plugin() -> !;
 }
 
-// Implement skse_rust_halt_impl().
+// Implement stop_plugin().
 std::arch::global_asm! {
     include_str!("stop_plugin.S"),
     options(att_syntax)
@@ -45,14 +40,6 @@ pub (in crate) fn skse_panic(
         "<Unknown error>"
     };
 
-    unsafe {
-        // SAFETY: We have given the function valid pointers and lengths.
-        skse_rust_halt_impl(
-            file.as_bytes().as_ptr(),
-            file.len(),
-            line as usize,
-            msg.as_bytes().as_ptr(),
-            msg.len()
-        );
-    }
+    skse_fatal!("{}:{}: `{}'", file, line, msg);
+    unsafe { stop_plugin(); }
 }

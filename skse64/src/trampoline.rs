@@ -11,23 +11,42 @@ use core::ptr::NonNull;
 /// Encodes the trampoline which should be operated on.
 #[repr(C)] pub enum Trampoline { Global, Local }
 
-extern "system" {
-    // module == None => "use skyrim module".
-    #[link_name = "SKSE64_BranchTrampoline__create__"]
-    pub fn create(t: Trampoline, len: usize, module: Option<NonNull<c_void>>);
+pub unsafe fn create(
+    _t: Trampoline,
+    _len: usize,
+    _module: Option<NonNull<c_void>>
+) {
+    todo!();
+}
 
-    #[link_name = "SKSE64_BranchTrampoline__destroy__"]
-    pub fn destroy(t: Trampoline);
+pub unsafe fn write_jump6(
+    _t: Trampoline,
+    _src: usize,
+    _dst: usize
+) {
+    todo!("Branch trampoline is not implemented");
+}
 
-    #[link_name = "SKSE64_BranchTrampoline__write_jump6__"]
-    pub fn write_jump6(t: Trampoline, src: usize, dst: usize);
+pub unsafe fn write_call6(
+    _t: Trampoline,
+    _src: usize,
+    _dst: usize
+) {
+    todo!("Branch trampoline is not implemented");
+}
 
-    #[link_name = "SKSE64_BranchTrampoline__write_call6__"]
-    pub fn write_call6(t: Trampoline, src: usize, dst: usize);
+pub unsafe fn write_jump5(
+    _t: Trampoline,
+    _src: usize,
+    _dst: usize
+) {
+    todo!("Branch trampoline is not implemented");
+}
 
-    #[link_name = "SKSE64_BranchTrampoline__write_jump5__"]
-    pub fn write_jump5(t: Trampoline, src: usize, dst: usize);
-
-    #[link_name = "SKSE64_BranchTrampoline__write_call5__"]
-    pub fn write_call5(t: Trampoline, src: usize, dst: usize);
+pub unsafe fn write_call5(
+    _t: Trampoline,
+    _src: usize,
+    _dst: usize
+) {
+    todo!("Branch trampoline is not implemented");
 }

@@ -28,7 +28,7 @@ extern "Rust" {
     fn skse_plugin_rust_entry(skse: &SkseInterface) -> Result<(), ()>;
 
     /// Used to name the log file.
-    static SKSEPlugin_Version: SksePluginVersionData;
+    pub (in crate) static SKSEPlugin_Version: SksePluginVersionData;
 }
 
 ///
@@ -54,10 +54,10 @@ pub unsafe extern "system" fn SKSEPlugin_Load(
     std::panic::set_hook(Box::new(errors::skse_panic));
 
     // Before we do anything else, we try and open up a log file.
-    log::open(format!(
+    log::open(std::path::PathBuf::from(format!(
         "{}.log",
         CStr::from_ptr(SKSEPlugin_Version.name.as_ptr()).to_str().unwrap()
-    ));
+    )).as_path());
 
     // "yup, no more editor. obscript is gone (mostly)" ~ianpatt
     assert!(!(skse.is_null()));

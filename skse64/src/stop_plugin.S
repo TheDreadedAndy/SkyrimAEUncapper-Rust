@@ -5,6 +5,6 @@
  * @bug No known bugs.
  */
 
-.global SKSE64_Errors__stop_plugin__
-SKSE64_Errors__stop_plugin__:
+// We include this file; no need to make this symbol global.
+stop_plugin:
     ud2 // Throw a hardware exception. SKSE64 will catch it.

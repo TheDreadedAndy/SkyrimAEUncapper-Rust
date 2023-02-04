@@ -1,9 +1,9 @@
 [workspace]
 
 members = [
-    "vsprofile",
     "disarray",
     "later",
+    "racy_cell",
     "skse64",
     "versionlib",
     "skyrim_patcher",

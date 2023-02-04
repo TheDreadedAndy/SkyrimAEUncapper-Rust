@@ -424,7 +424,7 @@ pub fn apply<const NUM_PATCHES: usize>(
             alloc_size
         );
     } else {
-        skse_message!("[SKIPPED] All patches are disabled.");
+        skse_message!("[SKIPPED] No patches require a branch trampoline allocation");
     }
 
     // Install our patches.

@@ -38,6 +38,13 @@ impl<T> Later<T> {
             (*self.pl.get()).write(pl);
         }
     }
+
+    /// Checks if the instance has been initialized.
+    pub fn is_init(
+        &self
+    ) -> bool {
+        self.is_init.load(Ordering::Relaxed)
+    }
 }
 
 impl<T> Deref for Later<T> {
