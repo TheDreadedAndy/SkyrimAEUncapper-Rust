@@ -212,7 +212,7 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "ImproveAttributeWhenLevelUp",
             enabled: settings::is_attr_points_enabled,
-            hook: Hook::Call14(improve_attribute_when_level_up_wrapper as *const u8),
+            hook: Hook::Call16(improve_attribute_when_level_up_wrapper as *const u8),
             loc: GameLocation::Id { id: 51917, offset: 0x93 },
             sig: signature![
                 0xff, 0x50, 0x28, 0x83, 0x7f, 0x18, 0x1a, 0x75,

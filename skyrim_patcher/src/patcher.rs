@@ -16,8 +16,10 @@
 use std::cell::UnsafeCell;
 use std::ptr::NonNull;
 
-use skse64::log::skse_message;
+#[cfg(alloc_trampoline)]
 use skse64::trampoline::Trampoline;
+
+use skse64::log::skse_message;
 use skse64::reloc::RelocAddr;
 use skse64::safe::Flow;
 use versionlib::VersionDb;
@@ -171,11 +173,14 @@ impl std::fmt::Display for GameLocation {
 
 impl Hook {
     /// Gets the trampoline allocation size of the hook.
+    #[cfg(alloc_trampoline)]
     fn alloc_size(
         &self
     ) -> usize {
         match self {
+            #[cfg(alloc_trampoline)]
             Hook::Jump5 { .. } | Hook::Call5(_) => 14,
+            #[cfg(alloc_trampoline)]
             Hook::Jump6 { .. } | Hook::Call6(_) => 8,
             _ => 0
         }
@@ -186,11 +191,13 @@ impl Hook {
         &self
     ) -> usize {
         match self {
-            Hook::None => 0,
-            Hook::Jump5 { .. } | Hook::Call5(_) |
-            Hook::DirectJump { .. } | Hook::DirectCall(_) => 5,
+            #[cfg(alloc_trampoline)]
+            Hook::Jump5 { .. } | Hook::Call5(_) => 5,
+            #[cfg(alloc_trampoline)]
             Hook::Jump6 { .. } | Hook::Call6(_) => 6,
-            Hook::Jump14 { .. } | Hook::Call14(_) => 14,
+            Hook::None => 0,
+            Hook::DirectJump { .. } | Hook::DirectCall(_) => 5,
+            Hook::Jump14 { .. } => 14,
             Hook::Call16(_) => 16,
         }
     }
@@ -200,7 +207,10 @@ impl Hook {
         &self
     ) -> Option<NonNull<UnsafeCell<usize>>> {
         match self {
-            Hook::Jump5  { trampoline, .. } | Hook::Jump6 { trampoline, .. } |
+            #[cfg(alloc_trampoline)]
+            Hook::Jump5  { trampoline, .. } | Hook::Jump6 { trampoline, .. } => {
+                Some(*trampoline)
+            },
             Hook::Jump14 { trampoline, .. } | Hook::DirectJump { trampoline, .. } => {
                 Some(*trampoline)
             },
@@ -219,27 +229,24 @@ impl Hook {
         addr: usize
     ) {
         match self {
+            #[cfg(alloc_trampoline)]
             Self::Jump5 { entry, .. } => {
                 skse64::trampoline::write_jump5(Trampoline::Global, addr, *entry as usize);
             },
+            #[cfg(alloc_trampoline)]
             Self::Call5(entry) => {
                 skse64::trampoline::write_call5(Trampoline::Global, addr, *entry as usize);
             },
+            #[cfg(alloc_trampoline)]
             Self::Jump6 { entry, .. } => {
                 skse64::trampoline::write_jump6(Trampoline::Global, addr, *entry as usize);
             },
+            #[cfg(alloc_trampoline)]
             Self::Call6(entry) => {
                 skse64::trampoline::write_call6(Trampoline::Global, addr, *entry as usize);
             },
             Self::Jump14 { entry, .. } => {
                 skse64::safe::write_flow(addr, *entry as usize, Flow::JumpAbsolute).unwrap();
-            },
-            Self::Call14(entry) => {
-                skse64::safe::write_flow(
-                    addr,
-                    *entry as usize,
-                    Flow::CallAbsoluteUnchecked
-                ).unwrap();
             },
             Self::Call16(entry) => {
                 skse64::safe::write_flow(addr, *entry as usize, Flow::CallAbsolute).unwrap();
@@ -405,6 +412,8 @@ pub fn apply<const NUM_PATCHES: usize>(
 ) -> Result<(), ()> {
     let db = VersionDb::new(None);
     let mut res_addrs: [usize; NUM_PATCHES] = [0; NUM_PATCHES];
+
+    #[cfg(alloc_trampoline)]
     let mut alloc_size: usize = 0;
 
     skse_message!("--------------------- Skyrim Patcher 1.0.2 ---------------------");
@@ -417,10 +426,12 @@ pub fn apply<const NUM_PATCHES: usize>(
 
         match res {
             Ok(addr) => {
+                assert!(sig.hook().map(|h| h.patch_size() <= sig.size()).unwrap_or(true));
                 res_addrs[i] = addr.addr();
+
+                #[cfg(alloc_trampoline)]
                 if let Some(h) = sig.hook() {
                     alloc_size += h.alloc_size();
-                    assert!(h.patch_size() <= sig.size());
                 }
             },
             Err(DescriptorError::Disabled) => (),
@@ -438,6 +449,7 @@ pub fn apply<const NUM_PATCHES: usize>(
     }
 
     // Allocate our branch trampoline.
+    #[cfg(alloc_trampoline)]
     if alloc_size > 0 {
         // SAFETY: We're not giving an image base, so this is actually safe.
         unsafe { skse64::trampoline::create(Trampoline::Global, alloc_size, None) };

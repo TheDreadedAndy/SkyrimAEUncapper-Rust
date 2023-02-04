@@ -15,14 +15,10 @@ use windows_sys::Win32::System::Memory::{VirtualProtect, PAGE_EXECUTE_READWRITE}
 ///
 /// Indirect calling methods require an address to write the trampoline to.
 ///
-/// Important: Call absolute unchecked patches must have their caller begin their function
-/// by adding 0x08 to their return address to skip the absolute address.
-///
 pub enum Flow {
     CallRelative,
     JumpRelative,
     CallAbsolute,
-    CallAbsoluteUnchecked,
     JumpAbsolute,
     CallIndirect(usize),
     JumpIndirect(usize)
@@ -44,7 +40,6 @@ impl Flow {
             Self::JumpRelative => &[0xe9],
             // call 0x02(%rip); jmp 0x08 (over absolute).
             Self::CallAbsolute => &[0xff, 0x15, 0x02, 0x00, 0x00, 0x00, 0xeb, 0x08],
-            Self::CallAbsoluteUnchecked => &[0xff, 0x15, 0x00, 0x00, 0x00, 0x00],
             Self::CallIndirect(_) => &[0xff, 0x15],
             Self::JumpAbsolute => &[0xff, 0x25, 0x00, 0x00, 0x00, 0x00],
             Self::JumpIndirect(_) => &[0xff, 0x25]
@@ -62,8 +57,7 @@ impl Flow {
             Self::JumpIndirect(_) => size_of::<i32>(),
 
             Self::JumpAbsolute |
-            Self::CallAbsolute |
-            Self::CallAbsoluteUnchecked => size_of::<usize>(),
+            Self::CallAbsolute => size_of::<usize>()
         }
     }
 }
@@ -114,7 +108,6 @@ pub unsafe fn write_flow_unchecked(
         },
 
         Flow::CallAbsolute |
-        Flow::CallAbsoluteUnchecked |
         Flow::JumpAbsolute => {
             write_flow_instr_unchecked(addr, flow.opcode(), AddrMode::Absolute(target))
         },
