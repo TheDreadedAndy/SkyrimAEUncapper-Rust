@@ -9,11 +9,11 @@ use std::fmt;
 use std::fmt::Arguments;
 use std::fs::File;
 use std::io::Write;
-use std::path::Path;
 
 use later::Later;
 use racy_cell::RacyCell;
 use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxA, MB_ICONERROR};
+use windows_sys::Win32::UI::Shell::{SHGetFolderPathA, CSIDL_MYDOCUMENTS, SHGFP_TYPE_CURRENT};
 
 use crate::SKSEPlugin_Version;
 
@@ -40,7 +40,7 @@ impl LogBuf {
     const BUF_SIZE: usize = 8192;
 
     /// Creates a new, empty, log buffer.
-    pub const fn new() -> Self {
+    const fn new() -> Self {
         Self {
             buf: [0; Self::BUF_SIZE],
             len: 0
@@ -48,21 +48,45 @@ impl LogBuf {
     }
 
     /// Gets the current length of the buffer.
-    pub const fn len(
+    const fn len(
         &self
     ) -> usize {
         self.len
     }
 
     /// Gets the underlying &[u8] in the buffer, excluding the null.
-    pub fn as_bytes(
+    fn as_bytes(
         &self
     ) -> &[u8] {
         self.buf.split_at(self.len).0
     }
 
+    /// Gets a mutable pointer to the buffer.
+    unsafe fn as_mut_ptr(
+        &mut self
+    ) -> *mut u8 {
+        self.buf.as_mut_ptr()
+    }
+
+    ///
+    /// Updates the buffer length to point to the null terminator.
+    ///
+    /// For use after FFI has written into the buffer.
+    ///
+    fn update_len(
+        &mut self
+    ) {
+        for c in self.buf.split_at(self.len).1.iter() {
+            if *c == 0 {
+                return;
+            }
+
+            self.len += 1;
+        }
+    }
+
     /// Erases the contents of the buffer.
-    pub fn flush(
+    fn flush(
         &mut self
     ) {
         self.buf[0] = 0;
@@ -87,14 +111,29 @@ impl fmt::Write for LogBuf {
 }
 
 /// Opens a log file with the given name in the SKSE log directory.
-pub (in crate) fn open(
-    log: &Path
-) {
-    let log = dirs_next::document_dir().unwrap()
-        .join("My Games\\Skyrim Special Edition\\SKSE")
-        .join(log);
+pub (in crate) fn open() {
+    unsafe {
+        // SAFETY: Single threaded library, protected from double init by skse.
+        // SAFETY: The buffer is empty, and its size is larger than MAX_PATH (260).
+        (*LOG_BUFFER.get()).flush();
+        SHGetFolderPathA(
+            0,
+            CSIDL_MYDOCUMENTS as i32,
+            0,
+            SHGFP_TYPE_CURRENT as u32,
+            (*LOG_BUFFER.get()).as_mut_ptr()
+        );
+        (*LOG_BUFFER.get()).update_len();
 
-    LOG_FILE.init(RacyCell::new(File::create(log).unwrap()));
+        <dyn fmt::Write>::write_fmt(&mut *LOG_BUFFER.get(), format_args!(
+            "\\My Games\\Skyrim Special Edition\\SKSE\\{}.log",
+            std::ffi::CStr::from_ptr(SKSEPlugin_Version.name.as_ptr()).to_str().unwrap()
+        )).unwrap();
+
+        LOG_FILE.init(RacyCell::new(
+            File::create(std::str::from_utf8((*LOG_BUFFER.get()).as_bytes()).unwrap()).unwrap()
+        ));
+    }
 }
 
 // Writes out the given format string to the opened log file.

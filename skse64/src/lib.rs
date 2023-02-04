@@ -18,7 +18,6 @@ pub mod util;
 pub use core;
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::ffi::CStr;
 
 use version::{RUNNING_GAME_VERSION, RUNNING_SKSE_VERSION};
 use plugin_api::{SkseInterface, SksePluginVersionData};
@@ -54,10 +53,7 @@ pub unsafe extern "system" fn SKSEPlugin_Load(
     std::panic::set_hook(Box::new(errors::skse_panic));
 
     // Before we do anything else, we try and open up a log file.
-    log::open(std::path::PathBuf::from(format!(
-        "{}.log",
-        CStr::from_ptr(SKSEPlugin_Version.name.as_ptr()).to_str().unwrap()
-    )).as_path());
+    log::open();
 
     // "yup, no more editor. obscript is gone (mostly)" ~ianpatt
     assert!(!(skse.is_null()));

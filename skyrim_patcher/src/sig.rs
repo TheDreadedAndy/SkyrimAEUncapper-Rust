@@ -124,6 +124,7 @@ impl std::fmt::Display for BinarySig {
         &self,
         f: &mut std::fmt::Formatter<'_>
     ) -> Result<(), std::fmt::Error> {
+        // FIXME: This allocation really shouldn't be here.
         let mut sig: Vec<u8> = Vec::new();
 
         unsafe {
