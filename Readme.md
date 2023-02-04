@@ -14,8 +14,6 @@
 2) Use VS2019 installer to install dependencies.
     * Windows SDK.
     * clang++.
-3) Install SKSE64 src as skse64\_src to the workspace directory.
-    * Note that, due to limitations with bindgen, the version constants in skse64/src/version.rs must be updated manually.
-4) Install Rust using rust-up.
-5) define LIBCLANG\_PATH environment variable.
-6) Run cargo build.
+3) Install Rust using rust-up.
+4) define LIBCLANG\_PATH environment variable.
+5) Run cargo build.
