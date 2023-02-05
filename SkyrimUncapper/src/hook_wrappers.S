@@ -187,7 +187,7 @@ _finish_max_charge_begin_wrapper:
  * to using the magnitude formula cap, if necessary.
  */
 max_charge_end_wrapper:
-    // We jump here, but we also need to safe register state. We can't do that without
+    // We jump here, but we also need to save register state. We can't do that without
     // violating calling convention, though, so we call another function which saves the
     // state and then we use our trampoline.
     call max_charge_end_invoker
@@ -235,46 +235,36 @@ player_avo_get_current_original_wrapper:
 
 /*
  * Forces the code which displays skill values in the skills menu to show the
- * true skill level instead of the damaged value by calling the OG function.
+ * true skill level/color instead of the damaged value by calling the OG function.
  *
- * FIXME: (0x903bad; 22) (remove cvt, dont overwrite og).
+ * It just so happens that things get thrown in the same regs, so the patch is
+ * the same for both.
  */
 display_true_skill_level_hook:
-    sub $0x28, %rsp
-    call player_avo_get_current_original_wrapper // Replacing a call, no need to save.
-    cvttss2si %xmm0, %ecx
-    add $0x28, %rsp
-    ret
-
-/*
- * Forces the code which displays skill color in the skills menu to show the
- * true skill color instead of the damaged color by calling the OG
- * player_avo_get_current() function.
- *
- * FIXME: (0x91c8b4; 17) (greatly simplifies patch anyway)
- */
 display_true_skill_color_hook:
-    /*
-     * We need this later, as we overwrote an instruction which would
-     * move the player AVO vtable into rax, and that offset is version
-     * dependent.
-     */
-    push %rax
-    sub $0x20, %rsp
+    sub $0x28, %rsp
+
+    // Reimplement replaced setup.
+    call get_player_avo
+    mov %rax, %rcx
+    mov %edi, %edx
+
+    // Call the unmodified function.
     call player_avo_get_current_original_wrapper
-    add $0x20, %rsp
-    pop %rax
+
+    add $0x28, %rsp
     ret
 
 /*
  * Forces the training fn to call the original improve_player_skill_points()
  * function.
- *
- * FIXME: (0x7213bb; 18)
  */
 improve_skill_by_training_hook:
+    // Reimplement the arg setup we overwrote.
+    mov %r13b, 0x28(%rsp)
+    mov %r15, %rcx
+    mov %r13d, 0x20(%rsp)
     call improve_player_skill_points_original
-    inc %esi // Overwritten by our hook, so we readd it.
     jmp *improve_skill_by_training_return_trampoline(%rip)
 
 /*
@@ -293,18 +283,15 @@ improve_player_skill_points_original:
     jmp *improve_player_skill_points_return_trampoline(%rip)
 
 /*
- * Injected after the current number of perk points is read. Returns to the
- * instruction where the new perk count is written back. We do this to avoid
- * non-portable (across skyrim versions) accesses to the player class.
+ * Reads in the number of perk points to add to the players pool and then updates
+ * the pool based on the sign of that number and our config settings.
  *
- * FIXME: (0x908b72; 29) <- Requires hardcoding another offset :/
+ * We save all registers, since this is an injected call.
  */
 modify_perk_pool_wrapper:
     SAVEALL
-    mov %rdi, %rdx // Get modification count.
+    mov %dil, %cl // Get modification count.
     call modify_perk_pool_hook
-    mov %al, %cl // We'll return to an instruction that'll store this in the player
-    mov %rcx, 0xa8(%rsp) // Overwrite the restore value of rcx for cl.
     RESTOREALL
     ret
 
@@ -312,8 +299,6 @@ modify_perk_pool_wrapper:
  * Passes the EXP gain to our function for further modification.
  * Note that the code here is rather different than the OG implementation
  * because the original improve_level_exp_by_skill_level() function got inlined.
- *
- * FIXME: (0x721217; 17) <- Requires making a way to get g_thePlayer in ASM.
  */
 improve_level_exp_by_skill_level_wrapper:
     SAVEALL
@@ -325,6 +310,11 @@ improve_level_exp_by_skill_level_wrapper:
     mov 0xb0(%rsp), %rax // Get the saved value for rax.
     addss (%rax), %xmm0 // This is the code we overwrote, except we
     movss %xmm0, (%rax) // now use xmm0 instead of xmm1.
+
+    // Set up args for the call we return to.
+    call get_player
+    mov %rax, 0xa8(%rsp) // Move into saved rcx.
+    mov %esi, 0xa0(%rsp) // Move into saved rdx.
 
     RESTOREALL
 
@@ -340,8 +330,6 @@ improve_attribute_when_level_up_wrapper:
 /*
  * Modifies the rest level of legendarying a skill depending on the user
  * settings and the base level in xmm0.
- *
- * FIXME: (0x90c5e9; 36)
  */
 legendary_reset_skill_level_wrapper:
     SAVEALL
@@ -375,11 +363,9 @@ check_condition_for_legendary_skill_alt_wrapper:
  * Allows the legendary button to be hidden based on an INI setting.
  * We are overwriting another function call here, so we dont need to save
  * the register state.
- *
- * FIXME: (0x904743; 30)
  */
 hide_legendary_button_wrapper:
-    mov %edx, %ecx
+    mov %r15d, %ecx
     call hide_legendary_button_hook
     cmp $1, %al
     jmp *hide_legendary_button_return_trampoline(%rip)
@@ -387,8 +373,6 @@ hide_legendary_button_wrapper:
 /*
  * Forces the game to clear the legendary button in accordance with
  * what our mod expects when scrolling in the skill menu.
- *
- * FIXME: (0x905ccd; 23)
  */
 clear_legendary_button_wrapper:
     mov %r15d, %ecx

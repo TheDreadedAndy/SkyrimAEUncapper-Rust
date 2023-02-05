@@ -5,6 +5,8 @@
 //! @bug No known bugs.
 //!
 
+use core::cell::Cell;
+
 use skse64::version::{RUNTIME_VERSION_1_6_317, RUNTIME_VERSION_1_6_629};
 
 skse64::util::abstract_type! {
@@ -23,14 +25,33 @@ impl PlayerCharacter {
     pub fn get_avo(
         &self
     ) -> *mut ActorValueOwner {
+        unsafe {
+            // SAFETY: These offsets have been verified to be correct.
+            self.version_offset(0xb8, 0xb0)
+        }
+    }
+
+    /// Gets a reference to the players perk pool.
+    pub fn get_perk_pool(
+        &self
+    ) -> &Cell<u8> {
+        unsafe {
+            // SAFETY: These offsets have been verified to be correct.
+            Cell::from_mut(self.version_offset::<u8>(0xb09, 0xb01).as_mut().unwrap())
+        }
+    }
+
+    /// Gets a version dependent offset in the player structure.
+    unsafe fn version_offset<T>(
+        &self,
+        current: usize,
+        compat: usize
+    ) -> *mut T {
         let version = skse64::version::current_runtime();
         assert!(version >= RUNTIME_VERSION_1_6_317); // AE.
 
-        let offset: usize = if version >= RUNTIME_VERSION_1_6_629 { 0xb8 } else { 0xb0 };
+        let offset: usize = if version >= RUNTIME_VERSION_1_6_629 { current } else { compat };
         let player = self as *const Self as *mut Self;
-        unsafe {
-            // SAFETY: We have ensured that we are using the correct offset for our game version.
-            player.cast::<u8>().add(offset).cast::<ActorValueOwner>()
-        }
+        player.cast::<u8>().add(offset).cast()
     }
 }

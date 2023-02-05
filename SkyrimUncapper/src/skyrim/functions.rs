@@ -109,11 +109,29 @@ disarray::disarray! {
     ];
 }
 
-/// Gets the player actor value owner structure.
-pub fn get_player_avo() -> *mut ActorValueOwner {
+/// Helper for assembly code to get the player pointer.
+#[no_mangle]
+extern "system" fn get_player() -> *mut PlayerCharacter {
     unsafe {
         // SAFETY: The GameRef struct ensures our player pointer is valid.
-        (*(PLAYER_OBJECT.get())).as_ref().unwrap().get_avo()
+        *(PLAYER_OBJECT.get())
+    }
+}
+
+/// Gets the player actor value owner structure.
+#[no_mangle]
+pub extern "system" fn get_player_avo() -> *mut ActorValueOwner {
+    unsafe {
+        // SAFETY: The GameRef struct ensures our player pointer is valid.
+        (*get_player()).get_avo()
+    }
+}
+
+/// Gets a reference to the players perk pool.
+pub fn get_player_perk_pool() -> &'static core::cell::Cell<u8> {
+    unsafe {
+        // SAFETY: The GameRef struct ensures our player pointer is valid.
+        (*get_player()).get_perk_pool()
     }
 }
 

@@ -17,7 +17,7 @@ use skyrim_patcher::{Descriptor, Hook, GameLocation, GameRef, signature};
 use crate::settings;
 use crate::hook_wrappers::*;
 use crate::skyrim::{ActorAttribute, ActorValueOwner, PlayerSkills};
-use crate::skyrim::get_player_avo;
+use crate::skyrim::{get_player_avo, get_player_perk_pool};
 use crate::skyrim::{player_avo_get_base, player_avo_get_current_original, game_setting};
 use crate::skyrim::{player_avo_mod_base, player_avo_mod_current, get_player_level};
 
@@ -55,7 +55,7 @@ disarray::disarray! {
             name: "GetSkillCap",
             enabled: settings::is_skill_cap_enabled,
             hook: Hook::Call16(skill_cap_patch_wrapper as *const u8),
-            loc: GameLocation::Id { id: 41561, offset: 0x76 },
+            loc: GameLocation::Id { id: 41561, offset: 0x5e },
             sig: signature![
                 0x48, 0x8b, 0x0d, ?, ?, ?, ?,
                 0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
@@ -80,7 +80,8 @@ disarray::disarray! {
             sig: signature![
                 0xf3, 0x0f, 0x11, 0x84, 0x24, 0xa0, 0x00, 0x00, 0x00,
                 0x48, 0x85, 0xc9,
-                0x0f, 0x84, 0x2f, 0x01, 0x00, 0x00; 18]
+                0x0f, 0x84, 0x2f, 0x01, 0x00, 0x00; 18
+            ]
         },
         Descriptor::Patch {
             name: "EndMaxChargeCalculation",
@@ -109,7 +110,7 @@ disarray::disarray! {
             name: "CalculateChargePointsPerUse",
             enabled: settings::is_enchant_patch_enabled,
             hook: Hook::Call16(calculate_charge_points_per_use_wrapper as *const u8),
-            loc: GameLocation::Id { id: 51449, offset: 0x32a },
+            loc: GameLocation::Id { id: 51449, offset: 0x314 },
             sig: signature![
                 0x48, 0x8b, 0x0d, ?, ?, ?, ?,
                 0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
@@ -148,9 +149,15 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "DisplayTrueSkillLevel",
             enabled: settings::is_skill_formula_cap_enabled,
-            hook: Hook::Call6(display_true_skill_level_hook as *const u8),
-            loc: GameLocation::Id { id: 52525, offset: 0x120 },
-            sig: signature![0xff, 0x50, 0x08, 0xf3, 0x0f, 0x2c, 0xc8; 7]
+            hook: Hook::Call16(display_true_skill_level_hook as *const u8),
+            loc: GameLocation::Id { id: 52525, offset: 0x10d },
+            sig: signature![
+                0x48, 0x8b, 0x0d, ?, ?, ?, ?,
+                0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
+                0x48, 0x8b, 0x01,
+                0x8b, 0xd7,
+                0xff, 0x50, 0x08; 22
+            ]
         },
 
         //
@@ -162,21 +169,30 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "DisplayTrueSkillColor",
             enabled: settings::is_skill_formula_cap_enabled,
-            hook: Hook::Call6(display_true_skill_color_hook as *const u8),
-            loc: GameLocation::Id { id: 52945, offset: 0x32 },
-            sig: signature![0xff, 0x50, 0x08, 0x48, 0x8b, 0x86, ?, 0x00, 0x00, 0x00; 10]
+            hook: Hook::Call16(display_true_skill_color_hook as *const u8),
+            loc: GameLocation::Id { id: 52945, offset: 0x24 },
+            sig: signature![
+                0x48, 0x8b, 0x86, ?, 0x00, 0x00, 0x00,
+                0x48, 0x8d, 0x8e, ?, 0x00, 0x00, 0x00,
+                0xff, 0x50, 0x08; 17
+            ]
         },
 
         // Prevents the skill training function from applying our multipliers.
         Descriptor::Patch {
             name: "ImproveSkillByTraining",
             enabled: settings::is_skill_exp_enabled,
-            hook: Hook::Jump6 {
+            hook: Hook::Jump14 {
                 entry: improve_skill_by_training_hook as *const u8,
                 trampoline: improve_skill_by_training_return_trampoline.inner()
             },
-            loc: GameLocation::Id { id: 41562, offset: 0x98 },
-            sig: signature![0xe8, ?, ?, ?, ?, 0xff, 0xc6; 7]
+            loc: GameLocation::Id { id: 41562, offset: 0x8b },
+            sig: signature![
+                0x44, 0x88, 0x6c, 0x24, 0x28,
+                0x49, 0x8b, 0xcf,
+                0x44, 0x89, 0x6c, 0x24, 0x20,
+                0xe8, ?, ?, ?, ?; 18
+            ]
         },
 
         // Applies the multipliers from the INI file to skill experience.
@@ -201,9 +217,17 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "ModifyPerkPool",
             enabled: settings::is_perk_points_enabled,
-            hook: Hook::Call6(modify_perk_pool_wrapper as *const u8),
-            loc: GameLocation::Id { id: 52538, offset: 0x70 },
-            sig: signature![0x8b, 0xc1, 0x03, 0xc7, 0x78, 0x09, 0x40, 0x02, 0xcf; 9]
+            hook: Hook::Call16(modify_perk_pool_wrapper as *const u8),
+            loc: GameLocation::Id { id: 52538, offset: 0x62 },
+            sig: signature![
+                0x48, 0x8b, 0x15, ?, ?, ?, ?,
+                0x0f, 0xb6, 0x8a, ?, 0x0b, 0x00, 0x00,
+                0x8b, 0xc1,
+                0x03, 0xc7,
+                0x78, 0x09,
+                0x40, 0x02, 0xcf,
+                0x88, 0x8a, ?, 0x0b, 0x00, 0x00; 29
+            ]
         },
 
         //
@@ -213,9 +237,14 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "ImproveLevelExpBySkillLevel",
             enabled: settings::is_level_exp_enabled,
-            hook: Hook::Call6(improve_level_exp_by_skill_level_wrapper as *const u8),
+            hook: Hook::Call16(improve_level_exp_by_skill_level_wrapper as *const u8),
             loc: GameLocation::Id { id: 41561, offset: 0x2d7 },
-            sig: signature![0xf3, 0x0f, 0x58, 0x08, 0xf3, 0x0f, 0x11, 0x08; 8]
+            sig: signature![
+                0xf3, 0x0f, 0x58, 0x08,
+                0xf3, 0x0f, 0x11, 0x08,
+                0x8b, 0xd6,
+                0x48, 0x8b, 0x0d, ?, ?, ?, ?; 17
+            ]
         },
 
         //
@@ -250,9 +279,17 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "LegendaryResetSkillLevel",
             enabled: settings::is_legendary_enabled,
-            hook: Hook::Call6(legendary_reset_skill_level_wrapper as *const u8),
-            loc: GameLocation::Id { id: 52591, offset: 0x1d7 },
-            sig: signature![0x0f, 0x82, ?, ?, ?, ?; 6]
+            hook: Hook::Call16(legendary_reset_skill_level_wrapper as *const u8),
+            loc: GameLocation::Id { id: 52591, offset: 0x1b9 },
+            sig: signature![
+                0x48, 0x8b, 0x0d, ?, ?, ?, ?,
+                0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
+                0x48, 0x8b, 0x01,
+                0x8b, 0x56, 0x1c,
+                0xff, 0x50, 0x18,
+                0x0f, 0x2f, 0x05, ?, ?, ?, ?,
+                0x0f, 0x82, ?, ?, ?, ?; 36
+            ]
         },
 
         // Replaces the call to the legendary condition check function with our own.
@@ -289,12 +326,19 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "HideLegendaryButton",
             enabled: settings::is_legendary_enabled,
-            hook: Hook::Jump6 {
+            hook: Hook::Jump14 {
                 entry: hide_legendary_button_wrapper as *const u8,
                 trampoline: hide_legendary_button_return_trampoline.inner()
             },
-            loc: GameLocation::Id { id: 52527, offset: 0x167 },
-            sig: signature![0xff, 0x50, 0x18, 0x0f, 0x2f, 0x05, ?, ?, ?, ?; 10]
+            loc: GameLocation::Id { id: 52527, offset: 0x153 },
+            sig: signature![
+                0x48, 0x8b, 0x0d, ?, ?, ?, ?,
+                0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
+                0x48, 0x8b, 0x01,
+                0x41, 0x8b, 0xd7,
+                0xff, 0x50, 0x18,
+                0x0f, 0x2f, 0x05, ?, ?, ?, ?; 30
+            ]
         },
 
         //
@@ -317,9 +361,15 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "ClearLegendaryButton",
             enabled: settings::is_legendary_enabled,
-            hook: Hook::Call6(clear_legendary_button_wrapper as *const u8),
-            loc: GameLocation::Id { id: 52527, offset: 0x16ee },
-            sig: signature![0x41, 0x8b, 0xd7, 0xff, 0x50, 0x08; 6]
+            hook: Hook::Call16(clear_legendary_button_wrapper as *const u8),
+            loc: GameLocation::Id { id: 52527, offset: 0x16dd },
+            sig: signature![
+                0x48, 0x8b, 0x0d, ?, ?, ?, ?,
+                0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
+                0x48, 0x8b, 0x01,
+                0x41, 0x8b, 0xd7,
+                0xff, 0x50, 0x08; 23
+            ]
         }
     ];
 }
@@ -442,13 +492,14 @@ extern "system" fn improve_player_skill_points_hook(
 /// Adjusts the number of perks the player recieves at level-up.
 #[no_mangle]
 extern "system" fn modify_perk_pool_hook(
-    points: u8,
     count: i8
-) -> u8 {
+) {
     assert!(settings::is_perk_points_enabled());
+
+    let pool = get_player_perk_pool();
     let delta = std::cmp::min(0xFF, settings::get_perk_delta(get_player_level()));
-    let res = (points as i16) + (if count > 0 { delta as i16 } else { count as i16 });
-    std::cmp::max(0, std::cmp::min(0xff, res)) as u8
+    let res = (pool.get() as i16) + (if count > 0 { delta as i16 } else { count as i16 });
+    pool.set(std::cmp::max(0, std::cmp::min(0xff, res)) as u8);
 }
 
 /// Multiplies the exp gain of a level-up by the configured multiplier.
