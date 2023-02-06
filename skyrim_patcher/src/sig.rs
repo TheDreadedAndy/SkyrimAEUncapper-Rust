@@ -5,8 +5,6 @@
 //! @bug No known bugs.
 //!
 
-use std::vec::Vec;
-
 use skse64::reloc::RelocAddr;
 
 ///
@@ -124,22 +122,29 @@ impl std::fmt::Display for BinarySig {
         &self,
         f: &mut std::fmt::Formatter<'_>
     ) -> Result<(), std::fmt::Error> {
-        // FIXME: This allocation really shouldn't be here.
-        let mut sig: Vec<u8> = Vec::new();
+        let mut res = Ok(());
 
         unsafe {
             // SAFETY: The caller of the diff function ensures this is a valid sig.
             skse64::safe::use_region(self.0.addr(), self.1, || {
-                sig.extend_from_slice(
-                    std::slice::from_raw_parts(self.0.addr() as *const u8, self.1)
-                );
+                let sig = std::slice::from_raw_parts(self.0.addr() as *const u8, self.1);
+
+                if let Err(e) = write!(f, "{{ ") {
+                    res = Err(e);
+                    return;
+                }
+
+                for b in sig.iter() {
+                    if let Err(e) = write!(f, "{:02x} ", b) {
+                        res = Err(e);
+                        return;
+                    }
+                }
+
+                res = write!(f, "}}");
             });
         }
 
-        write!(f, "{{ ")?;
-        for b in sig.as_slice().iter() {
-            write!(f, "{:02x} ", b)?;
-        }
-        write!(f, "}}")
+        return res;
     }
 }

@@ -4,8 +4,6 @@
 //! @brief Exposes game objects and functions which must be located at runtime.
 //! @bug No known bugs.
 //!
-//! FIXME: Every game function call needs a try-catch wrapper
-//!
 
 use std::ffi::{c_char, c_int};
 

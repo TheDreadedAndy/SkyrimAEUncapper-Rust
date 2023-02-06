@@ -74,6 +74,8 @@ impl LogBuf {
     ///
     /// For use after FFI has written into the buffer.
     ///
+    /// FIXME: This interface is stupid.
+    ///
     fn update_len(
         &mut self
     ) {

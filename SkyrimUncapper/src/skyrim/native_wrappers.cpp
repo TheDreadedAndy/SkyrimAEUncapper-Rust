@@ -23,18 +23,18 @@ do {\
 
 extern "C" {
     /* Native entry points */
-    u16 (*get_level_entry)(void*);
-    void *(*get_game_setting_entry)(void*, const char*);
-    f32 (*player_avo_get_base_entry)(void*, int);
-    f32 (*player_avo_get_current_entry)(void*, int);
-    void (*player_avo_mod_base_entry)(void*, int, float);
-    void (*player_avo_mod_current_entry)(void*, u32, int, f32);
+    extern u16 (*get_level_entry)(void*);
+    extern void *(*get_game_setting_entry)(void*, const char*);
+    extern f32 (*player_avo_get_base_entry)(void*, int);
+    extern f32 (*player_avo_get_current_entry)(void*, int);
+    extern void (*player_avo_mod_base_entry)(void*, int, float);
+    extern void (*player_avo_mod_current_entry)(void*, u32, int, f32);
 
     /* ASM wrappers */
-    f32 player_avo_get_current_original_wrapper(void*, int);
+    extern f32 player_avo_get_current_original_wrapper(void*, int);
 
     /* Panic function */
-    __declspec(noreturn) void handle_ffi_exception(void);
+    __declspec(noreturn) extern void handle_ffi_exception(void);
 
     /* Wrappers */
 

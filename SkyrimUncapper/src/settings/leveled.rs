@@ -132,7 +132,6 @@ impl<T: Copy + FromStr> IniNamedReadable for LeveledIniSection<T>
         section: &str,
         default: Self::Value
     ) {
-        // FIXME: Something isn't loading correctly.
         if let Some(sec) = ini.get_map_ref().get(section) {
             for (level, item) in sec.iter() {
                 let level = if let Ok(l) = u32::from_str(level) {
