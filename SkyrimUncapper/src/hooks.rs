@@ -16,10 +16,11 @@ use skyrim_patcher::{Descriptor, Hook, Register, GameLocation, GameRef, signatur
 
 use crate::settings;
 use crate::hook_wrappers::*;
-use crate::skyrim::{ActorAttribute, ActorValueOwner, PlayerSkills};
+use crate::skyrim::{ActorAttribute, ActorValueOwner};
 use crate::skyrim::{get_player_avo, get_player_perk_pool};
 use crate::skyrim::{player_avo_get_base, player_avo_get_current, game_setting};
 use crate::skyrim::{player_avo_mod_base, player_avo_mod_current, get_player_level};
+use crate::skyrim::{improve_player_skill_points, PlayerSkills};
 
 //
 // Trampolines used by hooks to return to game code.
@@ -263,7 +264,7 @@ disarray::disarray! {
             enabled: settings::is_level_exp_enabled,
             hook: Hook::Call12 {
                 entry: improve_level_exp_by_skill_level_wrapper as *const u8,
-                clobber: Register::Rdx
+                clobber: Register::Rcx
             },
             loc: GameLocation::Id { id: 41561, offset: 0x2d7 },
             sig: signature![
@@ -518,18 +519,17 @@ extern "system" fn improve_player_skill_points_hook(
 ) {
     assert!(settings::is_skill_exp_enabled());
     let attr = ActorAttribute::from_raw(attr).unwrap();
+    assert!(attr.is_skill());
 
-    if attr.is_skill() {
-        exp *= settings::get_skill_exp_mult(
-            attr,
-            player_avo_get_base(attr) as u32,
-            get_player_level()
-        );
-    }
+    exp *= settings::get_skill_exp_mult(
+        attr,
+        player_avo_get_base(attr) as u32,
+        get_player_level()
+    );
 
     unsafe {
         // SAFETY: We give it the same args, except the modified exp.
-        improve_player_skill_points_original(skill_data, attr, exp, unk1, unk2, unk3, unk4);
+        improve_player_skill_points(skill_data, attr as c_int, exp, unk1, unk2, unk3, unk4);
     }
 }
 
@@ -554,14 +554,13 @@ extern "system" fn improve_level_exp_by_skill_level_hook(
 ) -> f32 {
     assert!(settings::is_level_exp_enabled());
     let attr = ActorAttribute::from_raw(attr).unwrap();
+    assert!(attr.is_skill());
 
-    if attr.is_skill() {
-        exp *= settings::get_level_exp_mult(
-            attr,
-            player_avo_get_base(attr) as u32,
-            get_player_level()
-        );
-    }
+    exp *= settings::get_level_exp_mult(
+        attr,
+        player_avo_get_base(attr) as u32,
+        get_player_level()
+    );
 
     exp
 }

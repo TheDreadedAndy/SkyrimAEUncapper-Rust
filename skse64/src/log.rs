@@ -15,6 +15,7 @@ use later::Later;
 use racy_cell::RacyCell;
 use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxA, MB_ICONERROR};
 use windows_sys::Win32::UI::Shell::{SHGetFolderPathA, CSIDL_MYDOCUMENTS, SHGFP_TYPE_CURRENT};
+use windows_sys::Win32::Foundation::MAX_PATH;
 
 use crate::SKSEPlugin_Version;
 
@@ -62,23 +63,18 @@ impl LogBuf {
         self.buf.split_at(self.len).0
     }
 
-    /// Gets a mutable pointer to the buffer.
-    unsafe fn as_mut_ptr(
-        &mut self
-    ) -> *mut u8 {
-        self.buf.as_mut_ptr()
-    }
-
     ///
-    /// Updates the buffer length to point to the null terminator.
+    /// Calls the given function, then updates the length of the buffer based on the null
+    /// terminator.
     ///
-    /// For use after FFI has written into the buffer.
+    /// The given function must null terminate any data it appends.
     ///
-    /// FIXME: This interface is stupid.
-    ///
-    fn update_len(
-        &mut self
+    unsafe fn write_ffi(
+        &mut self,
+        func: impl FnOnce(&mut [u8])
     ) {
+        func(self.buf.split_at_mut(self.len).1);
+
         for c in self.buf.split_at(self.len).1.iter() {
             if *c == 0 {
                 return;
@@ -119,14 +115,16 @@ pub (in crate) fn open() {
         // SAFETY: Single threaded library, protected from double init by skse.
         // SAFETY: The buffer is empty, and its size is larger than MAX_PATH (260).
         (*LOG_BUFFER.get()).flush();
-        SHGetFolderPathA(
-            0,
-            CSIDL_MYDOCUMENTS as i32,
-            0,
-            SHGFP_TYPE_CURRENT as u32,
-            (*LOG_BUFFER.get()).as_mut_ptr()
-        );
-        (*LOG_BUFFER.get()).update_len();
+        (*LOG_BUFFER.get()).write_ffi(|buf| {
+            assert!(buf.len() > MAX_PATH as usize);
+            SHGetFolderPathA(
+                0,
+                CSIDL_MYDOCUMENTS as i32,
+                0,
+                SHGFP_TYPE_CURRENT as u32,
+                buf.as_mut_ptr()
+            );
+        });
 
         <dyn fmt::Write>::write_fmt(&mut *LOG_BUFFER.get(), format_args!(
             "\\My Games\\Skyrim Special Edition\\SKSE\\{}.log",

@@ -42,11 +42,16 @@ pub const SKILL_COUNT: usize = 18;
 /// @brief The offset in the attribute enum to the start of the skill block.
 const SKILL_OFFSET: usize = 6;
 
-/// @brief Encodes the actor attribute enum, as defined by the game.
+///
+/// Encodes the actor attribute enum, as defined by the game.
+///
+/// This enum actually has *many* more values (163), but I refuse to transcribe them all.
+/// The full list is here: https://en.uesp.net/wiki/Skyrim_Mod:Actor_Value_Indices
+///
 #[repr(C)]
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum ActorAttribute {
-    /* 0x0-0x5 unknown */
+    /* 0x0-0x5 ignored */
     OneHanded = 0x6,
     TwoHanded,
     Marksman,
@@ -68,7 +73,7 @@ pub enum ActorAttribute {
     Health,
     Magicka,
     Stamina,
-    /* 0x1b-0x1f unknown */
+    /* 0x1b-0x1f ignored */
     CarryWeight = 0x20
 }
 

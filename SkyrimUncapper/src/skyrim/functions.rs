@@ -9,7 +9,8 @@ use std::ffi::{c_char, c_int};
 
 use skyrim_patcher::{GameRef, Descriptor, GameLocation};
 
-use super::{PlayerCharacter, ActorValueOwner, SettingCollectionMap, ActorAttribute, Setting};
+use super::{PlayerCharacter, PlayerSkills};
+use super::{ActorValueOwner, ActorAttribute, SettingCollectionMap, Setting};
 use crate::settings;
 
 /// Gets a game setting, given a string literal.
@@ -125,12 +126,27 @@ extern "system" {
         attr: ActorAttribute,
         delta: f32
     );
+    fn improve_player_skill_points_net(
+        data: *mut PlayerSkills,
+        attr: c_int,
+        exp: f32,
+        unk1: u64,
+        unk2: u32,
+        unk3: u8,
+        unk4: bool
+    );
 }
 
 /// Handles a C++ exception by just panicking.
 #[no_mangle]
-extern "system" fn handle_ffi_exception() -> ! {
-    panic!("An exception occured while executing a native game function");
+unsafe extern "system" fn handle_ffi_exception(
+    s: *const u8,
+    len: usize
+) -> ! {
+    panic!(
+        "An exception occured while executing a native game function: {}",
+        std::str::from_utf8(std::slice::from_raw_parts(s, len)).unwrap()
+    );
 }
 
 /// Helper for assembly code to get the player pointer.
@@ -213,4 +229,18 @@ pub fn player_avo_mod_current(
 ) {
     // No idea what second arg does; just match game calls.
     unsafe { player_avo_mod_current_net(get_player_avo(), 0, attr, val) }
+}
+
+/// Improves the skill experience of a player skill.
+#[no_mangle]
+pub unsafe extern "system" fn improve_player_skill_points(
+    data: *mut PlayerSkills,
+    attr: c_int,
+    exp: f32,
+    unk1: u64,
+    unk2: u32,
+    unk3: u8,
+    unk4: bool
+) {
+    unsafe { improve_player_skill_points_net(data, attr, exp, unk1, unk2, unk3, unk4); }
 }

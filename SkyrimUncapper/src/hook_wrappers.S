@@ -98,8 +98,8 @@ skill_cap_patch_wrapper:
 
     mov %esi, %ecx // Move skill ID back into first arg.
     call get_skill_cap_hook
-    movaps %xmm8, %xmm0 // Restore xmm0, just in case (this call wasn't here before).
     movss %xmm0, %xmm10 // Replace maximum with fn result.
+    movaps %xmm8, %xmm0 // Restore xmm0, just in case (this call wasn't here before).
 
     add $0x28, %rsp
     ret
@@ -198,7 +198,7 @@ improve_skill_by_training_hook:
     // Reimplement the arg setup we overwrote.
     mov %r15, %rcx
     mov %r13d, 0x20(%rsp)
-    call improve_player_skill_points_original
+    call improve_player_skill_points
     jmp *improve_skill_by_training_return_trampoline(%rip)
 
 /*
@@ -237,7 +237,7 @@ improve_level_exp_by_skill_level_wrapper:
     SAVEALL
 
     movss %xmm1, %xmm0 // xmm1 contains level exp
-    mov %rsi, %rdx // rsi contains skill_id.
+    mov %esi, %edx // esi contains skill_id.
     call improve_level_exp_by_skill_level_hook
 
     mov 0xb0(%rsp), %rax // Get the saved value for rax.
@@ -247,14 +247,14 @@ improve_level_exp_by_skill_level_wrapper:
     // Set up args for the call we return to.
     call get_player
     mov %rax, 0xa8(%rsp) // Move into saved rcx.
-    mov %esi, 0xa0(%rsp) // Move into saved rdx.
+    mov %rsi, 0xa0(%rsp) // Move into saved rdx.
 
     RESTOREALL
 
     ret
 
 /*
- * Fixes the return address before jumping to the hook.
+ * Fixes the arguments before jumping to the hook.
  */
 improve_attribute_when_level_up_wrapper:
     mov %edx, %ecx
