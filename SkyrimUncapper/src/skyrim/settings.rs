@@ -14,6 +14,7 @@ skse64::util::abstract_type! {
 }
 
 /// The union of valid settings data types within the game.
+#[repr(C)]
 pub union SettingData {
     _u: u32,
     _i: i32,
@@ -23,6 +24,7 @@ pub union SettingData {
 }
 
 /// The settings structure, as defined by skyrim.
+#[repr(C)]
 pub struct Setting {
     _vtbl: *const (),
     data: UnsafeCell<SettingData>,

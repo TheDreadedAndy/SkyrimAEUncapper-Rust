@@ -12,7 +12,6 @@ use std::ffi::{c_char, c_int};
 use skyrim_patcher::{GameRef, Descriptor, GameLocation};
 
 use super::{PlayerCharacter, ActorValueOwner, SettingCollectionMap, ActorAttribute, Setting};
-use crate::hook_wrappers::player_avo_get_current_original_wrapper;
 use crate::settings;
 
 /// Gets a game setting, given a string literal.
@@ -34,21 +33,27 @@ pub (in crate) use game_setting;
 static PLAYER_OBJECT: GameRef<*mut *mut PlayerCharacter> = GameRef::new();
 static GAME_SETTINGS_OBJECT: GameRef<*mut *mut SettingCollectionMap> = GameRef::new();
 
-// Game functions. These are wrapped by safe implementations later.
-static GET_LEVEL_ENTRY: GameRef<fn(*mut PlayerCharacter) -> u16> = GameRef::new();
-static GET_GAME_SETTING_ENTRY: GameRef<
+// Game functions. These are wrapped by C++ catchers and then safe implementations later.
+#[no_mangle]
+static get_level_entry: GameRef<fn(*mut PlayerCharacter) -> u16> = GameRef::new();
+#[no_mangle]
+static get_game_setting_entry: GameRef<
     fn(*mut SettingCollectionMap, *const c_char) -> *mut Setting
 > = GameRef::new();
-static PLAYER_AVO_GET_BASE_ENTRY: GameRef<
+#[no_mangle]
+static player_avo_get_base_entry: GameRef<
     fn(*mut ActorValueOwner, ActorAttribute) -> f32
 > = GameRef::new();
-static PLAYER_AVO_GET_CURRENT_ENTRY: GameRef<
+#[no_mangle]
+static player_avo_get_current_entry: GameRef<
     fn(*mut ActorValueOwner, c_int) -> f32
 > = GameRef::new();
-static PLAYER_AVO_MOD_BASE_ENTRY: GameRef<
+#[no_mangle]
+static player_avo_mod_base_entry: GameRef<
     fn(*mut ActorValueOwner, ActorAttribute, f32)
 > = GameRef::new();
-static PLAYER_AVO_MOD_CURRENT_ENTRY: GameRef<
+#[no_mangle]
+static player_avo_mod_current_entry: GameRef<
     fn(*mut ActorValueOwner, u32, ActorAttribute, f32)
 > = GameRef::new();
 
@@ -74,39 +79,60 @@ disarray::disarray! {
         Descriptor::Function {
             name: "GetLevel",
             loc: GameLocation::Id { id: 37334, offset: 0 },
-            result: GET_LEVEL_ENTRY.inner()
+            result: get_level_entry.inner()
         },
 
         Descriptor::Function {
             name: "GetGameSetting",
             loc: GameLocation::Id { id: 22788, offset: 0 },
-            result: GET_GAME_SETTING_ENTRY.inner()
+            result: get_game_setting_entry.inner()
         },
 
         Descriptor::Function {
             name: "PlayerAVOGetBase",
             loc: GameLocation::Id { id: 38464, offset: 0 },
-            result: PLAYER_AVO_GET_BASE_ENTRY.inner()
+            result: player_avo_get_base_entry.inner()
         },
 
         Descriptor::Function {
             name: "PlayerAVOGetCurrent",
             loc: GameLocation::Id { id: 38462, offset: 0 },
-            result: PLAYER_AVO_GET_CURRENT_ENTRY.inner()
+            result: player_avo_get_current_entry.inner()
         },
 
         Descriptor::Function {
             name: "PlayerAVOModBase",
             loc: GameLocation::Id { id: 38466, offset: 0 },
-            result: PLAYER_AVO_MOD_BASE_ENTRY.inner()
+            result: player_avo_mod_base_entry.inner()
         },
 
         Descriptor::Function {
             name: "PlayerAVOModCurrent",
             loc: GameLocation::Id { id: 38467, offset: 0 },
-            result: PLAYER_AVO_MOD_CURRENT_ENTRY.inner()
+            result: player_avo_mod_current_entry.inner()
         }
     ];
+}
+
+// C++ wrappers, which catch any exceptions and redirect to us in a defined way.
+extern "system" {
+    fn get_level_net(player: *mut PlayerCharacter) -> u16;
+    fn get_game_setting_net(map: *mut SettingCollectionMap, setting: *const c_char) -> *mut Setting;
+    fn player_avo_get_base_net(av: *mut ActorValueOwner, attr: ActorAttribute) -> f32;
+    fn player_avo_get_current_net(av: *mut ActorValueOwner, attr: c_int, patch_en: bool) -> f32;
+    fn player_avo_mod_base_net(av: *mut ActorValueOwner, attr: ActorAttribute, delta: f32);
+    fn player_avo_mod_current_net(
+        av: *mut ActorValueOwner,
+        unk1: u32,
+        attr: ActorAttribute,
+        delta: f32
+    );
+}
+
+/// Handles a C++ exception by just panicking.
+#[no_mangle]
+extern "system" fn handle_ffi_exception() -> ! {
+    panic!("An exception occured while executing a native game function");
 }
 
 /// Helper for assembly code to get the player pointer.
@@ -137,8 +163,7 @@ pub fn get_player_perk_pool() -> &'static core::cell::Cell<u8> {
 
 /// Gets the current level of the player.
 pub fn get_player_level() -> u32 {
-    let player = unsafe { *(PLAYER_OBJECT.get()) };
-    (GET_LEVEL_ENTRY.get())(player) as u32
+    unsafe { get_level_net(*(PLAYER_OBJECT.get())) as u32 }
 }
 
 /// Gets the game setting associated with the null-terminated c-string.
@@ -150,7 +175,7 @@ pub fn get_game_setting(
     let settings = unsafe { *(GAME_SETTINGS_OBJECT.get()) };
     unsafe {
         // SAFETY: We have ensured our var string and settings map are valid.
-        (GET_GAME_SETTING_ENTRY.get())(settings, var.as_ptr()).as_ref().unwrap()
+        get_game_setting_net(settings, var.as_ptr()).as_ref().unwrap()
     }
 }
 
@@ -159,7 +184,7 @@ pub fn get_game_setting(
 pub extern "system" fn player_avo_get_base(
     attr: ActorAttribute
 ) -> f32 {
-    (PLAYER_AVO_GET_BASE_ENTRY.get())(get_player_avo(), attr)
+    unsafe { player_avo_get_base_net(get_player_avo(), attr) }
 }
 
 ///
@@ -167,18 +192,12 @@ pub extern "system" fn player_avo_get_base(
 ///
 /// In order to use this function safely, the given AVO and attr must be valid.
 ///
-pub unsafe fn player_avo_get_current_original(
+#[no_mangle]
+pub unsafe extern "system" fn player_avo_get_current(
     av: *mut ActorValueOwner,
     attr: c_int
 ) -> f32 {
-    if settings::is_skill_formula_cap_enabled() {
-        // Patch installed, so we need to use the wrapper.
-        player_avo_get_current_original_wrapper(av, attr)
-    } else {
-        // No patch, so we can just call the og function
-        // (and must, since we don't have a trampoline).
-        (PLAYER_AVO_GET_CURRENT_ENTRY.get())(av, attr)
-    }
+    unsafe { player_avo_get_current_net(av, attr, settings::is_skill_formula_cap_enabled()) }
 }
 
 /// Modifies the base value of a player attribute.
@@ -186,7 +205,7 @@ pub fn player_avo_mod_base(
     attr: ActorAttribute,
     val: f32
 ) {
-    (PLAYER_AVO_MOD_BASE_ENTRY.get())(get_player_avo(), attr, val)
+    unsafe { player_avo_mod_base_net(get_player_avo(), attr, val) }
 }
 
 /// Modifies the current value of a player attribute.
@@ -195,5 +214,5 @@ pub fn player_avo_mod_current(
     val: f32
 ) {
     // No idea what second arg does; just match game calls.
-    (PLAYER_AVO_MOD_CURRENT_ENTRY.get())(get_player_avo(), 0, attr, val)
+    unsafe { player_avo_mod_current_net(get_player_avo(), 0, attr, val) }
 }

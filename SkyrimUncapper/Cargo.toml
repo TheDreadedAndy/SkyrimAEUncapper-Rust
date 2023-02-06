@@ -20,3 +20,4 @@ skyrim_patcher = { path = "../skyrim_patcher" }
 
 [build-dependencies]
 winres = "0.1.12"
+cc = "1.0.79"

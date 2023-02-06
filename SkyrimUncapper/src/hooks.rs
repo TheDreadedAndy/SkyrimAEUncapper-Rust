@@ -12,13 +12,13 @@
 
 use std::ffi::c_int;
 
-use skyrim_patcher::{Descriptor, Hook, GameLocation, GameRef, signature};
+use skyrim_patcher::{Descriptor, Hook, Register, GameLocation, GameRef, signature};
 
 use crate::settings;
 use crate::hook_wrappers::*;
 use crate::skyrim::{ActorAttribute, ActorValueOwner, PlayerSkills};
 use crate::skyrim::{get_player_avo, get_player_perk_pool};
-use crate::skyrim::{player_avo_get_base, player_avo_get_current_original, game_setting};
+use crate::skyrim::{player_avo_get_base, player_avo_get_current, game_setting};
 use crate::skyrim::{player_avo_mod_base, player_avo_mod_current, get_player_level};
 
 //
@@ -27,7 +27,7 @@ use crate::skyrim::{player_avo_mod_base, player_avo_mod_current, get_player_leve
 // Boing!
 //
 #[no_mangle]
-static max_charge_end_return_trampoline: GameRef<usize> = GameRef::new();
+static max_charge_begin_return_trampoline: GameRef<usize> = GameRef::new();
 #[no_mangle]
 static improve_skill_by_training_return_trampoline: GameRef<usize> = GameRef::new();
 #[no_mangle]
@@ -54,7 +54,10 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "GetSkillCap",
             enabled: settings::is_skill_cap_enabled,
-            hook: Hook::Call16(skill_cap_patch_wrapper as *const u8),
+            hook: Hook::Call12 {
+                entry: skill_cap_patch_wrapper as *const u8,
+                clobber: Register::Rax
+            },
             loc: GameLocation::Id { id: 41561, offset: 0x5e },
             sig: signature![
                 0x48, 0x8b, 0x0d, ?, ?, ?, ?,
@@ -75,20 +78,23 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "BeginMaxChargeCalculation",
             enabled: settings::is_enchant_patch_enabled,
-            hook: Hook::Call16(max_charge_begin_wrapper as *const u8),
+            hook: Hook::Jump12 {
+                entry: max_charge_begin_wrapper as *const u8,
+                clobber: Register::Rax, // Tmp from earlier cmove. Not used again.
+                trampoline: max_charge_begin_return_trampoline.inner()
+            },
             loc: GameLocation::Id { id: 51449, offset: 0xe9 },
             sig: signature![
                 0xf3, 0x0f, 0x11, 0x84, 0x24, 0xa0, 0x00, 0x00, 0x00,
-                0x48, 0x85, 0xc9,
-                0x0f, 0x84, 0x2f, 0x01, 0x00, 0x00; 18
+                0x48, 0x85, 0xc9; 12
             ]
         },
         Descriptor::Patch {
             name: "EndMaxChargeCalculation",
             enabled: settings::is_enchant_patch_enabled,
-            hook: Hook::Jump14 {
+            hook: Hook::Call12 {
                 entry: max_charge_end_wrapper as *const u8,
-                trampoline: max_charge_end_return_trampoline.inner()
+                clobber: Register::Rcx // Patch follows a function call.
             },
             loc: GameLocation::Id { id: 51449, offset: 0x179 },
             sig: signature![
@@ -109,7 +115,10 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "CalculateChargePointsPerUse",
             enabled: settings::is_enchant_patch_enabled,
-            hook: Hook::Call16(calculate_charge_points_per_use_wrapper as *const u8),
+            hook: Hook::Call12 {
+                entry: calculate_charge_points_per_use_wrapper as *const u8,
+                clobber: Register::Rax
+            },
             loc: GameLocation::Id { id: 51449, offset: 0x314 },
             sig: signature![
                 0x48, 0x8b, 0x0d, ?, ?, ?, ?,
@@ -129,8 +138,9 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "PlayerAVOGetCurrent",
             enabled: settings::is_skill_formula_cap_enabled,
-            hook: Hook::Jump14 {
+            hook: Hook::Jump12 {
                 entry: player_avo_get_current_hook as *const u8,
+                clobber: Register::Rax,
                 trampoline: player_avo_get_current_return_trampoline.inner()
             },
             loc: GameLocation::Id { id: 38462, offset: 0 },
@@ -149,7 +159,10 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "DisplayTrueSkillLevel",
             enabled: settings::is_skill_formula_cap_enabled,
-            hook: Hook::Call16(display_true_skill_level_hook as *const u8),
+            hook: Hook::Call12 {
+                entry: display_true_skill_level_hook as *const u8,
+                clobber: Register::Rax
+            },
             loc: GameLocation::Id { id: 52525, offset: 0x10d },
             sig: signature![
                 0x48, 0x8b, 0x0d, ?, ?, ?, ?,
@@ -169,7 +182,10 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "DisplayTrueSkillColor",
             enabled: settings::is_skill_formula_cap_enabled,
-            hook: Hook::Call16(display_true_skill_color_hook as *const u8),
+            hook: Hook::Call12 {
+                entry: display_true_skill_color_hook as *const u8,
+                clobber: Register::Rax
+            },
             loc: GameLocation::Id { id: 52945, offset: 0x24 },
             sig: signature![
                 0x48, 0x8b, 0x86, ?, 0x00, 0x00, 0x00,
@@ -182,16 +198,16 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "ImproveSkillByTraining",
             enabled: settings::is_skill_exp_enabled,
-            hook: Hook::Jump14 {
+            hook: Hook::Jump12 {
                 entry: improve_skill_by_training_hook as *const u8,
+                clobber: Register::Rax,
                 trampoline: improve_skill_by_training_return_trampoline.inner()
             },
-            loc: GameLocation::Id { id: 41562, offset: 0x8b },
+            loc: GameLocation::Id { id: 41562, offset: 0x90 },
             sig: signature![
-                0x44, 0x88, 0x6c, 0x24, 0x28,
                 0x49, 0x8b, 0xcf,
                 0x44, 0x89, 0x6c, 0x24, 0x20,
-                0xe8, ?, ?, ?, ?; 18
+                0xe8, ?, ?, ?, ?; 13
             ]
         },
 
@@ -199,14 +215,19 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "ImprovePlayerSkillPoints",
             enabled: settings::is_skill_exp_enabled,
-            hook: Hook::Jump14 {
+            hook: Hook::Jump12 {
                 entry: improve_player_skill_points_hook as *const u8,
+                clobber: Register::Rax,
                 trampoline: improve_player_skill_points_return_trampoline.inner()
             },
             loc: GameLocation::Id { id: 41561, offset: 0 },
             sig: signature![
-                0x48, 0x8b, 0xc4, 0x57, 0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57,
-                0x48, 0x81, 0xec, 0x80, 0x01, 0x00, 0x00; 19
+                0x48, 0x8b, 0xc4,
+                0x57,
+                0x41, 0x54,
+                0x41, 0x55,
+                0x41, 0x56,
+                0x41, 0x57; 12
             ]
         },
 
@@ -217,7 +238,10 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "ModifyPerkPool",
             enabled: settings::is_perk_points_enabled,
-            hook: Hook::Call16(modify_perk_pool_wrapper as *const u8),
+            hook: Hook::Call12 {
+                entry: modify_perk_pool_wrapper as *const u8,
+                clobber: Register::Rax
+            },
             loc: GameLocation::Id { id: 52538, offset: 0x62 },
             sig: signature![
                 0x48, 0x8b, 0x15, ?, ?, ?, ?,
@@ -237,7 +261,10 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "ImproveLevelExpBySkillLevel",
             enabled: settings::is_level_exp_enabled,
-            hook: Hook::Call16(improve_level_exp_by_skill_level_wrapper as *const u8),
+            hook: Hook::Call12 {
+                entry: improve_level_exp_by_skill_level_wrapper as *const u8,
+                clobber: Register::Rdx
+            },
             loc: GameLocation::Id { id: 41561, offset: 0x2d7 },
             sig: signature![
                 0xf3, 0x0f, 0x58, 0x08,
@@ -263,7 +290,10 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "ImproveAttributeWhenLevelUp",
             enabled: settings::is_attr_points_enabled,
-            hook: Hook::Call16(improve_attribute_when_level_up_wrapper as *const u8),
+            hook: Hook::Call12 {
+                entry: improve_attribute_when_level_up_wrapper as *const u8,
+                clobber: Register::Rax
+            },
             loc: GameLocation::Id { id: 51917, offset: 0x93 },
             sig: signature![
                 0xff, 0x50, 0x28, 0x83, 0x7f, 0x18, 0x1a, 0x75,
@@ -275,11 +305,17 @@ disarray::disarray! {
             ]
         },
 
-        // Alters the reset level of legendarying a skill.
+        //
+        // Alters the reset level of legendarying a skill, and overwrites a check
+        // which prevents the level from changing if its below 100.
+        //
         Descriptor::Patch {
             name: "LegendaryResetSkillLevel",
             enabled: settings::is_legendary_enabled,
-            hook: Hook::Call16(legendary_reset_skill_level_wrapper as *const u8),
+            hook: Hook::Call12 {
+                entry: legendary_reset_skill_level_wrapper as *const u8,
+                clobber: Register::Rax
+            },
             loc: GameLocation::Id { id: 52591, offset: 0x1b9 },
             sig: signature![
                 0x48, 0x8b, 0x0d, ?, ?, ?, ?,
@@ -296,13 +332,15 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "CheckConditionForLegendarySkill",
             enabled: settings::is_legendary_enabled,
-            hook: Hook::Jump14 {
+            hook: Hook::Jump12 {
                 entry: check_condition_for_legendary_skill_wrapper as *const u8,
+                clobber: Register::Rcx,
                 trampoline: check_condition_for_legendary_skill_return_trampoline.inner()
             },
             loc: GameLocation::Id { id: 52520, offset: 0x150 },
             sig: signature![
-                0x48, 0x8d, 0x8f, ?, 0x00, 0x00, 0x00, 0xff, 0x53, 0x18,
+                0x48, 0x8d, 0x8f, ?, 0x00, 0x00, 0x00,
+                0xff, 0x53, 0x18,
                 0x0f, 0x2f, 0x05, ?, ?, ?, ?; 17
             ]
         },
@@ -311,13 +349,15 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "CheckConditionForLegendarySkillAlt",
             enabled: settings::is_legendary_enabled,
-            hook: Hook::Jump14 {
+            hook: Hook::Jump12 {
                 entry: check_condition_for_legendary_skill_alt_wrapper as *const u8,
+                clobber: Register::Rcx,
                 trampoline: check_condition_for_legendary_skill_alt_return_trampoline.inner()
             },
             loc: GameLocation::Id { id: 52510, offset: 0x4d7 },
             sig: signature![
-                0x48, 0x8d, 0x8f, ?, 0x00, 0x00, 0x00, 0xff, 0x53, 0x18,
+                0x48, 0x8d, 0x8f, ?, 0x00, 0x00, 0x00,
+                0xff, 0x53, 0x18,
                 0x0f, 0x2f, 0x05, ?, ?, ?, ?; 17
             ]
         },
@@ -326,8 +366,9 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "HideLegendaryButton",
             enabled: settings::is_legendary_enabled,
-            hook: Hook::Jump14 {
+            hook: Hook::Jump12 {
                 entry: hide_legendary_button_wrapper as *const u8,
+                clobber: Register::Rax,
                 trampoline: hide_legendary_button_return_trampoline.inner()
             },
             loc: GameLocation::Id { id: 52527, offset: 0x153 },
@@ -361,7 +402,10 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "ClearLegendaryButton",
             enabled: settings::is_legendary_enabled,
-            hook: Hook::Call16(clear_legendary_button_wrapper as *const u8),
+            hook: Hook::Call12 {
+                entry: clear_legendary_button_wrapper as *const u8,
+                clobber: Register::Rax
+            },
             loc: GameLocation::Id { id: 52527, offset: 0x16dd },
             sig: signature![
                 0x48, 0x8b, 0x0d, ?, ?, ?, ?,
@@ -423,7 +467,7 @@ extern "system" fn calculate_charge_points_per_use_hook(
     let enchanting_level = cap.min(unsafe {
         // SAFETY: We know we were given the player AV, and that the enchanting actor
         //         attribute is valid.
-        player_avo_get_current_original(av, ActorAttribute::Enchanting as c_int)
+        player_avo_get_current(av, ActorAttribute::Enchanting as c_int)
     });
 
     let base = cost_mult * base_points.powf(cost_exponent);
@@ -450,7 +494,7 @@ extern "system" fn player_avo_get_current_hook(
 
     let mut val = unsafe {
         // SAFETY: We are passing through the original arguments.
-        player_avo_get_current_original(av, attr)
+        player_avo_get_current(av, attr)
     };
 
     if let Ok(attr) = ActorAttribute::from_raw(attr) {

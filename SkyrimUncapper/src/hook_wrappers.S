@@ -38,7 +38,10 @@
 .global clear_legendary_button_wrapper
 
 // Saves all caller saved registers.
-.macro SAVEALL
+.macro SAVEALL is_jump
+    .ifnb \is_jump
+    sub $0x08, %rsp
+    .endif
     push %rax
     push %rcx
     push %rdx
@@ -56,8 +59,10 @@
 .endm
 
 // Restores all caller saved registers.
-.macro RESTOREALL
+.macro RESTOREALL retgpr, retfpr, is_jump
+    .ifb \retfpr
     movdqu 0x20(%rsp), %xmm0
+    .endif
     movdqu 0x30(%rsp), %xmm1
     movdqu 0x40(%rsp), %xmm2
     movdqu 0x50(%rsp), %xmm3
@@ -70,75 +75,14 @@
     pop %r8
     pop %rdx
     pop %rcx
+    .ifb \retgpr
     pop %rax
-.endm
-
-// Saves all caller saved registers, except rax.
-.macro SAVEALL_RETGPR
-    push %rcx
-    push %rdx
-    push %r8
-    push %r9
-    push %r10
-    push %r11
-    sub $0x88, %rsp // Allocate extra 32 + 8 bytes for calling convention.
-    movdqu %xmm0, 0x20(%rsp)
-    movdqu %xmm1, 0x30(%rsp)
-    movdqu %xmm2, 0x40(%rsp)
-    movdqu %xmm3, 0x50(%rsp)
-    movdqu %xmm4, 0x60(%rsp)
-    movdqu %xmm5, 0x70(%rsp)
-.endm
-
-// Restores the caller saved registers, except rax.
-.macro RESTOREALL_RETGPR
-    movdqu 0x20(%rsp), %xmm0
-    movdqu 0x30(%rsp), %xmm1
-    movdqu 0x40(%rsp), %xmm2
-    movdqu 0x50(%rsp), %xmm3
-    movdqu 0x60(%rsp), %xmm4
-    movdqu 0x70(%rsp), %xmm5
-    add $0x88, %rsp
-    pop %r11
-    pop %r10
-    pop %r9
-    pop %r8
-    pop %rdx
-    pop %rcx
-.endm
-
-// Saves all caller saved registers except xmm0.
-.macro SAVEALL_RETFPR
-    push %rax
-    push %rcx
-    push %rdx
-    push %r8
-    push %r9
-    push %r10
-    push %r11
-    sub $0x70, %rsp
-    movdqu %xmm1, 0x20(%rsp)
-    movdqu %xmm2, 0x30(%rsp)
-    movdqu %xmm3, 0x40(%rsp)
-    movdqu %xmm4, 0x50(%rsp)
-    movdqu %xmm5, 0x60(%rsp)
-.endm
-
-// Restores all caller saved registers except xmm0.
-.macro RESTOREALL_RETFPR
-    movdqu 0x20(%rsp), %xmm1
-    movdqu 0x30(%rsp), %xmm2
-    movdqu 0x40(%rsp), %xmm3
-    movdqu 0x50(%rsp), %xmm4
-    movdqu 0x60(%rsp), %xmm5
-    add $0x70, %rsp
-    pop %r11
-    pop %r10
-    pop %r9
-    pop %r8
-    pop %rdx
-    pop %rcx
-    pop %rax
+    .else
+    add $0x08, %rsp
+    .endif
+    .ifnb \is_jump
+    add $0x08, %rsp
+    .endif
 .endm
 
 /*
@@ -165,7 +109,7 @@ skill_cap_patch_wrapper:
  * to use the weapon cap if the enchanted item is offensive.
  */
 max_charge_begin_wrapper:
-    SAVEALL
+    SAVEALL is_jump=1
 
     // Reimplement replaced instruction.
     movss %xmm0, 0x160(%rsp)
@@ -173,36 +117,27 @@ max_charge_begin_wrapper:
     mov %r14d, %ecx // Enchantment type is in r14d.
     call max_charge_begin_hook
 
-    mov 0xa8(%rsp), %rcx // Get rcx value
-    test %rcx, %rcx // Reimplement replaced test + je.
-    jne _finish_max_charge_begin_wrapper
-    addq $0x12f, 0xb8(%rsp) // Offset return address (this is a crime).
+    RESTOREALL is_jump=1
 
-_finish_max_charge_begin_wrapper:
-    RESTOREALL
-    ret
+    // I think this technically violates unwinding calling convention, but we
+    // block unwinds below us anyway.
+    test %rcx, %rcx // Reimplement replaced test.
+    jmp *max_charge_begin_return_trampoline(%rip)
 
 /*
  * Ends a max_charge calculation by returning the skill formula equation
  * to using the magnitude formula cap, if necessary.
  */
 max_charge_end_wrapper:
-    // We jump here, but we also need to save register state. We can't do that without
-    // violating calling convention, though, so we call another function which saves the
-    // state and then we use our trampoline.
-    call _max_charge_end_invoker
-    jmp *max_charge_end_return_trampoline(%rip)
-
-_max_charge_end_invoker:
-    SAVEALL_RETFPR
+    SAVEALL
 
     call max_charge_end_hook
 
     // Reimplement overwritten instructions.
-    movss 0x150(%rsp), %xmm0 // Get max_charge
+    movss 0x160(%rsp), %xmm0 // Get max_charge
     maxss %xmm9, %xmm0 // MAX(max_charge, 0)
 
-    RESTOREALL_RETFPR
+    RESTOREALL retfpr=1
     ret
 
 /*
@@ -250,7 +185,7 @@ display_true_skill_color_hook:
     mov %edi, %edx
 
     // Call the unmodified function.
-    call player_avo_get_current_original_wrapper
+    call player_avo_get_current
 
     add $0x28, %rsp
     ret
@@ -261,7 +196,6 @@ display_true_skill_color_hook:
  */
 improve_skill_by_training_hook:
     // Reimplement the arg setup we overwrote.
-    mov %r13b, 0x28(%rsp)
     mov %r15, %rcx
     mov %r13d, 0x20(%rsp)
     call improve_player_skill_points_original
@@ -279,7 +213,6 @@ improve_player_skill_points_original:
     push %r13
     push %r14
     push %r15
-    sub $0x180, %rsp
     jmp *improve_player_skill_points_return_trampoline(%rip)
 
 /*
