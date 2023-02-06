@@ -5,10 +5,51 @@
 //! @bug No known bugs
 //!
 
+use core::slice;
 use core::ffi::c_void;
 use core::mem::size_of;
 
 use windows_sys::Win32::System::Memory::{VirtualProtect, PAGE_EXECUTE_READWRITE};
+
+/// The maximum patch size. Chosen as our largest patch size is 16 (call absolute).
+const MAX_PATCH_SIZE: usize = 16;
+
+/// Represents an assembled x86-64 patch to be written.
+struct Patch {
+    addr: usize,
+    buf: [u8; MAX_PATCH_SIZE],
+    len: usize
+}
+
+/// Encodes a x86-64 +rq register index.
+#[repr(u8)]
+#[derive(Copy, Clone)]
+pub enum Register {
+    Rax = 0,
+    Rcx = 1,
+    Rdx = 2,
+    Rbx = 3,
+    Rsp = 4,
+    Rbp = 5,
+    Rsi = 6,
+    Rdi = 7
+}
+
+/// Encodes the addressing mode of an instruction, or its opcode.
+enum Encoding {
+    JumpNear,
+    CallRelative,
+    JumpRelative,
+    CallIndirect,
+    JumpIndirect,
+    CallReg(Register),
+    JumpReg(Register),
+    MoveImmQReg(Register),
+    RelativeD(usize),
+    AbsoluteSH(i8),
+    AbsoluteD(u32),
+    AbsoluteQ(u64)
+}
 
 ///
 /// An enumeration of the different types of control flow which can be written.
@@ -20,45 +61,142 @@ pub enum Flow {
     JumpRelative,
     CallAbsolute,
     JumpAbsolute,
+    CallRegAbsolute(Register),
+    JumpRegAbsolute(Register),
     CallIndirect(usize),
     JumpIndirect(usize)
 }
 
-/// Encodes the addressing mode of an instruction.
-enum AddrMode {
-    Relative(usize),
-    Absolute(usize)
+impl Patch {
+    /// Generates a patch to be applied to the given address from the given encoding.
+    fn new(
+        addr: usize,
+        chunks: &[Encoding]
+    ) -> Result<Self, ()> {
+        let mut this = Self {
+            addr,
+            buf: [0; MAX_PATCH_SIZE],
+            len: 0
+        };
+
+        for chunk in chunks.iter() {
+            match chunk {
+                Encoding::JumpNear => this.append(&[0xeb]),
+                Encoding::CallRelative => this.append(&[0xe8]),
+                Encoding::JumpRelative => this.append(&[0xe9]),
+                Encoding::CallIndirect => this.append(&[0xff, 0x15]),
+                Encoding::JumpIndirect => this.append(&[0xff, 0x25]),
+                Encoding::CallReg(reg) => this.append(&[0xff, 0xd0 + (*reg as u8)]),
+                Encoding::JumpReg(reg) => this.append(&[0xff, 0xe0 + (*reg as u8)]),
+                Encoding::MoveImmQReg(reg) => this.append(&[0x48, 0xb8 + (*reg as u8)]),
+                Encoding::RelativeD(target) => {
+                    let rel: i32 = (
+                        target.wrapping_sub(addr + this.len + size_of::<i32>())
+                    ).try_into().map_err(|_| ())?;
+
+                    unsafe {
+                        this.append(slice::from_raw_parts(
+                            &rel as *const i32 as *const u8,
+                            size_of::<i32>()
+                        ));
+                    }
+                },
+                Encoding::AbsoluteSH(h) => this.append(&[*h as u8]),
+                Encoding::AbsoluteD(d) => unsafe {
+                    this.append(
+                        slice::from_raw_parts(d as *const u32 as *const u8, size_of::<u32>())
+                    );
+                },
+                Encoding::AbsoluteQ(q) => unsafe {
+                    this.append(
+                        slice::from_raw_parts(q as *const u64 as *const u8, size_of::<u64>())
+                    );
+                }
+            }
+        }
+
+        Ok(this)
+    }
+
+    /// Appends the given bytes to the patch buffer.
+    fn append(
+        &mut self,
+        s: &[u8]
+    ) {
+        self.buf.split_at_mut(self.len).1.split_at_mut(s.len()).0.copy_from_slice(s);
+        self.len += s.len();
+    }
+
+    /// Applies the given patch, protecting the region.
+    unsafe fn apply(
+        self
+    ) {
+        use_region(self.addr, self.len, || {
+            self.apply_unchecked();
+        });
+    }
+
+    /// Applies the given patch without protecting the region.
+    unsafe fn apply_unchecked(
+        self
+    ) {
+        std::ptr::copy(self.buf.as_ptr(), self.addr as *mut u8, self.len);
+    }
 }
 
 impl Flow {
-    /// Gets the opcode encoding for the given flow type.
-    fn opcode(
-        &self
-    ) -> &'static [u8] {
+    ///
+    /// Creates a new patch from the invoking flow, address, and target.
+    ///
+    /// If the flow is an indirect, the target is written to the trampoline on success.
+    ///
+    fn as_patch(
+        &self,
+        addr: usize,
+        target: usize
+    ) -> Result<Patch, ()> {
+        let patch = match self {
+            Flow::CallRelative => Patch::new(addr,  &[
+                Encoding::CallRelative, Encoding::RelativeD(target)
+            ]),
+
+            Flow::JumpRelative => Patch::new(addr, &[
+                Encoding::JumpRelative, Encoding::RelativeD(target)
+            ]),
+
+            Flow::CallAbsolute => Patch::new(addr, &[
+                Encoding::CallIndirect, Encoding::AbsoluteD(0x02),
+                Encoding::JumpNear, Encoding::AbsoluteSH(0x08),
+                Encoding::AbsoluteQ(target as u64)
+            ]),
+            Flow::JumpAbsolute => Patch::new(addr, &[
+                Encoding::JumpIndirect, Encoding::AbsoluteD(0),
+                Encoding::AbsoluteQ(target as u64)
+            ]),
+            Flow::CallRegAbsolute(reg) => Patch::new(addr, &[
+                Encoding::MoveImmQReg(*reg), Encoding::AbsoluteQ(target as u64),
+                Encoding::CallReg(*reg)
+            ]),
+            Flow::JumpRegAbsolute(reg) => Patch::new(addr, &[
+                Encoding::MoveImmQReg(*reg), Encoding::AbsoluteQ(target as u64),
+                Encoding::JumpReg(*reg)
+            ]),
+            Flow::CallIndirect(trampoline) => Patch::new(addr, &[
+                Encoding::CallIndirect, Encoding::RelativeD(*trampoline)
+            ]),
+            Flow::JumpIndirect(trampoline) => Patch::new(addr, &[
+                Encoding::JumpIndirect, Encoding::RelativeD(*trampoline)
+            ])
+        }?;
+
         match self {
-            Self::CallRelative => &[0xe8],
-            Self::JumpRelative => &[0xe9],
-            // call 0x02(%rip); jmp 0x08 (over absolute).
-            Self::CallAbsolute => &[0xff, 0x15, 0x02, 0x00, 0x00, 0x00, 0xeb, 0x08],
-            Self::CallIndirect(_) => &[0xff, 0x15],
-            Self::JumpAbsolute => &[0xff, 0x25, 0x00, 0x00, 0x00, 0x00],
-            Self::JumpIndirect(_) => &[0xff, 0x25]
+            Flow::CallIndirect(t) | Flow::JumpIndirect(t) => unsafe {
+                std::ptr::write_unaligned(*t as *mut usize, target);
+            }
+            _ => ()
         }
-    }
 
-    /// Gets the size of the patch to be inserted at addr.
-    fn patch_size(
-        &self
-    ) -> usize {
-        self.opcode().len() + match self {
-            Self::CallRelative |
-            Self::JumpRelative |
-            Self::CallIndirect(_) |
-            Self::JumpIndirect(_) => size_of::<i32>(),
-
-            Self::JumpAbsolute |
-            Self::CallAbsolute => size_of::<usize>()
-        }
+        Ok(patch)
     }
 }
 
@@ -86,11 +224,8 @@ pub unsafe fn write_flow(
     target: usize,
     flow: Flow
 ) -> Result<(), ()> {
-    let mut ret: Result<(), ()> = Err(());
-    use_region(addr, flow.patch_size(), || {
-        ret = write_flow_unchecked(addr, target, flow);
-    });
-    return ret;
+    flow.as_patch(addr, target)?.apply();
+    Ok(())
 }
 
 ///
@@ -101,51 +236,6 @@ pub unsafe fn write_flow_unchecked(
     target: usize,
     flow: Flow
 ) -> Result<(), ()> {
-    match flow {
-        Flow::CallRelative |
-        Flow::JumpRelative => {
-            write_flow_instr_unchecked(addr, flow.opcode(), AddrMode::Relative(target))
-        },
-
-        Flow::CallAbsolute |
-        Flow::JumpAbsolute => {
-            write_flow_instr_unchecked(addr, flow.opcode(), AddrMode::Absolute(target))
-        },
-
-        Flow::CallIndirect(trampoline) |
-        Flow::JumpIndirect(trampoline) => {
-            write_flow_instr_unchecked(addr, flow.opcode(), AddrMode::Relative(target))?;
-            std::ptr::write_unaligned(trampoline as *mut usize, target);
-            Ok(())
-        }
-    }
-}
-
-///
-/// Writes a control flow operation, with one 32-bit signed address
-/// offset and a second, optional, absolute address.
-///
-/// Returns the number of bytes written.
-///
-unsafe fn write_flow_instr_unchecked(
-    addr: usize,
-    opcode: &[u8],
-    mode: AddrMode
-) -> Result<(), ()> {
-    std::ptr::copy(opcode.as_ptr(), addr as *mut u8, opcode.len());
-
-    match mode {
-        AddrMode::Relative(target) => {
-            let rel: i32 = (
-                target - (addr + opcode.len() + size_of::<i32>())
-            ).try_into().map_err(|_| ())?;
-            std::ptr::write_unaligned((addr + opcode.len()) as *mut i32, rel);
-
-        },
-        AddrMode::Absolute(target) => {
-            std::ptr::write_unaligned((addr + opcode.len()) as *mut usize, target);
-        }
-    }
-
+    flow.as_patch(addr, target)?.apply_unchecked();
     Ok(())
 }

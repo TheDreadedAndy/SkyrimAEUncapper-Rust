@@ -21,10 +21,12 @@ use skse64::trampoline::Trampoline;
 
 use skse64::log::skse_message;
 use skse64::reloc::RelocAddr;
-use skse64::safe::Flow;
+use skse64::safe::{write_flow, Flow};
 use versionlib::VersionDb;
 
 use crate::sig::{Signature, BinarySig};
+
+pub use skse64::safe::Register;
 
 /// Tracks a location in the skyrim game binary.
 pub enum GameLocation {
@@ -69,6 +71,17 @@ pub enum Hook {
     },
 
     DirectCall(*const u8),
+
+    Jump12 {
+        entry: *const u8,
+        clobber: Register,
+        trampoline: NonNull<UnsafeCell<usize>>
+    },
+
+    Call12 {
+        entry: *const u8,
+        clobber: Register
+    },
 
     Jump14 {
         entry: *const u8,
@@ -197,6 +210,7 @@ impl Hook {
             Hook::Jump6 { .. } | Hook::Call6(_) => 6,
             Hook::None => 0,
             Hook::DirectJump { .. } | Hook::DirectCall(_) => 5,
+            Hook::Jump12 { .. } | Hook::Call12 { .. } => 12,
             Hook::Jump14 { .. } => 14,
             Hook::Call16(_) => 16,
         }
@@ -211,7 +225,9 @@ impl Hook {
             Hook::Jump5  { trampoline, .. } | Hook::Jump6 { trampoline, .. } => {
                 Some(*trampoline)
             },
-            Hook::Jump14 { trampoline, .. } | Hook::DirectJump { trampoline, .. } => {
+            Hook::Jump12 { trampoline, .. } |
+            Hook::Jump14 { trampoline, .. } |
+            Hook::DirectJump { trampoline, .. } => {
                 Some(*trampoline)
             },
             _ => None
@@ -245,17 +261,23 @@ impl Hook {
             Self::Call6(entry) => {
                 skse64::trampoline::write_call6(Trampoline::Global, addr, *entry as usize);
             },
+            Self::Jump12 { entry, clobber, .. } => {
+                write_flow(addr, *entry as usize, Flow::JumpRegAbsolute(*clobber)).unwrap();
+            },
+            Self::Call12 { entry, clobber, .. } => {
+                write_flow(addr, *entry as usize, Flow::CallRegAbsolute(*clobber)).unwrap();
+            },
             Self::Jump14 { entry, .. } => {
-                skse64::safe::write_flow(addr, *entry as usize, Flow::JumpAbsolute).unwrap();
+                write_flow(addr, *entry as usize, Flow::JumpAbsolute).unwrap();
             },
             Self::Call16(entry) => {
-                skse64::safe::write_flow(addr, *entry as usize, Flow::CallAbsolute).unwrap();
+                write_flow(addr, *entry as usize, Flow::CallAbsolute).unwrap();
             },
             Self::DirectJump { entry, .. } => {
-                skse64::safe::write_flow(addr, *entry as usize, Flow::JumpRelative).unwrap();
+                write_flow(addr, *entry as usize, Flow::JumpRelative).unwrap();
             },
             Self::DirectCall(entry) => {
-                skse64::safe::write_flow(addr, *entry as usize, Flow::CallRelative).unwrap();
+                write_flow(addr, *entry as usize, Flow::CallRelative).unwrap();
             },
             Self::None => panic!("Cannot install to a None hook!"),
         }

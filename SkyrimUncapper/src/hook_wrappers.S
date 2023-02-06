@@ -190,10 +190,10 @@ max_charge_end_wrapper:
     // We jump here, but we also need to save register state. We can't do that without
     // violating calling convention, though, so we call another function which saves the
     // state and then we use our trampoline.
-    call max_charge_end_invoker
+    call _max_charge_end_invoker
     jmp *max_charge_end_return_trampoline(%rip)
 
-max_charge_end_invoker:
+_max_charge_end_invoker:
     SAVEALL_RETFPR
 
     call max_charge_end_hook

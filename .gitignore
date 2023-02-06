@@ -13,3 +13,4 @@ Cargo.lock
 .vscode/
 skse64_src/
 SkyrimUncapper/hook_wrappers.asm
+*.zip
