@@ -5,6 +5,9 @@
 //! @bug No known bugs.
 //!
 
+use std::fs::File;
+use std::io::Write;
+
 const NATIVE_WRAPPERS: &str = "src/skyrim/native_wrappers.cpp";
 
 const RC_AUTHOR: &str = "Kasplat";
@@ -28,4 +31,19 @@ fn main() {
     res.set("ProductName", RC_NAME);
     res.set("ProductVersion", RC_VERSION);
     res.compile().unwrap();
+
+    // Generate git version information.
+    let std::process::Output { stdout, .. } = std::process::Command::new("git").args(&[
+        "describe",
+        "--always",
+        "--dirty",
+        "--tags"
+    ]).output().unwrap();
+    let version = String::from_utf8(stdout).unwrap();
+
+    // Write git version to a file.
+    let mut f = File::create(
+        format!("{}/git_version.rs", std::env::var("OUT_DIR").unwrap())
+    ).unwrap();
+    write!(&mut f, "pub (in crate) const GIT_VERSION: &str = \"{}\";", version.trim()).unwrap();
 }

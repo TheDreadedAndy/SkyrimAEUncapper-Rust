@@ -26,6 +26,9 @@ use skyrim_patcher::flatten_patch_groups;
 use skyrim::{GAME_SIGNATURES, NUM_GAME_SIGNATURES};
 use hooks::{HOOK_SIGNATURES, NUM_HOOK_SIGNATURES};
 
+// Get git version of the plugin.
+include!(concat!(env!("OUT_DIR"), "/git_version.rs"));
+
 const NUM_PATCHES: usize = NUM_GAME_SIGNATURES + NUM_HOOK_SIGNATURES;
 
 skse64::plugin_version_data! {
@@ -49,12 +52,13 @@ pub fn skse_plugin_rust_entry(
 ) -> Result<(), ()> {
     // Log runtime/skse info.
     skse_message!(
-        "{} {:?}\n\
+        "{} {:?} ({})\n\
          Compiled: SKSE64 {}, Skyrim AE {}\n\
          Running: SKSE64 {}, Skyrim AE {}\n\
          Base addr: {:#x}",
         unsafe { CStr::from_ptr(SKSEPlugin_Version.name.as_ptr()).to_str().unwrap() },
         SKSEPlugin_Version.plugin_version,
+        GIT_VERSION,
         PACKED_SKSE_VERSION,
         CURRENT_RELEASE_RUNTIME,
         skse.skse_version.unwrap(),
