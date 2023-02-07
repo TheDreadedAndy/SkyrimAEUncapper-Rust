@@ -8,12 +8,18 @@
 use std::fs::File;
 use std::io::Write;
 
+const NATIVE_WRAPPERS: &str = "src/skyrim/native_wrappers.cpp";
+
 const RC_AUTHOR: &str = "Kasplat";
 const RC_NAME: &str = "Skyrim Uncapper AE";
 const RC_VERSION: &str = "2.0.2.0";
 const RC_FILE: &str = "SkyrimUncapper.dll";
 
 fn main() {
+    // Build C++ exception nets.
+    println!("cargo:rerun-if-changed={}", NATIVE_WRAPPERS);
+    cc::Build::new().cpp(true).file(NATIVE_WRAPPERS).compile("nets");
+
     // Embed resource information.
     let mut res = winres::WindowsResource::new();
     res.set("CompanyName", RC_AUTHOR);
