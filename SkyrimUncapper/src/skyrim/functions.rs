@@ -16,14 +16,8 @@ use crate::settings;
 /// Gets a game setting, given a string literal.
 macro_rules! game_setting {
     ( $str:literal ) => {{
-        let s = ::std::concat!($str, "\0").as_bytes();
-        let s = unsafe {
-            ::std::slice::from_raw_parts::<'static, ::std::ffi::c_char>(
-                s.as_ptr() as *const ::std::ffi::c_char,
-                s.len()
-            )
-        };
-        $crate::skyrim::get_game_setting(s)
+        let s = ::std::concat!($str, "\0").as_bytes().as_ptr() as *const ::std::ffi::c_char;
+        unsafe { $crate::skyrim::get_game_setting(s) }
     }}
 }
 pub (in crate) use game_setting;
@@ -37,23 +31,23 @@ static GAME_SETTINGS_OBJECT: GameRef<*mut *mut SettingCollectionMap> = GameRef::
 static get_level_entry: GameRef<fn(*mut PlayerCharacter) -> u16> = GameRef::new();
 #[no_mangle]
 static get_game_setting_entry: GameRef<
-    fn(*mut SettingCollectionMap, *const c_char) -> *mut Setting
+    unsafe extern "system" fn(*mut SettingCollectionMap, *const c_char) -> *mut Setting
 > = GameRef::new();
 #[no_mangle]
 static player_avo_get_base_entry: GameRef<
-    fn(*mut ActorValueOwner, ActorAttribute) -> f32
+    unsafe extern "system" fn(*mut ActorValueOwner, ActorAttribute) -> f32
 > = GameRef::new();
 #[no_mangle]
 static player_avo_get_current_entry: GameRef<
-    fn(*mut ActorValueOwner, c_int) -> f32
+    unsafe extern "system" fn(*mut ActorValueOwner, c_int) -> f32
 > = GameRef::new();
 #[no_mangle]
 static player_avo_mod_base_entry: GameRef<
-    fn(*mut ActorValueOwner, ActorAttribute, f32)
+    unsafe extern "system" fn(*mut ActorValueOwner, ActorAttribute, f32)
 > = GameRef::new();
 #[no_mangle]
 static player_avo_mod_current_entry: GameRef<
-    fn(*mut ActorValueOwner, u32, ActorAttribute, f32)
+    unsafe extern "system" fn(*mut ActorValueOwner, u32, ActorAttribute, f32)
 > = GameRef::new();
 
 disarray::disarray! {
@@ -181,16 +175,10 @@ pub fn get_player_level() -> u32 {
 }
 
 /// Gets the game setting associated with the null-terminated c-string.
-pub fn get_game_setting(
-    var: &[c_char]
+pub unsafe fn get_game_setting(
+    var: *const c_char
 ) -> &'static Setting {
-    assert!(var[var.len() - 1] == b'\0' as c_char);
-
-    let settings = unsafe { *(GAME_SETTINGS_OBJECT.get()) };
-    unsafe {
-        // SAFETY: We have ensured our var string and settings map are valid.
-        get_game_setting_net(settings, var.as_ptr()).as_ref().unwrap()
-    }
+    get_game_setting_net(*(GAME_SETTINGS_OBJECT.get()), var).as_ref().unwrap()
 }
 
 ///

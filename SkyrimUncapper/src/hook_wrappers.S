@@ -92,7 +92,10 @@
 skill_cap_patch_wrapper:
     sub $0x28, %rsp
 
-    mov %esi, %ecx // pass SkillID in ecx to hook.
+    call get_player_avo
+
+    mov %rax, %rcx
+    mov %esi, %edx // pass SkillID in ecx to hook.
     call player_avo_get_base_unchecked
     movaps %xmm0, %xmm8 // Reimplement original move.
 
