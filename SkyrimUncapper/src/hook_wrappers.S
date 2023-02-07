@@ -27,7 +27,7 @@
 .global display_true_skill_level_hook
 .global display_true_skill_color_hook
 .global improve_skill_by_training_hook
-.global improve_player_skill_points_original
+.global improve_player_skill_points
 .global modify_perk_pool_wrapper
 .global improve_level_exp_by_skill_level_wrapper
 .global improve_attribute_when_level_up_wrapper
@@ -206,7 +206,7 @@ improve_skill_by_training_hook:
  * improve_player_skill_points() function by reimplementing the code our hook
  * replaces and then jumping to the original game code that follows our hook.
  */
-improve_player_skill_points_original:
+improve_player_skill_points:
     mov %rsp, %rax
     push %rdi
     push %r12

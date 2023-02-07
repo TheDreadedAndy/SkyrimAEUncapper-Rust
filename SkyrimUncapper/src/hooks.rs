@@ -422,7 +422,7 @@ disarray::disarray! {
 
 /// Determines the real skill cap of the given skill.
 #[no_mangle]
-extern "system" fn get_skill_cap_hook(
+extern "system-unwind" fn get_skill_cap_hook(
     skill: c_int
 ) -> f32 {
     assert!(settings::is_skill_cap_enabled());
@@ -431,7 +431,7 @@ extern "system" fn get_skill_cap_hook(
 
 /// Begins a calculation for weapon charge by setting the enchant cap to use the charge value.
 #[no_mangle]
-extern "system" fn max_charge_begin_hook(
+extern "system-unwind" fn max_charge_begin_hook(
     enchant_type: u32
 ) {
     const WEAPON_ENCHANT_TYPE: u32 = 0x29; // Defined by the game.
@@ -442,7 +442,7 @@ extern "system" fn max_charge_begin_hook(
 
 /// Ends a calculation for weapon charge by returning the cap mode to magnitude, if necessary.
 #[no_mangle]
-extern "system" fn max_charge_end_hook() {
+extern "system-unwind" fn max_charge_end_hook() {
     settings::use_enchant_magnitude_cap();
 }
 
@@ -453,7 +453,7 @@ extern "system" fn max_charge_end_hook() {
 /// implementation caps the level in the calculation to 199.
 ///
 #[no_mangle]
-extern "system" fn calculate_charge_points_per_use_hook(
+extern "system-unwind" fn calculate_charge_points_per_use_hook(
     base_points: f32,
     max_charge: f32
 ) -> f32 {
@@ -482,7 +482,7 @@ extern "system" fn calculate_charge_points_per_use_hook(
 }
 
 /// Caps the formula results for each skill.
-extern "system" fn player_avo_get_current_hook(
+extern "system-unwind" fn player_avo_get_current_hook(
     av: *mut ActorValueOwner,
     attr: c_int
 ) -> f32 {
@@ -501,7 +501,7 @@ extern "system" fn player_avo_get_current_hook(
 }
 
 /// Applies a multiplier to the exp gain for the given skill.
-extern "system" fn improve_player_skill_points_hook(
+extern "system-unwind" fn improve_player_skill_points_hook(
     skill_data: *mut PlayerSkills,
     attr: c_int,
     mut exp: f32,
@@ -528,7 +528,7 @@ extern "system" fn improve_player_skill_points_hook(
 
 /// Adjusts the number of perks the player recieves at level-up.
 #[no_mangle]
-extern "system" fn modify_perk_pool_hook(
+extern "system-unwind" fn modify_perk_pool_hook(
     count: i8
 ) {
     assert!(settings::is_perk_points_enabled());
@@ -541,7 +541,7 @@ extern "system" fn modify_perk_pool_hook(
 
 /// Multiplies the exp gain of a level-up by the configured multiplier.
 #[no_mangle]
-extern "system" fn improve_level_exp_by_skill_level_hook(
+extern "system-unwind" fn improve_level_exp_by_skill_level_hook(
     mut exp: f32,
     attr: c_int
 ) -> f32 {
@@ -562,7 +562,7 @@ extern "system" fn improve_level_exp_by_skill_level_hook(
 /// Adjusts the attribute gain at each level-up based on the configured settings.
 ///
 #[no_mangle]
-extern "system" fn improve_attribute_when_level_up_hook(
+extern "system-unwind" fn improve_attribute_when_level_up_hook(
     choice: c_int
 ) {
     assert!(settings::is_attr_points_enabled());
@@ -577,7 +577,7 @@ extern "system" fn improve_attribute_when_level_up_hook(
 
 /// Determines what level a skill should take on after being legendary'd.
 #[no_mangle]
-extern "system" fn legendary_reset_skill_level_hook(
+extern "system-unwind" fn legendary_reset_skill_level_hook(
     base_level: f32
 ) {
     assert!(settings::is_legendary_enabled());
@@ -592,7 +592,7 @@ extern "system" fn legendary_reset_skill_level_hook(
 
 /// Overwrites the check which determines when a skill can be legendary'd.
 #[no_mangle]
-extern "system" fn check_condition_for_legendary_skill_hook(
+extern "system-unwind" fn check_condition_for_legendary_skill_hook(
     skill: c_int
 ) -> bool {
     assert!(settings::is_legendary_enabled());
@@ -602,7 +602,7 @@ extern "system" fn check_condition_for_legendary_skill_hook(
 
 /// Determines if the legendary button should be displayed for the given skill.
 #[no_mangle]
-extern "system" fn hide_legendary_button_hook(
+extern "system-unwind" fn hide_legendary_button_hook(
     skill: c_int
 ) -> bool {
     assert!(settings::is_legendary_enabled());
@@ -612,7 +612,7 @@ extern "system" fn hide_legendary_button_hook(
 
 /// Determines if we should continue to display the legendary button after moving the skill view.
 #[no_mangle]
-extern "system" fn clear_legendary_button_hook(
+extern "system-unwind" fn clear_legendary_button_hook(
     skill: c_int
 ) -> f32 {
     const BASE_LEGENDARY_THRESHOLD: u32 = 100;

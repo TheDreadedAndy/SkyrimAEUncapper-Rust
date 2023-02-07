@@ -7,6 +7,8 @@
 //! @bug No known bugs.
 //!
 
+#![feature(c_unwind)]
+
 // Our crate name is stupid, for historical reasons.
 #![allow(non_snake_case)]
 
