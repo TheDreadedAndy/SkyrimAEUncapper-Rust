@@ -60,12 +60,17 @@ impl VersionDb {
         #[cfg(feature = "by_offset")]
         let mut by_offset = HashMap::<usize, usize>::new();
 
+        //
+        // Note that we hard-code the build number to 0, as Bethesda doesn't use it.
+        //
+        // The SKSE64 team uses it to denote which store the game was obtained from, so
+        // we can't just pull it from our version structure.
+        //
         let mut f = std::fs::File::open(PathBuf::from(format!(
-            "Data\\SKSE\\Plugins\\versionlib-{}-{}-{}-{}.bin",
+            "Data\\SKSE\\Plugins\\versionlib-{}-{}-{}-0.bin",
             version.major(),
             version.minor(),
-            version.build(),
-            version.runtime_type()
+            version.build()
         ))).unwrap();
 
         let (ptr_size, addr_count) = Self::parse_header(&mut f);
