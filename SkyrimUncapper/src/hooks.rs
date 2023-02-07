@@ -18,6 +18,7 @@ use crate::settings;
 use crate::hook_wrappers::*;
 use crate::skyrim::{ActorAttribute, ActorValueOwner};
 use crate::skyrim::{get_player_avo, get_player_perk_pool};
+use crate::skyrim::{player_avo_get_base_unchecked, player_avo_get_current_unchecked};
 use crate::skyrim::{player_avo_get_base, player_avo_get_current, game_setting};
 use crate::skyrim::{player_avo_mod_base, player_avo_mod_current, get_player_level};
 use crate::skyrim::{improve_player_skill_points, PlayerSkills};
@@ -425,7 +426,7 @@ extern "system" fn get_skill_cap_hook(
     skill: c_int
 ) -> f32 {
     assert!(settings::is_skill_cap_enabled());
-    settings::get_skill_cap(ActorAttribute::from_raw(skill).unwrap())
+    settings::get_skill_cap(ActorAttribute::from_raw_skill(skill).unwrap())
 }
 
 /// Begins a calculation for weapon charge by setting the enchant cap to use the charge value.
@@ -458,18 +459,12 @@ extern "system" fn calculate_charge_points_per_use_hook(
 ) -> f32 {
     assert!(settings::is_enchant_patch_enabled());
 
-    let av = get_player_avo();
-
     let cost_exponent = game_setting!("fEnchantingCostExponent").get_float();
     let cost_base = game_setting!("fEnchantingSkillCostBase").get_float();
     let cost_scale = game_setting!("fEnchantingSkillCostScale").get_float();
     let cost_mult = game_setting!("fEnchantingSkillCostMult").get_float();
     let cap = settings::get_enchant_charge_cap();
-    let enchanting_level = cap.min(unsafe {
-        // SAFETY: We know we were given the player AV, and that the enchanting actor
-        //         attribute is valid.
-        player_avo_get_current(av, ActorAttribute::Enchanting as c_int)
-    });
+    let enchanting_level = cap.min(player_avo_get_current(ActorAttribute::Enchanting));
 
     let base = cost_mult * base_points.powf(cost_exponent);
     if settings::is_enchant_charge_linear() {
@@ -495,13 +490,11 @@ extern "system" fn player_avo_get_current_hook(
 
     let mut val = unsafe {
         // SAFETY: We are passing through the original arguments.
-        player_avo_get_current(av, attr)
+        player_avo_get_current_unchecked(av, attr)
     };
 
-    if let Ok(attr) = ActorAttribute::from_raw(attr) {
-        if attr.is_skill() {
-            val = val.min(settings::get_skill_formula_cap(attr)).max(0.0);
-        }
+    if let Ok(skill) = ActorAttribute::from_raw_skill(attr) {
+        val = val.min(settings::get_skill_formula_cap(skill)).max(0.0);
     }
 
     return val;
@@ -518,14 +511,14 @@ extern "system" fn improve_player_skill_points_hook(
     unk4: bool
 ) {
     assert!(settings::is_skill_exp_enabled());
-    let attr = ActorAttribute::from_raw(attr).unwrap();
-    assert!(attr.is_skill());
 
-    exp *= settings::get_skill_exp_mult(
-        attr,
-        player_avo_get_base(attr) as u32,
-        get_player_level()
-    );
+    if let Ok(skill) = ActorAttribute::from_raw_skill(attr) {
+        exp *= settings::get_skill_exp_mult(
+            skill,
+            player_avo_get_base(skill) as u32,
+            get_player_level()
+        );
+    }
 
     unsafe {
         // SAFETY: We give it the same args, except the modified exp.
@@ -553,14 +546,14 @@ extern "system" fn improve_level_exp_by_skill_level_hook(
     attr: c_int
 ) -> f32 {
     assert!(settings::is_level_exp_enabled());
-    let attr = ActorAttribute::from_raw(attr).unwrap();
-    assert!(attr.is_skill());
 
-    exp *= settings::get_level_exp_mult(
-        attr,
-        player_avo_get_base(attr) as u32,
-        get_player_level()
-    );
+    if let Ok(skill) = ActorAttribute::from_raw_skill(attr) {
+        exp *= settings::get_level_exp_mult(
+            skill,
+            player_avo_get_base(skill) as u32,
+            get_player_level()
+        );
+    }
 
     exp
 }
@@ -603,8 +596,7 @@ extern "system" fn check_condition_for_legendary_skill_hook(
     skill: c_int
 ) -> bool {
     assert!(settings::is_legendary_enabled());
-    let skill = ActorAttribute::from_raw(skill).unwrap();
-    assert!(skill.is_skill());
+    let skill = ActorAttribute::from_raw_skill(skill).unwrap();
     settings::is_legendary_available(player_avo_get_base(skill) as u32)
 }
 
@@ -614,8 +606,7 @@ extern "system" fn hide_legendary_button_hook(
     skill: c_int
 ) -> bool {
     assert!(settings::is_legendary_enabled());
-    let skill = ActorAttribute::from_raw(skill).unwrap();
-    assert!(skill.is_skill());
+    let skill = ActorAttribute::from_raw_skill(skill).unwrap();
     settings::is_legendary_button_visible(player_avo_get_base(skill) as u32)
 }
 
@@ -627,18 +618,21 @@ extern "system" fn clear_legendary_button_hook(
     const BASE_LEGENDARY_THRESHOLD: u32 = 100;
 
     assert!(settings::is_legendary_enabled());
-    let skill = ActorAttribute::from_raw(skill).unwrap();
-    assert!(skill.is_skill());
 
-    let level = player_avo_get_base(skill) as u32;
-    let game_vis = level >= BASE_LEGENDARY_THRESHOLD;
-    let mod_vis = settings::is_legendary_button_visible(level);
+    if let Ok(skill) = ActorAttribute::from_raw_skill(skill) {
+        let level = player_avo_get_base(skill) as u32;
+        let game_vis = level >= BASE_LEGENDARY_THRESHOLD;
+        let mod_vis = settings::is_legendary_button_visible(level);
 
-    if game_vis == mod_vis {
-        level as f32
-    } else if game_vis { // visible, but shouldn't be.
-        (BASE_LEGENDARY_THRESHOLD - 1) as f32
-    } else { // invisible, but shouldn't be.
-        BASE_LEGENDARY_THRESHOLD as f32
+        if game_vis == mod_vis {
+            level as f32
+        } else if game_vis { // visible, but shouldn't be.
+            (BASE_LEGENDARY_THRESHOLD - 1) as f32
+        } else { // invisible, but shouldn't be.
+            BASE_LEGENDARY_THRESHOLD as f32
+        }
+    } else {
+        // Some other perk menu. E.g. vampire or werewolf
+        unsafe { player_avo_get_base_unchecked(get_player_avo(), skill) }
     }
 }

@@ -93,7 +93,7 @@ skill_cap_patch_wrapper:
     sub $0x28, %rsp
 
     mov %esi, %ecx // pass SkillID in ecx to hook.
-    call player_avo_get_base
+    call player_avo_get_base_unchecked
     movaps %xmm0, %xmm8 // Reimplement original move.
 
     mov %esi, %ecx // Move skill ID back into first arg.
@@ -185,7 +185,7 @@ display_true_skill_color_hook:
     mov %edi, %edx
 
     // Call the unmodified function.
-    call player_avo_get_current
+    call player_avo_get_current_unchecked
 
     add $0x28, %rsp
     ret

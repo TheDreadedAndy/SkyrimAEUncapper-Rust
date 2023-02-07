@@ -117,13 +117,13 @@ disarray::disarray! {
 extern "system" {
     fn get_level_net(player: *mut PlayerCharacter) -> u16;
     fn get_game_setting_net(map: *mut SettingCollectionMap, setting: *const c_char) -> *mut Setting;
-    fn player_avo_get_base_net(av: *mut ActorValueOwner, attr: ActorAttribute) -> f32;
+    fn player_avo_get_base_net(av: *mut ActorValueOwner, attr: c_int) -> f32;
     fn player_avo_get_current_net(av: *mut ActorValueOwner, attr: c_int, patch_en: bool) -> f32;
-    fn player_avo_mod_base_net(av: *mut ActorValueOwner, attr: ActorAttribute, delta: f32);
+    fn player_avo_mod_base_net(av: *mut ActorValueOwner, attr: c_int, delta: f32);
     fn player_avo_mod_current_net(
         av: *mut ActorValueOwner,
         unk1: u32,
-        attr: ActorAttribute,
+        attr: c_int,
         delta: f32
     );
     fn improve_player_skill_points_net(
@@ -193,12 +193,17 @@ pub fn get_game_setting(
     }
 }
 
+///
 /// Gets the base value of a player attribute.
+///
+/// In order to use this function safely, the given attribute and avo must be valid.
+///
 #[no_mangle]
-pub extern "system" fn player_avo_get_base(
-    attr: ActorAttribute
+pub unsafe extern "system" fn player_avo_get_base_unchecked(
+    av: *mut ActorValueOwner,
+    attr: c_int
 ) -> f32 {
-    unsafe { player_avo_get_base_net(get_player_avo(), attr) }
+    player_avo_get_base_net(av, attr)
 }
 
 ///
@@ -207,11 +212,25 @@ pub extern "system" fn player_avo_get_base(
 /// In order to use this function safely, the given AVO and attr must be valid.
 ///
 #[no_mangle]
-pub unsafe extern "system" fn player_avo_get_current(
+pub unsafe extern "system" fn player_avo_get_current_unchecked(
     av: *mut ActorValueOwner,
     attr: c_int
 ) -> f32 {
-    unsafe { player_avo_get_current_net(av, attr, settings::is_skill_formula_cap_enabled()) }
+    player_avo_get_current_net(av, attr, settings::is_skill_formula_cap_enabled())
+}
+
+/// Gets the base value of the given attribute.
+pub fn player_avo_get_base(
+    attr: ActorAttribute
+) -> f32 {
+    unsafe { player_avo_get_base_unchecked(get_player_avo(), attr as c_int) }
+}
+
+/// Gets the current value of the given attribute.
+pub fn player_avo_get_current(
+    attr: ActorAttribute
+) -> f32 {
+    unsafe { player_avo_get_current_unchecked(get_player_avo(), attr as c_int) }
 }
 
 /// Modifies the base value of a player attribute.
@@ -219,7 +238,7 @@ pub fn player_avo_mod_base(
     attr: ActorAttribute,
     val: f32
 ) {
-    unsafe { player_avo_mod_base_net(get_player_avo(), attr, val) }
+    unsafe { player_avo_mod_base_net(get_player_avo(), attr as c_int, val) }
 }
 
 /// Modifies the current value of a player attribute.
@@ -228,7 +247,7 @@ pub fn player_avo_mod_current(
     val: f32
 ) {
     // No idea what second arg does; just match game calls.
-    unsafe { player_avo_mod_current_net(get_player_avo(), 0, attr, val) }
+    unsafe { player_avo_mod_current_net(get_player_avo(), 0, attr as c_int, val) }
 }
 
 /// Improves the skill experience of a player skill.

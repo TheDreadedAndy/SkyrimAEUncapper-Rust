@@ -92,7 +92,7 @@ pub trait HungarianAttribute: _private::Sealed + Copy {
 }
 
 impl ActorAttribute {
-    /// @brief Converts a c_int into an ActorAttribute, if it has a known value.
+    /// Converts a c_int into an ActorAttribute, if it has a known value.
     pub fn from_raw(
         attr: c_int
     ) -> Result<Self, ()> {
@@ -106,6 +106,13 @@ impl ActorAttribute {
         } else {
             Err(())
         }
+    }
+
+    /// Converts a c_int into a skill attribute, if the value is a known skill value.
+    pub fn from_raw_skill(
+        attr: c_int
+    ) -> Result<Self, ()> {
+        Self::from_raw(attr).and_then(|a| if a.is_skill() { Ok(a) } else { Err(()) })
     }
 
     /// @brief Checks if the invoking attribute is a skill.
