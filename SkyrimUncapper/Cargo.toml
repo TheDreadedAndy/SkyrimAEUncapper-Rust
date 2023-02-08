@@ -12,6 +12,7 @@ alloc_trampoline = ["skyrim_patcher/alloc_trampoline"]
 by_offset = ["skyrim_patcher/by_offset"]
 
 [dependencies]
+racy_cell = { path = "../racy_cell" }
 configparser = "3.0.2"
 later = { path = "../later" }
 disarray = { path = "../disarray" }

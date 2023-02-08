@@ -318,15 +318,14 @@ disarray::disarray! {
                 entry: legendary_reset_skill_level_wrapper as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id { id: 52591, offset: 0x1b9 },
+            loc: GameLocation::Id { id: 52591, offset: 0x1d0 },
             sig: signature![
+                0x0f, 0x2f, 0x05, ?, ?, ?, ?,
+                0x0f, 0x82, 0x27, 0x01, 0x00, 0x00,
                 0x48, 0x8b, 0x0d, ?, ?, ?, ?,
                 0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
                 0x48, 0x8b, 0x01,
-                0x8b, 0x56, 0x1c,
-                0xff, 0x50, 0x18,
-                0x0f, 0x2f, 0x05, ?, ?, ?, ?,
-                0x0f, 0x82, ?, ?, ?, ?; 36
+                0xf3, 0x0f, 0x10, 0x15, ?, ?, ?, ?; 38
             ]
         },
 
@@ -579,15 +578,11 @@ extern "system" fn improve_attribute_when_level_up_hook(
 #[no_mangle]
 extern "system" fn legendary_reset_skill_level_hook(
     base_level: f32
-) {
+) -> f32 {
     assert!(settings::is_legendary_enabled());
     assert!(base_level >= 0.0);
-
-    let reset_val = game_setting!("fLegendarySkillResetValue");
-    reset_val.set_float(settings::get_post_legendary_skill_level(
-            reset_val.get_float(),
-            base_level
-    ));
+    let base_val = game_setting!("fLegendarySkillResetValue");
+    settings::get_post_legendary_skill_level(base_val.get_float(), base_level)
 }
 
 /// Overwrites the check which determines when a skill can be legendary'd.

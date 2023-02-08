@@ -51,10 +51,10 @@ pub struct SkseInterface {
     pub runtime_version: Option<SkseVersion>,
     pub editor_version: u32,
     pub is_editor: u32,
-    pub query_interface: extern "system" fn(u32) -> *mut c_void,
-    pub get_plugin_handle: extern "system" fn() -> u32,
-    pub get_release_index: extern "system" fn() -> u32,
-    pub get_plugin_info: extern "system" fn(*const c_char) -> *const PluginInfo
+    pub query_interface: unsafe extern "system" fn(u32) -> *mut c_void,
+    pub get_plugin_handle: unsafe extern "system" fn() -> u32,
+    pub get_release_index: unsafe extern "system" fn() -> u32,
+    pub get_plugin_info: unsafe extern "system" fn(*const c_char) -> *const PluginInfo
 }
 
 #[repr(C)]

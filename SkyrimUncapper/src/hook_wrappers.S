@@ -269,8 +269,21 @@ improve_attribute_when_level_up_wrapper:
  */
 legendary_reset_skill_level_wrapper:
     SAVEALL
+
+    // Get the level we should set the legendary skill to.
     call legendary_reset_skill_level_hook
-    RESTOREALL
+
+    // Save the new value in what will be arg 3 (xmm2) of the call we return to.
+    movdqu %xmm0, 0x40(%rsp)
+
+    // Get the player AVO, we will return back to a call which applies
+    // the new skill level value.
+    call get_player_avo
+
+    mov %rax, 0xa8(%rsp) // Move player avo into arg 1 (saved rcx).
+    mov (%rax), %rax     // Load v-table for the call we return to.
+
+    RESTOREALL retgpr=1
     ret
 
 /*
