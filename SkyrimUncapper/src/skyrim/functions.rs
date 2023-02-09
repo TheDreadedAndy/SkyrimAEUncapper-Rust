@@ -126,7 +126,7 @@ extern "system" {
         exp: f32,
         unk1: u64,
         unk2: u32,
-        unk3: u8,
+        natural_exp: bool,
         unk4: bool
     );
 }
@@ -244,10 +244,10 @@ pub unsafe extern "system" fn improve_player_skill_points(
     data: *mut PlayerSkills,
     attr: c_int,
     exp: f32,
-    unk1: u64,
-    unk2: u32,
-    unk3: u8,
-    unk4: bool
+    unk1: u64, // r9
+    unk2: u32, // 0x70(%rsp)
+    natural_exp: bool, // true if natural, false if by training.
+    unk4: bool // true if by training and not the end of the count. Controls advancement display?
 ) {
-    unsafe { improve_player_skill_points_net(data, attr, exp, unk1, unk2, unk3, unk4); }
+    unsafe { improve_player_skill_points_net(data, attr, exp, unk1, unk2, natural_exp, unk4); }
 }

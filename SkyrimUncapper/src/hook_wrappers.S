@@ -112,7 +112,7 @@ skill_cap_patch_wrapper:
  * to use the weapon cap if the enchanted item is offensive.
  */
 max_charge_begin_wrapper:
-    SAVEALL is_jump=1
+    SAVEALL
 
     // Reimplement replaced instruction.
     movss %xmm0, 0x160(%rsp)
@@ -120,12 +120,12 @@ max_charge_begin_wrapper:
     mov %r14d, %ecx // Enchantment type is in r14d.
     call max_charge_begin_hook
 
-    RESTOREALL is_jump=1
+    RESTOREALL
 
     // I think this technically violates unwinding calling convention, but we
     // block unwinds below us anyway.
     test %rcx, %rcx // Reimplement replaced test.
-    jmp *max_charge_begin_return_trampoline(%rip)
+    ret
 
 /*
  * Ends a max_charge calculation by returning the skill formula equation
@@ -289,24 +289,13 @@ legendary_reset_skill_level_wrapper:
 /*
  * Overwrites the call to the original legendary skill condition check
  * with a call to our own condition check.
- * Since we are overwriting another fn call, we dont need to reg save.
  *
- * Note that we have to use jumps and not call/ret here, as putting the
- * comparison after the rsp add violates the epilogue calling convention.
- * We can't use leaq to stop the flags from being wiped, either, as that
- * would also violate calling convention.
+ * Since we are overwriting another fn call, we dont need to reg save.
  */
 check_condition_for_legendary_skill_wrapper:
-    mov %edx, %ecx
-    call check_condition_for_legendary_skill_hook
-    cmp $1, %al
-    jmp *check_condition_for_legendary_skill_return_trampoline(%rip)
-
 check_condition_for_legendary_skill_alt_wrapper:
-    mov %edx, %ecx
-    call check_condition_for_legendary_skill_hook
-    cmp $1, %al
-    jmp *check_condition_for_legendary_skill_alt_return_trampoline(%rip)
+    mov %eax, %ecx
+    jmp check_condition_for_legendary_skill_hook
 
 /*
  * Allows the legendary button to be hidden based on an INI setting.
@@ -315,9 +304,7 @@ check_condition_for_legendary_skill_alt_wrapper:
  */
 hide_legendary_button_wrapper:
     mov %r15d, %ecx
-    call hide_legendary_button_hook
-    cmp $1, %al
-    jmp *hide_legendary_button_return_trampoline(%rip)
+    jmp hide_legendary_button_hook
 
 /*
  * Forces the game to clear the legendary button in accordance with

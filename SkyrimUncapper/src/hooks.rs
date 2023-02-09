@@ -23,25 +23,20 @@ use crate::skyrim::{player_avo_get_base, player_avo_get_current, game_setting};
 use crate::skyrim::{player_avo_mod_base, player_avo_mod_current, get_player_level};
 use crate::skyrim::{improve_player_skill_points, PlayerSkills};
 
+/// The base game threshold for legendarying a skill.
+const BASE_LEGENDARY_THRESHOLD: f32 = 100.0;
+
 //
 // Trampolines used by hooks to return to game code.
 //
 // Boing!
 //
 #[no_mangle]
-static max_charge_begin_return_trampoline: GameRef<usize> = GameRef::new();
-#[no_mangle]
 static improve_skill_by_training_return_trampoline: GameRef<usize> = GameRef::new();
 #[no_mangle]
 static improve_player_skill_points_return_trampoline: GameRef<usize> = GameRef::new();
 #[no_mangle]
 static player_avo_get_current_return_trampoline: GameRef<usize> = GameRef::new();
-#[no_mangle]
-static check_condition_for_legendary_skill_return_trampoline: GameRef<usize> = GameRef::new();
-#[no_mangle]
-static check_condition_for_legendary_skill_alt_return_trampoline: GameRef<usize> = GameRef::new();
-#[no_mangle]
-static hide_legendary_button_return_trampoline: GameRef<usize> = GameRef::new();
 
 disarray::disarray! {
     /// The hooks which must be installed by the game patcher.
@@ -80,10 +75,9 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "BeginMaxChargeCalculation",
             enabled: settings::is_enchant_patch_enabled,
-            hook: Hook::Jump12 {
+            hook: Hook::Call12 {
                 entry: max_charge_begin_wrapper as *const u8,
-                clobber: Register::Rax, // Tmp from earlier cmove. Not used again.
-                trampoline: max_charge_begin_return_trampoline.inner()
+                clobber: Register::Rax // Tmp from earlier cmove. Not used again.
             },
             loc: GameLocation::Id { id: 51449, offset: 0xe9 },
             sig: signature![
@@ -333,16 +327,15 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "CheckConditionForLegendarySkill",
             enabled: settings::is_legendary_enabled,
-            hook: Hook::Jump12 {
+            hook: Hook::Call12 {
                 entry: check_condition_for_legendary_skill_wrapper as *const u8,
-                clobber: Register::Rcx,
-                trampoline: check_condition_for_legendary_skill_return_trampoline.inner()
+                clobber: Register::Rdx
             },
-            loc: GameLocation::Id { id: 52520, offset: 0x150 },
+            loc: GameLocation::Id { id: 52520, offset: 0x14e },
             sig: signature![
+                0x8b, 0xd0,
                 0x48, 0x8d, 0x8f, ?, 0x00, 0x00, 0x00,
-                0xff, 0x53, 0x18,
-                0x0f, 0x2f, 0x05, ?, ?, ?, ?; 17
+                0xff, 0x53, 0x18; 12
             ]
         },
 
@@ -350,16 +343,15 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "CheckConditionForLegendarySkillAlt",
             enabled: settings::is_legendary_enabled,
-            hook: Hook::Jump12 {
+            hook: Hook::Call12 {
                 entry: check_condition_for_legendary_skill_alt_wrapper as *const u8,
-                clobber: Register::Rcx,
-                trampoline: check_condition_for_legendary_skill_alt_return_trampoline.inner()
+                clobber: Register::Rdx
             },
-            loc: GameLocation::Id { id: 52510, offset: 0x4d7 },
+            loc: GameLocation::Id { id: 52510, offset: 0x4d5 },
             sig: signature![
+                0x8b, 0xd0,
                 0x48, 0x8d, 0x8f, ?, 0x00, 0x00, 0x00,
-                0xff, 0x53, 0x18,
-                0x0f, 0x2f, 0x05, ?, ?, ?, ?; 17
+                0xff, 0x53, 0x18; 12
             ]
         },
 
@@ -367,10 +359,9 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "HideLegendaryButton",
             enabled: settings::is_legendary_enabled,
-            hook: Hook::Jump12 {
+            hook: Hook::Call12 {
                 entry: hide_legendary_button_wrapper as *const u8,
-                clobber: Register::Rax,
-                trampoline: hide_legendary_button_return_trampoline.inner()
+                clobber: Register::Rax
             },
             loc: GameLocation::Id { id: 52527, offset: 0x153 },
             sig: signature![
@@ -378,8 +369,7 @@ disarray::disarray! {
                 0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
                 0x48, 0x8b, 0x01,
                 0x41, 0x8b, 0xd7,
-                0xff, 0x50, 0x18,
-                0x0f, 0x2f, 0x05, ?, ?, ?, ?; 30
+                0xff, 0x50, 0x18; 23
             ]
         },
 
@@ -506,7 +496,7 @@ extern "system" fn improve_player_skill_points_hook(
     mut exp: f32,
     unk1: u64,
     unk2: u32,
-    unk3: u8,
+    natural_exp: bool,
     unk4: bool
 ) {
     assert!(settings::is_skill_exp_enabled());
@@ -521,7 +511,7 @@ extern "system" fn improve_player_skill_points_hook(
 
     unsafe {
         // SAFETY: We give it the same args, except the modified exp.
-        improve_player_skill_points(skill_data, attr as c_int, exp, unk1, unk2, unk3, unk4);
+        improve_player_skill_points(skill_data, attr as c_int, exp, unk1, unk2, natural_exp, unk4);
     }
 }
 
@@ -585,46 +575,73 @@ extern "system" fn legendary_reset_skill_level_hook(
     settings::get_post_legendary_skill_level(base_val.get_float(), base_level)
 }
 
+///
 /// Overwrites the check which determines when a skill can be legendary'd.
+///
+/// Due to how this function is injected, we return a "bool" based on the legendary
+/// threshold. If the condition is valid, we return the threshold. Otherwise, we
+/// return threshold - 1.
+///
 #[no_mangle]
 extern "system" fn check_condition_for_legendary_skill_hook(
     skill: c_int
-) -> bool {
+) -> f32 {
     assert!(settings::is_legendary_enabled());
     let skill = ActorAttribute::from_raw_skill(skill).unwrap();
-    settings::is_legendary_available(player_avo_get_base(skill) as u32)
+
+    if settings::is_legendary_available(player_avo_get_base(skill) as u32) {
+        BASE_LEGENDARY_THRESHOLD
+    } else {
+        BASE_LEGENDARY_THRESHOLD - 1.0
+    }
 }
 
+///
 /// Determines if the legendary button should be displayed for the given skill.
+///
+/// Due to how this function is injected, we return a "bool" based on the legendary
+/// threshold. If the condition is valid, we return the threshold. Otherwise, we
+/// return threshold - 1.
+///
 #[no_mangle]
 extern "system" fn hide_legendary_button_hook(
     skill: c_int
-) -> bool {
+) -> f32 {
     assert!(settings::is_legendary_enabled());
     let skill = ActorAttribute::from_raw_skill(skill).unwrap();
-    settings::is_legendary_button_visible(player_avo_get_base(skill) as u32)
+
+    if settings::is_legendary_button_visible(player_avo_get_base(skill) as u32) {
+        BASE_LEGENDARY_THRESHOLD
+    } else {
+        BASE_LEGENDARY_THRESHOLD - 1.0
+    }
 }
 
+///
 /// Determines if we should continue to display the legendary button after moving the skill view.
+///
+/// The value determined depends on how the state of the legendary button hint differs from
+/// what we want. If it is in the correct state, we make no changes. Otherwise, we return the
+/// threshold or the threshold - 1 depending on if we want the hint to be invisible or
+/// visible, respectively.
+///
 #[no_mangle]
 extern "system" fn clear_legendary_button_hook(
     skill: c_int
 ) -> f32 {
-    const BASE_LEGENDARY_THRESHOLD: u32 = 100;
-
     assert!(settings::is_legendary_enabled());
 
     if let Ok(skill) = ActorAttribute::from_raw_skill(skill) {
-        let level = player_avo_get_base(skill) as u32;
+        let level = player_avo_get_base(skill);
         let game_vis = level >= BASE_LEGENDARY_THRESHOLD;
-        let mod_vis = settings::is_legendary_button_visible(level);
+        let mod_vis = settings::is_legendary_button_visible(level as u32);
 
         if game_vis == mod_vis {
-            level as f32
+            level
         } else if game_vis { // visible, but shouldn't be.
-            (BASE_LEGENDARY_THRESHOLD - 1) as f32
+            BASE_LEGENDARY_THRESHOLD - 1.0
         } else { // invisible, but shouldn't be.
-            BASE_LEGENDARY_THRESHOLD as f32
+            BASE_LEGENDARY_THRESHOLD
         }
     } else {
         // Some other perk menu. E.g. vampire or werewolf
