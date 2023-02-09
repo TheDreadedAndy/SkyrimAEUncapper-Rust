@@ -11,7 +11,7 @@ use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::mem::size_of;
 
-use skse64::version::SkseVersion;
+use skse64::version::{SkseVersion, RUNTIME_VERSION_1_6_317};
 use skse64::reloc::RelocAddr;
 
 /// A version database, which allows for offsets/ids to be searched for by each other.
@@ -60,6 +60,14 @@ impl VersionDb {
         #[cfg(feature = "by_offset")]
         let mut by_offset = HashMap::<usize, usize>::new();
 
+        // Figure out what kind of version db we're loading, so we can enforce the format later.
+        // It also effects the base of the file name.
+        let (file_base, format) = if version < RUNTIME_VERSION_1_6_317 {
+            ("version", 1)
+        } else {
+            ("versionlib", 2)
+        };
+
         //
         // Note that we hard-code the build number to 0, as Bethesda doesn't use it.
         //
@@ -67,13 +75,14 @@ impl VersionDb {
         // we can't just pull it from our version structure.
         //
         let mut f = std::fs::File::open(PathBuf::from(format!(
-            "Data\\SKSE\\Plugins\\versionlib-{}-{}-{}-0.bin",
+            "Data\\SKSE\\Plugins\\{}-{}-{}-{}-0.bin",
+            file_base,
             version.major(),
             version.minor(),
             version.build()
         ))).unwrap();
 
-        let (ptr_size, addr_count) = Self::parse_header(&mut f);
+        let (ptr_size, addr_count) = Self::parse_header(&mut f, format);
         let (mut pid, mut poffset) = (0, 0);
         for _ in 0..addr_count {
             let (id, offset) = Self::parse_addr(&mut f, pid, poffset, ptr_size);
@@ -122,7 +131,7 @@ impl VersionDb {
     /// Parses the header of a version database file.
     ///
     /// The version db file format seems to be as follows:
-    /// - Each binary begins with a u32 version, where 2 is AE.
+    /// - Each binary begins with a u32 version, where 1 is SE and 2 is AE.
     /// - After that, there is a (major, minor, build, sub) u32 tuple. This can be skipped.
     /// - The version tuple is followed by a u32 module name string len, between 0 and 0x10000.
     /// - This string length is followed by exactly len many bytes encoding the name.
@@ -131,9 +140,10 @@ impl VersionDb {
     /// - The remainder of the database is the addresses contained within it.
     ///
     fn parse_header(
-        f: &mut File
+        f: &mut File,
+        format: u32
     ) -> (u32, u32) {
-        assert!(Self::read::<u32>(f) == 2); // version
+        assert!(Self::read::<u32>(f) == format); // version
         Self::skip(f, (size_of::<u32>() * 4) as u32); // Runtime version
         let mod_len = Self::read::<u32>(f); // Module name length
         Self::skip(f, mod_len); // Module name.
