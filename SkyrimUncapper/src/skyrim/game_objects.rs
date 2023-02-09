@@ -1,38 +1,29 @@
 //!
-//! @file reloc.rs
+//! @file game_objects.rs
 //! @author Andrew Spaulding (Kasplat)
 //! @brief Exposes game objects and functions which must be located at runtime.
 //! @bug No known bugs.
 //!
 
-use std::ffi::{c_char, c_int};
+use std::ffi::c_int;
 
-use skyrim_patcher::{GameRef, Descriptor, GameLocation};
+use skyrim_patcher::{GameRef, Descriptor, GameLocation, AddrId};
 
 use super::{PlayerCharacter, PlayerSkills};
-use super::{ActorValueOwner, ActorAttribute, SettingCollectionMap, Setting};
+use super::{ActorValueOwner, ActorAttribute};
 use crate::settings;
-
-/// Gets a game setting, given a string literal.
-macro_rules! game_setting {
-    ( $str:literal ) => {{
-        let s = ::std::concat!($str, "\0").as_bytes().as_ptr() as *const ::std::ffi::c_char;
-        unsafe { $crate::skyrim::get_game_setting(s) }
-    }}
-}
-pub (in crate) use game_setting;
 
 // Game objects.
 static PLAYER_OBJECT: GameRef<*mut *mut PlayerCharacter> = GameRef::new();
-static GAME_SETTINGS_OBJECT: GameRef<*mut *mut SettingCollectionMap> = GameRef::new();
+pub static ENCHANTING_SKILL_COST_BASE: GameRef<&'static f32> = GameRef::new();
+pub static ENCHANTING_SKILL_COST_SCALE: GameRef<&'static f32> = GameRef::new();
+pub static ENCHANTING_COST_EXPONENT: GameRef<&'static f32> = GameRef::new();
+pub static ENCHANTING_SKILL_COST_MULT: GameRef<&'static f32> = GameRef::new();
+pub static LEGENDARY_SKILL_RESET_VALUE: GameRef<&'static f32> = GameRef::new();
 
 // Game functions. These are wrapped by C++ catchers and then safe implementations later.
 #[no_mangle]
 static get_level_entry: GameRef<fn(*mut PlayerCharacter) -> u16> = GameRef::new();
-#[no_mangle]
-static get_game_setting_entry: GameRef<
-    unsafe extern "system" fn(*mut SettingCollectionMap, *const c_char) -> *mut Setting
-> = GameRef::new();
 #[no_mangle]
 static player_avo_get_base_entry: GameRef<
     unsafe extern "system" fn(*mut ActorValueOwner, ActorAttribute) -> f32
@@ -58,50 +49,68 @@ disarray::disarray! {
     ///
     pub static GAME_SIGNATURES: [Descriptor; NUM_GAME_SIGNATURES] = [
         Descriptor::Object {
-            name: "g_thePlayer",
-            loc: GameLocation::Id { id: 403521, offset: 0 },
-            result: PLAYER_OBJECT.inner()
+            name: "fEnchantingSkillCostBase",
+            loc: GameLocation::Id { id: AddrId::All { se: 506021, ae: 375771 }, offset: 0 },
+            result: ENCHANTING_SKILL_COST_BASE.inner()
         },
 
         Descriptor::Object {
-            name: "g_gameSettingCollection",
-            loc: GameLocation::Id { id: 400782, offset: 0 },
-            result: GAME_SETTINGS_OBJECT.inner()
+            name: "fEnchantingSkillCostMult",
+            loc: GameLocation::Id { id: AddrId::All { se: 506023, ae: 375774 }, offset: 0 },
+            result: ENCHANTING_SKILL_COST_MULT.inner()
+        },
+
+        Descriptor::Object {
+            name: "fEnchantingSkillCostScale",
+            loc: GameLocation::Id { id: AddrId::All { se: 506025, ae: 375777 }, offset: 0 },
+            result: ENCHANTING_SKILL_COST_SCALE.inner()
+        },
+
+        Descriptor::Object {
+            name: "fEnchantingCostExponent",
+            loc: GameLocation::Id { id: AddrId::All { se: 506027, ae: 375780 }, offset: 0 },
+            result: ENCHANTING_COST_EXPONENT.inner()
+        },
+
+        Descriptor::Object {
+            name: "fLegendarySkillResetValue",
+            loc: GameLocation::Id { id: AddrId::All { se: 507065, ae: 377771 }, offset: 0 },
+            result: LEGENDARY_SKILL_RESET_VALUE.inner()
+        },
+
+        Descriptor::Object {
+            name: "g_thePlayer",
+            loc: GameLocation::Id { id: AddrId::All { se: 517014, ae: 403521 }, offset: 0 },
+            result: PLAYER_OBJECT.inner()
         },
 
         Descriptor::Function {
             name: "GetLevel",
-            loc: GameLocation::Id { id: 37334, offset: 0 },
+            loc: GameLocation::Id { id: AddrId::All { se: 36344, ae: 37334 }, offset: 0 },
             result: get_level_entry.inner()
         },
 
         Descriptor::Function {
-            name: "GetGameSetting",
-            loc: GameLocation::Id { id: 22788, offset: 0 },
-            result: get_game_setting_entry.inner()
-        },
-
-        Descriptor::Function {
             name: "PlayerAVOGetBase",
-            loc: GameLocation::Id { id: 38464, offset: 0 },
+            loc: GameLocation::Id { id: AddrId::All { se: 37519, ae: 38464 }, offset: 0 },
             result: player_avo_get_base_entry.inner()
         },
 
         Descriptor::Function {
             name: "PlayerAVOGetCurrent",
-            loc: GameLocation::Id { id: 38462, offset: 0 },
+            loc: GameLocation::Id { id: AddrId::All { se: 37517, ae: 38462 }, offset: 0 },
             result: player_avo_get_current_entry.inner()
         },
 
         Descriptor::Function {
             name: "PlayerAVOModBase",
-            loc: GameLocation::Id { id: 38466, offset: 0 },
+            loc: GameLocation::Id { id: AddrId::All { se: 37521, ae: 38466 }, offset: 0 },
             result: player_avo_mod_base_entry.inner()
         },
 
         Descriptor::Function {
             name: "PlayerAVOModCurrent",
-            loc: GameLocation::Id { id: 38467, offset: 0 },
+            loc: GameLocation::Id { id: AddrId::All { se: 37522, ae: 38467 }, offset: 0 },
             result: player_avo_mod_current_entry.inner()
         }
     ];
@@ -110,7 +119,6 @@ disarray::disarray! {
 // C++ wrappers, which catch any exceptions and redirect to us in a defined way.
 extern "system" {
     fn get_level_net(player: *mut PlayerCharacter) -> u16;
-    fn get_game_setting_net(map: *mut SettingCollectionMap, setting: *const c_char) -> *mut Setting;
     fn player_avo_get_base_net(av: *mut ActorValueOwner, attr: c_int) -> f32;
     fn player_avo_get_current_net(av: *mut ActorValueOwner, attr: c_int, patch_en: bool) -> f32;
     fn player_avo_mod_base_net(av: *mut ActorValueOwner, attr: c_int, delta: f32);
@@ -172,13 +180,6 @@ pub fn get_player_perk_pool() -> &'static core::cell::Cell<u8> {
 /// Gets the current level of the player.
 pub fn get_player_level() -> u32 {
     unsafe { get_level_net(*(PLAYER_OBJECT.get())) as u32 }
-}
-
-/// Gets the game setting associated with the null-terminated c-string.
-pub unsafe fn get_game_setting(
-    var: *const c_char
-) -> &'static Setting {
-    get_game_setting_net(*(GAME_SETTINGS_OBJECT.get()), var).as_ref().unwrap()
 }
 
 ///

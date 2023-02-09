@@ -38,13 +38,15 @@ macro_rules! plugin_version_data {
 }
 pub use plugin_version_data;
 
+// Plugin query info returned to skse for SE.
 #[repr(C)]
 pub struct PluginInfo {
     pub info_version: u32,
     pub name: *const c_char,
-    pub version: u32
+    pub version: Option<SkseVersion>
 }
 
+// IMPORTANT: the bottom three fields DO NOT EXIST for SE.
 #[repr(C)]
 pub struct SkseInterface {
     pub skse_version: Option<SkseVersion>,
@@ -57,6 +59,7 @@ pub struct SkseInterface {
     pub get_plugin_info: unsafe extern "system" fn(*const c_char) -> *const PluginInfo
 }
 
+// Plugin info exported to skse for AE.
 #[repr(C)]
 pub struct SksePluginVersionData {
     pub data_version: u32, // Self::VERSION
@@ -68,6 +71,21 @@ pub struct SksePluginVersionData {
     pub version_indep: u32,
     pub compat_versions: [Option<SkseVersion>; 16], // None-terminated.
     pub se_version_required: Option<SkseVersion> // Minimum SKSE version required.
+}
+
+impl PluginInfo {
+    pub const VERSION: u32 = 1;
+
+    /// Creates SE plugin info from an AE plugin data structure.
+    pub fn from_ae(
+        ae: &SksePluginVersionData
+    ) -> Self {
+        Self {
+            info_version: Self::VERSION,
+            name: ae.name.as_ptr(),
+            version: Some(ae.plugin_version)
+        }
+    }
 }
 
 impl SksePluginVersionData {

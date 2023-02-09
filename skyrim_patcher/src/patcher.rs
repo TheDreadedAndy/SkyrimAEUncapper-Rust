@@ -28,6 +28,16 @@ use crate::sig::{Signature, BinarySig};
 
 pub use skse64::safe::Register;
 
+/// Contains a version independent address ID for the specified skyrim versions.
+pub enum AddrId {
+    Se(usize),
+    Ae(usize),
+    All {
+        se: usize,
+        ae: usize
+    }
+}
+
 /// Tracks a location in the skyrim game binary.
 pub enum GameLocation {
     #[cfg(feature = "by_offset")]
@@ -37,7 +47,7 @@ pub enum GameLocation {
     },
 
     Id {
-        id: usize,
+        id: AddrId,
         offset: usize
     }
 }
@@ -115,7 +125,9 @@ pub enum Descriptor {
 }
 
 /// Describes error reasons for why a descriptor result could not be located.
+#[derive(Debug)]
 enum DescriptorError {
+    IncompatibleGameVersion,
     Disabled,
     Missing,
     Mismatch(Signature, BinarySig)
@@ -131,6 +143,21 @@ type FindResult = Result<RelocAddr, DescriptorError>;
 ///
 #[repr(transparent)]
 pub struct GameRef<T>(UnsafeCell<usize>, std::marker::PhantomData<T>);
+
+impl AddrId {
+    /// Gets the address independent ID, if it is compatible with the running game version.
+    fn get(
+        &self
+    ) -> Result<usize, DescriptorError> {
+        let is_se = skse64::version::current_runtime() <= skse64::version::RUNTIME_VERSION_1_5_97;
+        let id = match self {
+            Self::Se(id) => if is_se { Some(*id) } else { None },
+            Self::Ae(id) => if is_se { None } else { Some(*id) },
+            Self::All { se, ae } => if is_se { Some(*se) } else { Some(*ae) }
+        };
+        id.ok_or(DescriptorError::IncompatibleGameVersion)
+    }
+}
 
 impl GameLocation {
     /// Finds the game address specified by this location.
@@ -149,7 +176,7 @@ impl GameLocation {
                 }
             },
             Self::Id { id, offset } => {
-                if let Ok(ra) = db.find_addr_by_id(*id) {
+                if let Ok(ra) = db.find_addr_by_id(id.get()?) {
                     Ok(ra + *offset)
                 } else {
                     Err(DescriptorError::Missing)
@@ -175,9 +202,9 @@ impl std::fmt::Display for GameLocation {
             },
             Self::Id { id, offset } => {
                 if *offset == 0 {
-                    write!(f, "[ID: {}]", id)
+                    write!(f, "[ID: {}]", id.get().unwrap())
                 } else {
-                    write!(f, "([ID: {}] + {:#x})", id, offset)
+                    write!(f, "([ID: {}] + {:#x})", id.get().unwrap(), offset)
                 }
             }
         }
@@ -335,7 +362,8 @@ impl Descriptor {
                 );
                 skse_message!("\\------> [EXPECTED] {}", sig);
                 skse_message!(" \\-----> [FOUND...] {}", bsig);
-            }
+            },
+            Err(DescriptorError::IncompatibleGameVersion) => (), // Invalid, so we ignore it.
         }
     }
 
@@ -456,7 +484,7 @@ pub fn apply<const NUM_PATCHES: usize>(
                     alloc_size += h.alloc_size();
                 }
             },
-            Err(DescriptorError::Disabled) => (),
+            Err(DescriptorError::Disabled) | Err(DescriptorError::IncompatibleGameVersion) => (),
             _ => {
                 fails += 1;
             }

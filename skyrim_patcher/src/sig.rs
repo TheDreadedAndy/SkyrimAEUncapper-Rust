@@ -13,7 +13,7 @@ use skse64::reloc::RelocAddr;
 /// This enumeration is used in the system that ensures that, regardless of game version, the
 /// intended code is being overwritten.
 ///
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 #[repr(u8)]
 pub enum Opcode {
     Code(u8),
@@ -21,10 +21,11 @@ pub enum Opcode {
 }
 
 /// Identifies a distinct string of binary code within the skyrim binary.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Signature(&'static [Opcode]);
 
 /// Helper to print a signature in the games code.
+#[derive(Debug)]
 pub (in crate) struct BinarySig(RelocAddr, usize);
 
 /// @brief Generates a new signature out of hex digits and question marks.

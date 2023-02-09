@@ -27,7 +27,6 @@ do {\
 extern "C" {
     /* Native entry points */
     extern u16 (*get_level_entry)(void*);
-    extern void *(*get_game_setting_entry)(void*, const char*);
     extern f32 (*player_avo_get_base_entry)(void*, int);
     extern f32 (*player_avo_get_current_entry)(void*, int);
     extern void (*player_avo_mod_base_entry)(void*, int, float);
@@ -49,14 +48,6 @@ extern "C" {
         void *player
     ) {
         CATCH_UNWIND(return get_level_entry(player););
-    }
-
-    void *
-    get_game_setting_net(
-        void *player,
-        const char *setting
-    ) {
-        CATCH_UNWIND(return get_game_setting_entry(player, setting););
     }
 
     f32

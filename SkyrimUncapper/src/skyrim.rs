@@ -7,10 +7,8 @@
 
 mod actor_attribute;
 mod player;
-mod settings;
-mod functions;
+mod game_objects;
 
 pub use actor_attribute::*;
 pub use player::*;
-pub use settings::*;
-pub use functions::*;
+pub use game_objects::*;

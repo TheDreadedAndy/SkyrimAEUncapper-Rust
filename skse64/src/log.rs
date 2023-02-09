@@ -17,7 +17,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxA, MB_ICONERROR};
 use windows_sys::Win32::UI::Shell::{SHGetFolderPathA, CSIDL_MYDOCUMENTS, SHGFP_TYPE_CURRENT};
 use windows_sys::Win32::Foundation::MAX_PATH;
 
-use crate::SKSEPlugin_Version;
+use crate::loader::SKSEPlugin_Version;
 
 ///
 /// The structure used to format information before writing it to the log file.

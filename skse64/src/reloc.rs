@@ -11,7 +11,7 @@ use windows_sys::Win32::System::LibraryLoader::GetModuleHandleA;
 
 /// Holds a game address, which can be accessed by offset or address.
 #[repr(transparent)]
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct RelocAddr(usize);
 
 /// Holds the base address of the skyrim binary.
