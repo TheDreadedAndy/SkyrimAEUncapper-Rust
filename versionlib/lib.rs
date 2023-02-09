@@ -1,25 +1,28 @@
 //!
 //! @file lib.rs
-//! @author Andrew Spaulding (aspauldi)
+//! @author Andrew Spaulding (Kasplat)
 //! @brief Reimplements the Skyrim AE versionlibdb header.
 //! @bug No known bugs.
 //!
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::mem::size_of;
 
+#[cfg(feature = "dump")]
+use std::str::FromStr;
+
 use skse64::version::{SkseVersion, RUNTIME_VERSION_1_6_317};
+
+#[cfg(not(feature = "dump"))]
 use skse64::reloc::RelocAddr;
 
 /// A version database, which allows for offsets/ids to be searched for by each other.
 pub struct VersionDb {
-    by_id: HashMap<usize, usize>,
-    #[cfg(feature = "by_offset")]
-    by_offset: HashMap<usize, usize>,
-    version: SkseVersion
+    pub (in crate) by_id: HashMap<usize, usize>,
+    #[cfg(all(feature = "by_offset", not(feature = "dump")))] by_offset: HashMap<usize, usize>,
+    #[cfg(not(feature = "dump"))] version: SkseVersion
 }
 
 ///
@@ -51,14 +54,11 @@ impl Unsigned for u64 {}
 impl VersionDb {
     /// Attempts to create a new version database, loading it with the specified version
     /// (or the current version, if none is provided).
+    #[cfg(not(feature = "dump"))]
     pub fn new(
         version: Option<SkseVersion>
     ) -> Self {
-        let mut by_id = HashMap::<usize, usize>::new();
         let version = version.unwrap_or(skse64::version::current_runtime());
-
-        #[cfg(feature = "by_offset")]
-        let mut by_offset = HashMap::<usize, usize>::new();
 
         // Figure out what kind of version db we're loading, so we can enforce the format later.
         // It also effects the base of the file name.
@@ -74,7 +74,7 @@ impl VersionDb {
         // The SKSE64 team uses it to denote which store the game was obtained from, so
         // we can't just pull it from our version structure.
         //
-        let mut f = std::fs::File::open(PathBuf::from(format!(
+        let mut f = std::fs::File::open(std::path::PathBuf::from(format!(
             "Data\\SKSE\\Plugins\\{}-{}-{}-{}-0.bin",
             file_base,
             version.major(),
@@ -82,10 +82,57 @@ impl VersionDb {
             version.build()
         ))).unwrap();
 
-        let (ptr_size, addr_count) = Self::parse_header(&mut f, format);
+        Self::new_from_file(&mut f, version, format)
+    }
+
+    /// Creates a version database from the given path, setting the version based on the file.
+    #[cfg(feature = "dump")]
+    pub fn new(
+        path: &std::path::Path
+    ) -> Self {
+        const DB_NAME_PARTS: usize = 5;
+
+        let db_name = path.file_name().unwrap().to_str().unwrap().split('.').next().unwrap();
+        let mut parts: [Option<&str>; DB_NAME_PARTS] = [None; DB_NAME_PARTS];
+        for (i, part) in db_name.split('-').enumerate() {
+            assert!(i < DB_NAME_PARTS);
+            parts[i] = Some(part);
+        }
+
+        let base = parts[0].unwrap();
+        let major = u32::from_str(parts[1].unwrap()).unwrap();
+        let minor = u32::from_str(parts[2].unwrap()).unwrap();
+        let revision = u32::from_str(parts[3].unwrap()).unwrap();
+        let build = u32::from_str(parts[4].unwrap()).unwrap();
+        assert!(build == 0);
+
+        let mut f = std::fs::File::open(path).unwrap();
+        let version = SkseVersion::new(major, minor, revision, build);
+        let format = if version < RUNTIME_VERSION_1_6_317 {
+            assert!(base == "version");
+            1
+        } else {
+            assert!(base == "versionlib");
+            2
+        };
+
+        Self::new_from_file(&mut f, version, format)
+    }
+
+    /// Loads in a version database from the given file and version.
+    fn new_from_file(
+        f: &mut File,
+        _version: SkseVersion,
+        format: u32
+    ) -> Self {
+        let mut by_id = HashMap::<usize, usize>::new();
+        #[cfg(feature = "by_offset")]
+        let mut by_offset = HashMap::<usize, usize>::new();
+
+        let (ptr_size, addr_count) = Self::parse_header(f, format);
         let (mut pid, mut poffset) = (0, 0);
         for _ in 0..addr_count {
-            let (id, offset) = Self::parse_addr(&mut f, pid, poffset, ptr_size);
+            let (id, offset) = Self::parse_addr(f, pid, poffset, ptr_size);
 
             assert!(by_id.insert(id, offset).is_none());
 
@@ -98,12 +145,13 @@ impl VersionDb {
 
         Self {
             by_id,
-            #[cfg(feature = "by_offset")] by_offset,
-            version
+            #[cfg(all(feature = "by_offset", not(feature = "dump")))] by_offset,
+            #[cfg(not(feature = "dump"))] version: _version
         }
     }
 
     /// Gets the version that is currently loaded into the database.
+    #[cfg(not(feature = "dump"))]
     pub fn loaded_version(
         &self
     ) -> SkseVersion {
@@ -111,7 +159,7 @@ impl VersionDb {
     }
 
     /// Attempts to find the address independent id for the given offset.
-    #[cfg(feature = "by_offset")]
+    #[cfg(all(feature = "by_offset", not(feature = "dump")))]
     pub fn find_id_by_addr(
         &self,
         addr: RelocAddr
@@ -120,6 +168,7 @@ impl VersionDb {
     }
 
     /// Attempts to find the offset of the given address independent id.
+    #[cfg(not(feature = "dump"))]
     pub fn find_addr_by_id(
         &self,
         id: usize

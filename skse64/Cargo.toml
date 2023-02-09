@@ -5,6 +5,8 @@ edition = "2021"
 
 [features]
 trampoline = []
+disas = []
+not_plugin = []
 
 [dependencies]
 later = { path = "../later" }

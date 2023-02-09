@@ -5,23 +5,24 @@
 //! @bug No known bugs.
 //!
 
-mod errors;
 pub mod version;
-pub mod log;
-pub mod reloc;
-pub mod plugin_api;
-#[cfg(feature = "trampoline")] pub mod trampoline;
-pub mod safe;
 pub mod util;
+
+#[cfg(not(feature = "not_plugin"))] mod errors;
+#[cfg(not(feature = "not_plugin"))] pub mod log;
+#[cfg(not(feature = "not_plugin"))] pub mod reloc;
+#[cfg(not(feature = "not_plugin"))] pub mod plugin_api;
+#[cfg(all(feature = "trampoline", not(feature = "not_plugin")))] pub mod trampoline;
+#[cfg(not(feature = "not_plugin"))] pub mod safe;
 
 // For macros.
 pub use core;
 
-use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(not(feature = "not_plugin"))] use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(not(feature = "not_plugin"))] use version::{RUNNING_GAME_VERSION, RUNNING_SKSE_VERSION};
+#[cfg(not(feature = "not_plugin"))] use plugin_api::{SkseInterface, SksePluginVersionData};
 
-use version::{RUNNING_GAME_VERSION, RUNNING_SKSE_VERSION};
-use plugin_api::{SkseInterface, SksePluginVersionData};
-
+#[cfg(not(feature = "not_plugin"))]
 extern "Rust" {
     /// Entry point for plugins using this crate.
     fn skse_plugin_rust_entry(skse: &SkseInterface) -> Result<(), ()>;
@@ -37,6 +38,7 @@ extern "Rust" {
 /// something more "Rust" like and performing any necessary initialization.
 ///
 #[no_mangle]
+#[cfg(not(feature = "not_plugin"))]
 pub unsafe extern "system" fn SKSEPlugin_Load(
     skse: *const SkseInterface
 ) -> bool {

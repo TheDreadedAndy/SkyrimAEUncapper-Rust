@@ -5,8 +5,9 @@
 //! @bug No known bugs.
 //!
 
-use windows_sys::Win32::System::LibraryLoader::GetModuleHandleA;
 use later::Later;
+
+use windows_sys::Win32::System::LibraryLoader::GetModuleHandleA;
 
 /// Holds a game address, which can be accessed by offset or address.
 #[repr(transparent)]
