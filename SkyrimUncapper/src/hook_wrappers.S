@@ -31,9 +31,10 @@
 .global display_true_skill_level_hook_ae
 .global display_true_skill_level_hook_se
 .global display_true_skill_color_hook
-.global improve_skill_by_training_hook
-.global improve_player_skill_points_original
-.global modify_perk_pool_wrapper
+.global improve_player_skill_points_wrapper_ae
+.global improve_player_skill_points_wrapper_se
+.global modify_perk_pool_wrapper_ae
+.global modify_perk_pool_wrapper_se
 .global improve_level_exp_by_skill_level_wrapper
 .global improve_attribute_when_level_up_wrapper
 .global legendary_reset_skill_level_wrapper
@@ -255,29 +256,31 @@ display_true_skill_level_hook_se:
     ret
 
 /*
- * Forces the training fn to call the original improve_player_skill_points()
- * function.
+ * Applies additional multipliers to the skill experience gained in the location
+ * where the game applies the skill experience base multiplier and offset.
  */
-improve_skill_by_training_hook:
-    // Reimplement the arg setup we overwrote.
-    mov %r15, %rcx
-    mov %r13d, 0x20(%rsp)
-    call improve_player_skill_points
-    jmp *improve_skill_by_training_return_trampoline(%rip)
+improve_player_skill_points_wrapper_ae:
+    SAVEALL
 
-/*
- * This function allows us to call the games original
- * improve_player_skill_points() function by reimplementing the code our hook
- * replaces and then jumping to the original game code that follows our hook.
- */
-improve_player_skill_points_original:
-    mov %rsp, %rax
-    push %rdi
-    push %r12
-    push %r13
-    push %r14
-    push %r15
-    jmp *improve_player_skill_points_return_trampoline(%rip)
+    mov %esi, %ecx          // Get actor attribute.
+    movss 0xf0(%rsp), %xmm1 // Get skill use mult.
+    mulss %xmm6, %xmm1      // exp_base = base * mult
+    movss 0xf4(%rsp), %xmm2 // Get skill offset
+    call improve_player_skill_points_hook
+
+    RESTOREALL retfpr=1
+    ret
+improve_player_skill_points_wrapper_se:
+    SAVEALL
+
+    mov %esi, %ecx
+    movss 0xf0(%rsp), %xmm1
+    mulss %xmm7, %xmm1      // SE has the exp base in xmm7
+    movss 0xf4(%rsp), %xmm2
+    call improve_player_skill_points_hook
+
+    RESTOREALL retfpr=1
+    ret
 
 /*
  * Reads in the number of perk points to add to the players pool and then updates
@@ -285,9 +288,15 @@ improve_player_skill_points_original:
  *
  * We save all registers, since this is an injected call.
  */
-modify_perk_pool_wrapper:
+modify_perk_pool_wrapper_ae:
     SAVEALL
     mov %dil, %cl // Get modification count.
+    call modify_perk_pool_hook
+    RESTOREALL
+    ret
+modify_perk_pool_wrapper_se:
+    SAVEALL
+    mov %bl, %cl // Get modification count (%ebx in SE).
     call modify_perk_pool_hook
     RESTOREALL
     ret

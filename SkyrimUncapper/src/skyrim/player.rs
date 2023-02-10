@@ -15,9 +15,6 @@ skse64::util::abstract_type! {
 
     /// The class which manages skills/attributes for an actor.
     pub type ActorValueOwner;
-
-    /// Player skill game class.
-    pub type PlayerSkills;
 }
 
 impl PlayerCharacter {

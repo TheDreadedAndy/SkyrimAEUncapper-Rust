@@ -27,10 +27,6 @@ const BASE_LEGENDARY_THRESHOLD: f32 = 100.0;
 // Boing!
 //
 #[no_mangle]
-static improve_skill_by_training_return_trampoline: GameRef<usize> = GameRef::new();
-#[no_mangle]
-static improve_player_skill_points_return_trampoline: GameRef<usize> = GameRef::new();
-#[no_mangle]
 static player_avo_get_current_return_trampoline: GameRef<usize> = GameRef::new();
 
 disarray::disarray! {
@@ -262,40 +258,33 @@ disarray::disarray! {
             ]
         },
 
-        // Prevents the skill training function from applying our multipliers.
-        Descriptor::Patch {
-            name: "ImproveSkillByTraining",
-            enabled: settings::is_skill_exp_enabled,
-            hook: Hook::Jump12 {
-                entry: improve_skill_by_training_hook as *const u8,
-                clobber: Register::Rax,
-                trampoline: improve_skill_by_training_return_trampoline.inner()
-            },
-            loc: GameLocation::Id(IdLocation::All { id_se: 40555, id_ae: 41562, offset_se: 0x90, offset_ae: 0x90 }),
-            sig: signature![
-                0x49, 0x8b, 0xcf,
-                0x44, 0x89, 0x6c, 0x24, 0x20,
-                0xe8, ?, ?, ?, ?; 13
-            ]
-        },
-
         // Applies the multipliers from the INI file to skill experience.
         Descriptor::Patch {
             name: "ImprovePlayerSkillPoints",
             enabled: settings::is_skill_exp_enabled,
-            hook: Hook::Jump12 {
-                entry: improve_player_skill_points_hook as *const u8,
-                clobber: Register::Rax,
-                trampoline: improve_player_skill_points_return_trampoline.inner()
+            hook: Hook::Call12 {
+                entry: improve_player_skill_points_wrapper_ae as *const u8,
+                clobber: Register::Rax // Written to after this patch.
             },
-            loc: GameLocation::Id(IdLocation::Base { se: 40554, ae: 41561 }),
+            loc: GameLocation::Id(IdLocation::Ae { id: 41561, offset: 0xf1 }),
             sig: signature![
-                0x48, 0x8b, 0xc4,
-                0x57,
-                0x41, 0x54,
-                0x41, 0x55,
-                0x41, 0x56,
-                0x41, 0x57; 12
+                0xf3, 0x0f, 0x10, 0x44, 0x24, 0x30,
+                0xf3, 0x0f, 0x59, 0xc6,
+                0xf3, 0x0f, 0x58, 0x44, 0x24, 0x34; 16
+            ]
+        },
+        Descriptor::Patch {
+            name: "ImprovePlayerSkillPoints",
+            enabled: settings::is_skill_exp_enabled,
+            hook: Hook::Call12 {
+                entry: improve_player_skill_points_wrapper_se as *const u8,
+                clobber: Register::Rax // Written to after this patch.
+            },
+            loc: GameLocation::Id(IdLocation::Se { id: 40554, offset: 0xdc }),
+            sig: signature![
+                0xf3, 0x0f, 0x10, 0x44, 0x24, 0x30,
+                0xf3, 0x0f, 0x59, 0xc7,
+                0xf3, 0x0f, 0x58, 0x44, 0x24, 0x34; 16
             ]
         },
 
@@ -307,10 +296,10 @@ disarray::disarray! {
             name: "ModifyPerkPool",
             enabled: settings::is_perk_points_enabled,
             hook: Hook::Call12 {
-                entry: modify_perk_pool_wrapper as *const u8,
+                entry: modify_perk_pool_wrapper_ae as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id(IdLocation::All { id_se: 51665, id_ae: 52538, offset_se: 0x62, offset_ae: 0x62 }),
+            loc: GameLocation::Id(IdLocation::Ae { id: 52538, offset: 0x62 }),
             sig: signature![
                 0x48, 0x8b, 0x15, ?, ?, ?, ?,
                 0x0f, 0xb6, 0x8a, ?, 0x0b, 0x00, 0x00,
@@ -319,6 +308,24 @@ disarray::disarray! {
                 0x78, 0x09,
                 0x40, 0x02, 0xcf,
                 0x88, 0x8a, ?, 0x0b, 0x00, 0x00; 29
+            ]
+        },
+        Descriptor::Patch {
+            name: "ModifyPerkPool",
+            enabled: settings::is_perk_points_enabled,
+            hook: Hook::Call12 {
+                entry: modify_perk_pool_wrapper_se as *const u8,
+                clobber: Register::Rax
+            },
+            loc: GameLocation::Id(IdLocation::Se { id: 51665, offset: 0x8f }),
+            sig: signature![
+                0x48, 0x8b, 0x15, ?, ?, ?, ?,
+                0x0f, 0xb6, 0x8a, ?, 0x0b, 0x00, 0x00,
+                0x8b, 0xc1,
+                0x03, 0xc3,
+                0x78, 0x08,
+                0x02, 0xcb,
+                0x88, 0x8a, ?, 0x0b, 0x00, 0x00; 28
             ]
         },
 
@@ -564,29 +571,25 @@ extern "system" fn player_avo_get_current_hook(
 }
 
 /// Applies a multiplier to the exp gain for the given skill.
+#[no_mangle]
 extern "system" fn improve_player_skill_points_hook(
-    skill_data: *mut PlayerSkills,
     attr: c_int,
-    mut exp: f32,
-    unk1: u64,
-    unk2: u32,
-    natural_exp: bool,
-    unk4: bool
-) {
+    mut exp_base: f32,
+    mut exp_offset: f32
+) -> f32 {
     assert!(settings::is_skill_exp_enabled());
 
     if let Ok(skill) = ActorAttribute::from_raw_skill(attr) {
-        exp *= settings::get_skill_exp_mult(
+        let (base_mult, offset_mult) = settings::get_skill_exp_mult(
             skill,
             player_avo_get_base(skill) as u32,
             get_player_level()
         );
+        exp_base *= base_mult;
+        exp_offset *= offset_mult;
     }
 
-    unsafe {
-        // SAFETY: We give it the same args, except the modified exp.
-        improve_player_skill_points(skill_data, attr as c_int, exp, unk1, unk2, natural_exp, unk4);
-    }
+    exp_base + exp_offset
 }
 
 /// Adjusts the number of perks the player recieves at level-up.

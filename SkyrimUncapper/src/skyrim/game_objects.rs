@@ -9,7 +9,7 @@ use std::ffi::c_int;
 
 use skyrim_patcher::{GameRef, Descriptor, GameLocation, IdLocation};
 
-use super::{PlayerCharacter, PlayerSkills};
+use super::PlayerCharacter;
 use super::{ActorValueOwner, ActorAttribute};
 use crate::settings;
 
@@ -133,15 +133,6 @@ extern "system" {
         attr: c_int,
         delta: f32
     );
-    fn improve_player_skill_points_net(
-        data: *mut PlayerSkills,
-        attr: c_int,
-        exp: f32,
-        unk1: u64,
-        unk2: u32,
-        natural_exp: bool,
-        unk4: bool
-    );
 }
 
 /// Handles a C++ exception by just panicking.
@@ -243,18 +234,4 @@ pub fn player_avo_mod_current(
 ) {
     // No idea what second arg does; just match game calls.
     unsafe { player_avo_mod_current_net(get_player_avo(), 0, attr as c_int, val) }
-}
-
-/// Improves the skill experience of a player skill.
-#[no_mangle]
-pub unsafe extern "system" fn improve_player_skill_points(
-    data: *mut PlayerSkills,
-    attr: c_int,
-    exp: f32,
-    unk1: u64, // r9
-    unk2: u32, // 0x70(%rsp)
-    natural_exp: bool, // true if natural, false if by training.
-    unk4: bool // true if by training and not the end of the count. Controls advancement display?
-) {
-    unsafe { improve_player_skill_points_net(data, attr, exp, unk1, unk2, natural_exp, unk4); }
 }

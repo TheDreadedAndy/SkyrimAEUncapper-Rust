@@ -302,11 +302,13 @@ pub fn get_skill_exp_mult(
     skill: ActorAttribute,
     skill_level: u32,
     player_level: u32
-) -> f32 {
+) -> (f32, f32) {
     let base_mult = SETTINGS.skill_exp_mults.get(skill).get();
     let skill_mult = SETTINGS.skill_exp_mults_with_skills.get(skill).get_nearest(skill_level);
     let pc_mult = SETTINGS.skill_exp_mults_with_pc_lvl.get(skill).get_nearest(player_level);
-    return base_mult * skill_mult * pc_mult;
+
+    // FIXME: Offset mult.
+    (base_mult * skill_mult * pc_mult, 1.0)
 }
 
 /// Calculates the level exp gain multiplier for the given skill, skill level, and player level.

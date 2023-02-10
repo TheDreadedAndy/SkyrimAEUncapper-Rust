@@ -9,10 +9,8 @@
 
 #include <cstdint>
 
-typedef uint64_t u64;
 typedef uint32_t u32;
 typedef uint16_t u16;
-typedef uint8_t u8;
 typedef float f32;
 
 #define CATCH_UNWIND(body)\
@@ -35,9 +33,6 @@ extern "C" {
     /* ASM wrappers */
     extern f32 player_avo_get_current_original_wrapper_se(void*, int);
     extern f32 player_avo_get_current_original_wrapper_ae(void*, int);
-    extern void improve_player_skill_points_original(
-        void *, int, f32, u64, u32, u8, bool
-    );
 
     /* Panic function */
     __declspec(noreturn) extern void handle_ffi_exception(const char *, size_t);
@@ -98,20 +93,5 @@ extern "C" {
         f32 delta
     ) {
         CATCH_UNWIND(player_avo_mod_current_entry(av, unk1, attr, delta););
-    }
-
-    void
-    improve_player_skill_points_net(
-        void *data,
-        int attr,
-        f32 exp,
-        u64 unk1,
-        u32 unk2,
-        u8 unk3,
-        bool unk4
-    ) {
-        CATCH_UNWIND(
-            improve_player_skill_points_original(data, attr, exp, unk1, unk2, unk3, unk4);
-        );
     }
 }
