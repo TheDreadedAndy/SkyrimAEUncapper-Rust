@@ -18,7 +18,7 @@ mod settings;
 use std::ffi::CStr;
 use std::path::Path;
 
-use skse64::log::skse_message;
+use skse64::log::{skse_message, skse_fatal};
 use skse64::version::{SkseVersion, PACKED_SKSE_VERSION, CURRENT_RELEASE_RUNTIME};
 use skse64::plugin_api::{SksePluginVersionData, SkseInterface};
 use skyrim_patcher::flatten_patch_groups;
@@ -67,10 +67,16 @@ pub fn skse_plugin_rust_entry(
     );
 
     settings::init(Path::new("Data\\SKSE\\Plugins\\SkyrimUncapper.ini"));
-    skyrim_patcher::apply(flatten_patch_groups::<NUM_PATCHES>(&[
-        &GAME_SIGNATURES,
-        &HOOK_SIGNATURES
-    ]))?;
+
+    let patches = flatten_patch_groups::<NUM_PATCHES>(&[&GAME_SIGNATURES, &HOOK_SIGNATURES]);
+    if let Err(_) = skyrim_patcher::apply(patches) {
+        skse_fatal!(
+            "Failed to install the requested set of game patches. See log for details.\n\
+             It is safe to continue playing; none of this mods changes have been applied."
+        );
+        return Err(());
+    }
+
     skse_message!("Initialization complete!");
     Ok(())
 }

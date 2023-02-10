@@ -7,7 +7,7 @@
 
 use std::ffi::c_int;
 
-use skyrim_patcher::{GameRef, Descriptor, GameLocation, AddrId};
+use skyrim_patcher::{GameRef, Descriptor, GameLocation, IdLocation};
 
 use super::{PlayerCharacter, PlayerSkills};
 use super::{ActorValueOwner, ActorAttribute};
@@ -50,67 +50,67 @@ disarray::disarray! {
     pub static GAME_SIGNATURES: [Descriptor; NUM_GAME_SIGNATURES] = [
         Descriptor::Object {
             name: "fEnchantingSkillCostBase",
-            loc: GameLocation::Id { id: AddrId::All { se: 506021, ae: 375771 }, offset: 0 },
+            loc: GameLocation::Id(IdLocation::Base { se: 506021, ae: 375771 }),
             result: ENCHANTING_SKILL_COST_BASE.inner()
         },
 
         Descriptor::Object {
             name: "fEnchantingSkillCostMult",
-            loc: GameLocation::Id { id: AddrId::All { se: 506023, ae: 375774 }, offset: 0 },
+            loc: GameLocation::Id(IdLocation::Base { se: 506023, ae: 375774 }),
             result: ENCHANTING_SKILL_COST_MULT.inner()
         },
 
         Descriptor::Object {
             name: "fEnchantingSkillCostScale",
-            loc: GameLocation::Id { id: AddrId::All { se: 506025, ae: 375777 }, offset: 0 },
+            loc: GameLocation::Id(IdLocation::Base { se: 506025, ae: 375777 }),
             result: ENCHANTING_SKILL_COST_SCALE.inner()
         },
 
         Descriptor::Object {
             name: "fEnchantingCostExponent",
-            loc: GameLocation::Id { id: AddrId::All { se: 506027, ae: 375780 }, offset: 0 },
+            loc: GameLocation::Id(IdLocation::Base { se: 506027, ae: 375780 }),
             result: ENCHANTING_COST_EXPONENT.inner()
         },
 
         Descriptor::Object {
             name: "fLegendarySkillResetValue",
-            loc: GameLocation::Id { id: AddrId::All { se: 507065, ae: 377771 }, offset: 0 },
+            loc: GameLocation::Id(IdLocation::Base { se: 507065, ae: 377771 }),
             result: LEGENDARY_SKILL_RESET_VALUE.inner()
         },
 
         Descriptor::Object {
             name: "g_thePlayer",
-            loc: GameLocation::Id { id: AddrId::All { se: 517014, ae: 403521 }, offset: 0 },
+            loc: GameLocation::Id(IdLocation::Base { se: 517014, ae: 403521 }),
             result: PLAYER_OBJECT.inner()
         },
 
         Descriptor::Function {
             name: "GetLevel",
-            loc: GameLocation::Id { id: AddrId::All { se: 36344, ae: 37334 }, offset: 0 },
+            loc: GameLocation::Id(IdLocation::Base { se: 36344, ae: 37334 }),
             result: get_level_entry.inner()
         },
 
         Descriptor::Function {
             name: "PlayerAVOGetBase",
-            loc: GameLocation::Id { id: AddrId::All { se: 37519, ae: 38464 }, offset: 0 },
+            loc: GameLocation::Id(IdLocation::Base { se: 37519, ae: 38464 }),
             result: player_avo_get_base_entry.inner()
         },
 
         Descriptor::Function {
             name: "PlayerAVOGetCurrent",
-            loc: GameLocation::Id { id: AddrId::All { se: 37517, ae: 38462 }, offset: 0 },
+            loc: GameLocation::Id(IdLocation::Base { se: 37517, ae: 38462 }),
             result: player_avo_get_current_entry.inner()
         },
 
         Descriptor::Function {
             name: "PlayerAVOModBase",
-            loc: GameLocation::Id { id: AddrId::All { se: 37521, ae: 38466 }, offset: 0 },
+            loc: GameLocation::Id(IdLocation::Base { se: 37521, ae: 38466 }),
             result: player_avo_mod_base_entry.inner()
         },
 
         Descriptor::Function {
             name: "PlayerAVOModCurrent",
-            loc: GameLocation::Id { id: AddrId::All { se: 37522, ae: 38467 }, offset: 0 },
+            loc: GameLocation::Id(IdLocation::Base { se: 37522, ae: 38467 }),
             result: player_avo_mod_current_entry.inner()
         }
     ];
@@ -120,7 +120,12 @@ disarray::disarray! {
 extern "system" {
     fn get_level_net(player: *mut PlayerCharacter) -> u16;
     fn player_avo_get_base_net(av: *mut ActorValueOwner, attr: c_int) -> f32;
-    fn player_avo_get_current_net(av: *mut ActorValueOwner, attr: c_int, patch_en: bool) -> f32;
+    fn player_avo_get_current_net(
+        av: *mut ActorValueOwner,
+        attr: c_int,
+        is_se: bool,
+        patch_en: bool
+    ) -> f32;
     fn player_avo_mod_base_net(av: *mut ActorValueOwner, attr: c_int, delta: f32);
     fn player_avo_mod_current_net(
         av: *mut ActorValueOwner,
@@ -205,7 +210,8 @@ pub unsafe extern "system" fn player_avo_get_current_unchecked(
     av: *mut ActorValueOwner,
     attr: c_int
 ) -> f32 {
-    player_avo_get_current_net(av, attr, settings::is_skill_formula_cap_enabled())
+    let is_se = skse64::version::current_runtime() <= skse64::version::RUNTIME_VERSION_1_5_97;
+    player_avo_get_current_net(av, attr, is_se, settings::is_skill_formula_cap_enabled())
 }
 
 /// Gets the base value of the given attribute.

@@ -12,7 +12,7 @@
 
 use std::ffi::c_int;
 
-use skyrim_patcher::{Descriptor, Hook, Register, GameLocation, AddrId, GameRef, signature};
+use skyrim_patcher::{Descriptor, Hook, Register, GameLocation, IdLocation, GameRef, signature};
 
 use crate::settings;
 use crate::hook_wrappers::*;
@@ -50,7 +50,7 @@ disarray::disarray! {
                 entry: skill_cap_patch_wrapper_ae as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id { id: AddrId::Ae(41561), offset: 0x72 },
+            loc: GameLocation::Id(IdLocation::Ae { id: 41561, offset: 0x72 }),
             sig: signature![
                 0x44, 0x0f, 0x28, 0xc0,
                 0xf3, 0x44, 0x0f, 0x10, 0x15, ?, ?, ?, ?; 13
@@ -63,7 +63,7 @@ disarray::disarray! {
                 entry: skill_cap_patch_wrapper_se as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id { id: AddrId::Se(40554), offset: 0x48 },
+            loc: GameLocation::Id(IdLocation::Se { id: 40554, offset: 0x48 }),
             sig: signature![
                 0xf3, 0x44, 0x0f, 0x10, 0x05, ?, ?, ?, ?,
                 0x0f, 0x28, 0xf0; 12
@@ -80,12 +80,25 @@ disarray::disarray! {
             name: "BeginMaxChargeCalculation",
             enabled: settings::is_enchant_patch_enabled,
             hook: Hook::Call12 {
-                entry: max_charge_begin_wrapper as *const u8,
+                entry: max_charge_begin_wrapper_ae as *const u8,
                 clobber: Register::Rax // Tmp from earlier cmove. Not used again.
             },
-            loc: GameLocation::Id { id: AddrId::All { se: 50557, ae: 51449 }, offset: 0xe9 },
+            loc: GameLocation::Id(IdLocation::Ae { id: 51449, offset: 0xe9 }),
             sig: signature![
                 0xf3, 0x0f, 0x11, 0x84, 0x24, 0xa0, 0x00, 0x00, 0x00,
+                0x48, 0x85, 0xc9; 12
+            ]
+        },
+        Descriptor::Patch {
+            name: "BeginMaxChargeCalculation",
+            enabled: settings::is_enchant_patch_enabled,
+            hook: Hook::Call12 {
+                entry: max_charge_begin_wrapper_se as *const u8,
+                clobber: Register::Rax // Tmp from earlier cmove. Not used again.
+            },
+            loc: GameLocation::Id(IdLocation::Se { id: 50557, offset: 0xe8 }),
+            sig: signature![
+                0xf3, 0x0f, 0x11, 0x84, 0x24, 0xc0, 0x00, 0x00, 0x00,
                 0x48, 0x85, 0xc9; 12
             ]
         },
@@ -93,13 +106,28 @@ disarray::disarray! {
             name: "EndMaxChargeCalculation",
             enabled: settings::is_enchant_patch_enabled,
             hook: Hook::Call12 {
-                entry: max_charge_end_wrapper as *const u8,
+                entry: max_charge_end_wrapper_ae as *const u8,
                 clobber: Register::Rcx // Patch follows a function call.
             },
-            loc: GameLocation::Id { id: AddrId::All { se: 50557, ae: 51449 }, offset: 0x179 },
+            loc: GameLocation::Id(IdLocation::Ae { id: 51449, offset: 0x179 }),
             sig: signature![
                 0xf3, 0x0f, 0x10, 0x84, 0x24, 0xa0, 0x00, 0x00, 0x00,
                 0xf3, 0x41, 0x0f, 0x5f, 0xc1; 14
+            ]
+        },
+        Descriptor::Patch {
+            name: "EndMaxChargeCalculation",
+            enabled: settings::is_enchant_patch_enabled,
+            hook: Hook::Call12 {
+                entry: max_charge_end_wrapper_se as *const u8,
+                clobber: Register::Rcx // Patch follows a function call.
+            },
+            loc: GameLocation::Id(IdLocation::Se { id: 50557, offset: 0x207 }),
+            sig: signature![
+                0xf3, 0x0f, 0x10, 0x84, 0x24, 0xc0, 0x00, 0x00, 0x00,
+                0x41, 0x0f, 0x2f, 0xc0,
+                0x77, 0x04,
+                0x41, 0x0f, 0x28, 0xc0; 19
             ]
         },
 
@@ -119,7 +147,12 @@ disarray::disarray! {
                 entry: calculate_charge_points_per_use_wrapper as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id { id: AddrId::All { se: 50557, ae: 51449 }, offset: 0x314 },
+            loc: GameLocation::Id(IdLocation::All {
+                id_se: 50557,
+                id_ae: 51449,
+                offset_se: 0x344,
+                offset_ae: 0x314
+            }),
             sig: signature![
                 0x48, 0x8b, 0x0d, ?, ?, ?, ?,
                 0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
@@ -143,10 +176,24 @@ disarray::disarray! {
                 clobber: Register::Rax,
                 trampoline: player_avo_get_current_return_trampoline.inner()
             },
-            loc: GameLocation::Id { id: AddrId::All { se: 37517, ae: 38462 }, offset: 0 },
+            loc: GameLocation::Id(IdLocation::Ae { id: 38462, offset: 0 }),
             sig: signature![
                 0x4c, 0x8b, 0xdc, 0x55, 0x56, 0x57, 0x41, 0x56,
                 0x41, 0x57, 0x48, 0x83, 0xec, 0x50; 14
+            ]
+        },
+        Descriptor::Patch {
+            name: "PlayerAVOGetCurrent",
+            enabled: settings::is_skill_formula_cap_enabled,
+            hook: Hook::Jump12 {
+                entry: player_avo_get_current_hook as *const u8,
+                clobber: Register::Rax,
+                trampoline: player_avo_get_current_return_trampoline.inner()
+            },
+            loc: GameLocation::Id(IdLocation::Se { id: 37517, offset: 0 }),
+            sig: signature![
+                0x40, 0x55, 0x56, 0x57, 0x41, 0x56, 0x41, 0x57,
+                0x48, 0x83, 0xec, 0x40; 12
             ]
         },
 
@@ -163,7 +210,7 @@ disarray::disarray! {
                 entry: display_true_skill_level_hook_ae as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id { id: AddrId::Ae(52525), offset: 0x10d },
+            loc: GameLocation::Id(IdLocation::Ae { id: 52525, offset: 0x10d }),
             sig: signature![
                 0x48, 0x8b, 0x0d, ?, ?, ?, ?,
                 0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
@@ -179,7 +226,7 @@ disarray::disarray! {
                 entry: display_true_skill_level_hook_se as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id { id: AddrId::Se(51652), offset: 0x108 },
+            loc: GameLocation::Id(IdLocation::Se { id: 51652, offset: 0x108 }),
             sig: signature![
                 0x48, 0x8b, 0x0d, ?, ?, ?, ?,
                 0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
@@ -195,8 +242,6 @@ disarray::disarray! {
         //
         // This patch exists for the same reason as the above patch.
         //
-        // TODO: Remove this comment. I have confirmed this one is AE+SE compatible
-        //
         Descriptor::Patch {
             name: "DisplayTrueSkillColor",
             enabled: settings::is_skill_formula_cap_enabled,
@@ -204,7 +249,12 @@ disarray::disarray! {
                 entry: display_true_skill_color_hook as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id { id: AddrId::All { se: 52059, ae: 52945 }, offset: 0x24 },
+            loc: GameLocation::Id(IdLocation::All {
+                id_se: 52059,
+                id_ae: 52945,
+                offset_se: 0x24,
+                offset_ae: 0x24
+            }),
             sig: signature![
                 0x48, 0x8b, 0x86, ?, 0x00, 0x00, 0x00,
                 0x48, 0x8d, 0x8e, ?, 0x00, 0x00, 0x00,
@@ -221,7 +271,7 @@ disarray::disarray! {
                 clobber: Register::Rax,
                 trampoline: improve_skill_by_training_return_trampoline.inner()
             },
-            loc: GameLocation::Id { id: AddrId::All { se: 40555, ae: 41562 }, offset: 0x90 },
+            loc: GameLocation::Id(IdLocation::All { id_se: 40555, id_ae: 41562, offset_se: 0x90, offset_ae: 0x90 }),
             sig: signature![
                 0x49, 0x8b, 0xcf,
                 0x44, 0x89, 0x6c, 0x24, 0x20,
@@ -238,7 +288,7 @@ disarray::disarray! {
                 clobber: Register::Rax,
                 trampoline: improve_player_skill_points_return_trampoline.inner()
             },
-            loc: GameLocation::Id { id: AddrId::All { se: 40554, ae: 41561 }, offset: 0 },
+            loc: GameLocation::Id(IdLocation::Base { se: 40554, ae: 41561 }),
             sig: signature![
                 0x48, 0x8b, 0xc4,
                 0x57,
@@ -260,7 +310,7 @@ disarray::disarray! {
                 entry: modify_perk_pool_wrapper as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id { id: AddrId::All { se: 51665, ae: 52538 }, offset: 0x62 },
+            loc: GameLocation::Id(IdLocation::All { id_se: 51665, id_ae: 52538, offset_se: 0x62, offset_ae: 0x62 }),
             sig: signature![
                 0x48, 0x8b, 0x15, ?, ?, ?, ?,
                 0x0f, 0xb6, 0x8a, ?, 0x0b, 0x00, 0x00,
@@ -283,7 +333,7 @@ disarray::disarray! {
                 entry: improve_level_exp_by_skill_level_wrapper as *const u8,
                 clobber: Register::Rcx
             },
-            loc: GameLocation::Id { id: AddrId::All { se: 40554, ae: 41561 }, offset: 0x2d7 },
+            loc: GameLocation::Id(IdLocation::All { id_se: 40554, id_ae: 41561, offset_se: 0x2d7, offset_ae: 0x2d7 }),
             sig: signature![
                 0xf3, 0x0f, 0x58, 0x08,
                 0xf3, 0x0f, 0x11, 0x08,
@@ -305,6 +355,8 @@ disarray::disarray! {
         // It also means the game settings which would usually control these attributes are
         // ignored.
         //
+        // FIXME: Verify this is actually ok.
+        //
         Descriptor::Patch {
             name: "ImproveAttributeWhenLevelUp",
             enabled: settings::is_attr_points_enabled,
@@ -312,7 +364,7 @@ disarray::disarray! {
                 entry: improve_attribute_when_level_up_wrapper as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id { id: AddrId::All { se: 51037, ae: 51917 }, offset: 0x93 },
+            loc: GameLocation::Id(IdLocation::All { id_se: 51037, id_ae: 51917, offset_se: 0x93, offset_ae: 0x93 }),
             sig: signature![
                 0xff, 0x50, 0x28, 0x83, 0x7f, 0x18, 0x1a, 0x75,
                 0x22, 0x48, 0x8b, 0x0d,    ?,    ?,    ?,    ?,
@@ -334,7 +386,7 @@ disarray::disarray! {
                 entry: legendary_reset_skill_level_wrapper as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id { id: AddrId::All { se: 51714, ae: 52591 }, offset: 0x1d0 },
+            loc: GameLocation::Id(IdLocation::All { id_se: 51714, id_ae: 52591, offset_se: 0, offset_ae: 0x1d0 }),
             sig: signature![
                 0x0f, 0x2f, 0x05, ?, ?, ?, ?,
                 0x0f, 0x82, 0x27, 0x01, 0x00, 0x00,
@@ -353,7 +405,7 @@ disarray::disarray! {
                 entry: check_condition_for_legendary_skill_wrapper as *const u8,
                 clobber: Register::Rdx
             },
-            loc: GameLocation::Id { id: AddrId::All { se: 51647, ae: 52520 }, offset: 0x14e },
+            loc: GameLocation::Id(IdLocation::All { id_se: 51647, id_ae: 52520, offset_se: 0, offset_ae: 0x14e }),
             sig: signature![
                 0x8b, 0xd0,
                 0x48, 0x8d, 0x8f, ?, 0x00, 0x00, 0x00,
@@ -369,7 +421,7 @@ disarray::disarray! {
                 entry: check_condition_for_legendary_skill_alt_wrapper as *const u8,
                 clobber: Register::Rdx
             },
-            loc: GameLocation::Id { id: AddrId::All { se: 51638, ae: 52510 }, offset: 0x4d5 },
+            loc: GameLocation::Id(IdLocation::All { id_se: 51638, id_ae: 52510, offset_se: 0, offset_ae: 0x4d5 }),
             sig: signature![
                 0x8b, 0xd0,
                 0x48, 0x8d, 0x8f, ?, 0x00, 0x00, 0x00,
@@ -385,7 +437,7 @@ disarray::disarray! {
                 entry: hide_legendary_button_wrapper as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id { id: AddrId::All { se: 51654, ae: 52527 }, offset: 0x153 },
+            loc: GameLocation::Id(IdLocation::All { id_se: 51654, id_ae: 52527, offset_se: 0, offset_ae: 0x153 }),
             sig: signature![
                 0x48, 0x8b, 0x0d, ?, ?, ?, ?,
                 0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
@@ -419,7 +471,7 @@ disarray::disarray! {
                 entry: clear_legendary_button_wrapper as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id { id: AddrId::All { se: 51654, ae: 52527 }, offset: 0x16dd },
+            loc: GameLocation::Id(IdLocation::All { id_se: 51654, id_ae: 52527, offset_se: 0, offset_ae: 0x16dd }),
             sig: signature![
                 0x48, 0x8b, 0x0d, ?, ?, ?, ?,
                 0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,

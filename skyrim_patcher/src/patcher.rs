@@ -29,27 +29,18 @@ use crate::sig::{Signature, BinarySig};
 pub use skse64::safe::Register;
 
 /// Contains a version independent address ID for the specified skyrim versions.
-pub enum AddrId {
-    Se(usize),
-    Ae(usize),
-    All {
-        se: usize,
-        ae: usize
-    }
+pub enum IdLocation {
+    Base { se: usize, ae: usize },
+    Se { id: usize, offset: usize },
+    Ae { id: usize, offset: usize },
+    All { id_se: usize, offset_se: usize, id_ae: usize, offset_ae: usize}
 }
 
 /// Tracks a location in the skyrim game binary.
 pub enum GameLocation {
     #[cfg(feature = "by_offset")]
-    Offset {
-        base: RelocAddr,
-        offset: usize
-    },
-
-    Id {
-        id: AddrId,
-        offset: usize
-    }
+    Offset { base: RelocAddr, offset: usize },
+    Id(IdLocation)
 }
 
 /// Encodes the type of hook which is being used by a patch.
@@ -144,16 +135,21 @@ type FindResult = Result<RelocAddr, DescriptorError>;
 #[repr(transparent)]
 pub struct GameRef<T>(UnsafeCell<usize>, std::marker::PhantomData<T>);
 
-impl AddrId {
-    /// Gets the address independent ID, if it is compatible with the running game version.
+impl IdLocation {
+    /// Gets the address independent location, if it is compatible with the running game version.
     fn get(
         &self
-    ) -> Result<usize, DescriptorError> {
+    ) -> Result<(usize, usize), DescriptorError> {
         let is_se = skse64::version::current_runtime() <= skse64::version::RUNTIME_VERSION_1_5_97;
         let id = match self {
-            Self::Se(id) => if is_se { Some(*id) } else { None },
-            Self::Ae(id) => if is_se { None } else { Some(*id) },
-            Self::All { se, ae } => if is_se { Some(*se) } else { Some(*ae) }
+            Self::Base { se, ae } => if is_se { Some((*se, 0)) } else { Some((*ae, 0)) },
+            Self::Se { id, offset } => if is_se { Some((*id, *offset)) } else { None },
+            Self::Ae { id, offset } => if is_se { None } else { Some((*id, *offset)) },
+            Self::All { id_se, offset_se, id_ae, offset_ae } => if is_se {
+                Some((*id_se, *offset_se))
+            } else {
+                Some((*id_ae, *offset_ae))
+            }
         };
         id.ok_or(DescriptorError::IncompatibleGameVersion)
     }
@@ -175,13 +171,25 @@ impl GameLocation {
                     Err(DescriptorError::Missing)
                 }
             },
-            Self::Id { id, offset } => {
-                if let Ok(ra) = db.find_addr_by_id(id.get()?) {
-                    Ok(ra + *offset)
+            Self::Id(id) => {
+                let (id, offset) = id.get()?;
+                if let Ok(ra) = db.find_addr_by_id(id) {
+                    Ok(ra + offset)
                 } else {
                     Err(DescriptorError::Missing)
                 }
             }
+        }
+    }
+
+    /// Checks if the game location is compatible with the running version.
+    fn compatible(
+        &self
+    ) -> bool {
+        match self {
+            Self::Id(id) => id.get().is_ok(),
+            #[cfg(feature = "by_offset")]
+            Self::Offset { .. } => true
         }
     }
 }
@@ -200,11 +208,12 @@ impl std::fmt::Display for GameLocation {
                     write!(f, "([BASE: {:#x}] + {:#x})", base.offset(), offset)
                 }
             },
-            Self::Id { id, offset } => {
-                if *offset == 0 {
-                    write!(f, "[ID: {}]", id.get().unwrap())
+            Self::Id(id) => {
+                let (id, offset) = id.get().unwrap();
+                if offset == 0 {
+                    write!(f, "[ID: {}]", id)
                 } else {
-                    write!(f, "([ID: {}] + {:#x})", id.get().unwrap(), offset)
+                    write!(f, "([ID: {}] + {:#x})", id, offset)
                 }
             }
         }
@@ -392,8 +401,8 @@ impl Descriptor {
         &self
     ) -> bool {
         match self {
-            Self::Patch { enabled, .. } => !enabled(),
-            _ => false
+            Self::Patch { enabled, loc, .. } => !enabled() || !loc.compatible(),
+            Self::Function { loc, .. } | Self::Object { loc, .. } => !loc.compatible()
         }
     }
 }

@@ -33,7 +33,8 @@ extern "C" {
     extern void (*player_avo_mod_current_entry)(void*, u32, int, f32);
 
     /* ASM wrappers */
-    extern f32 player_avo_get_current_original_wrapper(void*, int);
+    extern f32 player_avo_get_current_original_wrapper_se(void*, int);
+    extern f32 player_avo_get_current_original_wrapper_ae(void*, int);
     extern void improve_player_skill_points_original(
         void *, int, f32, u64, u32, u8, bool
     );
@@ -62,16 +63,20 @@ extern "C" {
     player_avo_get_current_net(
         void *av,
         int attr,
+        bool is_se,
         bool patch_en
     ) {
         CATCH_UNWIND(
-            if (patch_en) {
-                // Patch installed, so we need to use the wrapper.
-                return player_avo_get_current_original_wrapper(av, attr);
-            } else {
+            if (!patch_en) {
                 // No patch, so we can just call the og function
                 // (and must, since we don't have a trampoline).
                 return player_avo_get_current_entry(av, attr);
+            } else if (is_se) {
+                // SE patch installed, so we need to use the wrapper.
+                return player_avo_get_current_original_wrapper_se(av, attr);
+            } else {
+                // AE patch installed, so we need to use the wrapper.
+                return player_avo_get_current_original_wrapper_ae(av, attr);
             }
         );
     }

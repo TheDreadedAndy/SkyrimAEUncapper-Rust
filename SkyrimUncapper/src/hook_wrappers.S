@@ -21,10 +21,13 @@
 
 .global skill_cap_patch_wrapper_ae
 .global skill_cap_patch_wrapper_se
-.global max_charge_begin_wrapper
-.global max_charge_end_wrapper
+.global max_charge_begin_wrapper_ae
+.global max_charge_begin_wrapper_se
+.global max_charge_end_wrapper_ae
+.global max_charge_end_wrapper_se
 .global calculate_charge_points_per_use_wrapper
-.global player_avo_get_current_original_wrapper
+.global player_avo_get_current_original_wrapper_ae
+.global player_avo_get_current_original_wrapper_se
 .global display_true_skill_level_hook_ae
 .global display_true_skill_level_hook_se
 .global display_true_skill_color_hook
@@ -122,7 +125,7 @@ skill_cap_patch_wrapper_se:
  * Begins a max_charge calculation by changing the enchanting formula cap
  * to use the weapon cap if the enchanted item is offensive.
  */
-max_charge_begin_wrapper:
+max_charge_begin_wrapper_ae:
     SAVEALL
 
     // Reimplement replaced instruction.
@@ -137,12 +140,23 @@ max_charge_begin_wrapper:
     // block unwinds below us anyway.
     test %rcx, %rcx // Reimplement replaced test.
     ret
+max_charge_begin_wrapper_se:
+    SAVEALL
+
+    movss %xmm0, 0x180(%rsp) // Max charge is now at 0xc0(%rsp) in caller.
+
+    mov %r15d, %ecx // Enchantment type is in r15d.
+    call max_charge_begin_hook
+
+    RESTOREALL
+    test %rcx, %rcx // Reimplement replaced test.
+    ret
 
 /*
  * Ends a max_charge calculation by returning the skill formula equation
  * to using the magnitude formula cap, if necessary.
  */
-max_charge_end_wrapper:
+max_charge_end_wrapper_ae:
     SAVEALL
 
     call max_charge_end_hook
@@ -150,6 +164,17 @@ max_charge_end_wrapper:
     // Reimplement overwritten instructions.
     movss 0x160(%rsp), %xmm0 // Get max_charge
     maxss %xmm9, %xmm0 // MAX(max_charge, 0)
+
+    RESTOREALL retfpr=1
+    ret
+max_charge_end_wrapper_se:
+    SAVEALL
+
+    call max_charge_end_hook
+
+    // Reimplement overwritten instructions.
+    movss 0x180(%rsp), %xmm0 // Max charge is now at 0xc0(%rsp) in caller.
+    maxss %xmm8, %xmm0 // MAX(max_charge, 0)
 
     RESTOREALL retfpr=1
     ret
@@ -161,7 +186,11 @@ max_charge_end_wrapper:
  * reg save. We're just adding an arg.
  */
 calculate_charge_points_per_use_wrapper:
-    movss 0xa8(%rsp), %xmm1 // Get max_charge.
+    // Get &max_charge. It was stored as arg5 of an fn call earlier, and doesn't get
+    // in any version. This is more stable than 0xa0/0xc0, which differs between SE/AE.
+    mov 0x28(%rsp), %rax
+
+    movss (%rax), %xmm1 // Get max_charge.
     movaps %xmm7, %xmm0 // Get base_points
     xorps %xmm2, %xmm2 // Reimplement max from original code.
     maxss %xmm2, %xmm1
@@ -172,7 +201,7 @@ calculate_charge_points_per_use_wrapper:
  * running the overwritten instructions and then jumping to the address after
  * our hook.
  */
-player_avo_get_current_original_wrapper:
+player_avo_get_current_original_wrapper_ae:
     mov %rsp, %r11
     push %rbp
     push %rsi
@@ -180,6 +209,14 @@ player_avo_get_current_original_wrapper:
     push %r14
     push %r15
     sub $0x50, %rsp
+    jmp *player_avo_get_current_return_trampoline(%rip)
+player_avo_get_current_original_wrapper_se:
+    push %rbp
+    push %rsi
+    push %rdi
+    push %r14
+    push %r15
+    sub $0x40, %rsp
     jmp *player_avo_get_current_return_trampoline(%rip)
 
 /*
