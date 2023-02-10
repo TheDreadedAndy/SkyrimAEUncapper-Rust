@@ -6,11 +6,13 @@
 //!
 
 extern "system" {
-    pub fn skill_cap_patch_wrapper();
+    pub fn skill_cap_patch_wrapper_ae();
+    pub fn skill_cap_patch_wrapper_se();
     pub fn max_charge_begin_wrapper();
     pub fn max_charge_end_wrapper();
     pub fn calculate_charge_points_per_use_wrapper();
-    pub fn display_true_skill_level_hook();
+    pub fn display_true_skill_level_hook_ae();
+    pub fn display_true_skill_level_hook_se();
     pub fn display_true_skill_color_hook();
     pub fn improve_level_exp_by_skill_level_wrapper();
     pub fn improve_attribute_when_level_up_wrapper();

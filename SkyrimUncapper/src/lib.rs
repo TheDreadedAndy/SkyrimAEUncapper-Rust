@@ -61,8 +61,8 @@ pub fn skse_plugin_rust_entry(
         GIT_VERSION,
         PACKED_SKSE_VERSION,
         CURRENT_RELEASE_RUNTIME,
-        skse.skse_version.unwrap(),
-        skse.runtime_version.unwrap(),
+        (*skse).skse_version.unwrap(),
+        (*skse).runtime_version.unwrap(),
         skse64::reloc::RelocAddr::base()
     );
 

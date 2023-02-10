@@ -19,12 +19,14 @@
  * happen except for that epilogue (for unwinding).
  */
 
-.global skill_cap_patch_wrapper
+.global skill_cap_patch_wrapper_ae
+.global skill_cap_patch_wrapper_se
 .global max_charge_begin_wrapper
 .global max_charge_end_wrapper
 .global calculate_charge_points_per_use_wrapper
 .global player_avo_get_current_original_wrapper
-.global display_true_skill_level_hook
+.global display_true_skill_level_hook_ae
+.global display_true_skill_level_hook_se
 .global display_true_skill_color_hook
 .global improve_skill_by_training_hook
 .global improve_player_skill_points_original
@@ -88,21 +90,30 @@
 /*
  * This function gets injected in the middle of another, so we must use the call
  * injection macros to protect the register state.
+ *
+ * This immediately follows a call, so no need to reg save other than the return value.
  */
-skill_cap_patch_wrapper:
+skill_cap_patch_wrapper_ae:
     sub $0x28, %rsp
 
-    call get_player_avo
-
-    mov %rax, %rcx
-    mov %esi, %edx // pass SkillID in ecx to hook.
-    call player_avo_get_base_unchecked
     movaps %xmm0, %xmm8 // Reimplement original move.
 
     mov %esi, %ecx // Move skill ID back into first arg.
     call get_skill_cap_hook
     movss %xmm0, %xmm10 // Replace maximum with fn result.
-    movaps %xmm8, %xmm0 // Restore xmm0, just in case (this call wasn't here before).
+    movaps %xmm8, %xmm0 // Restore xmm0 for comparison.
+
+    add $0x28, %rsp
+    ret
+skill_cap_patch_wrapper_se:
+    sub $0x28, %rsp
+
+    movaps %xmm0, %xmm6 // Reimplement og move.
+
+    mov %esi, %ecx // Move skill ID back into first arg.
+    call get_skill_cap_hook
+    movss %xmm0, %xmm10 // Replace max with fn result.
+    movaps %xmm6, %xmm0 // Restore xmm0, just in case :)
 
     add $0x28, %rsp
     ret
@@ -178,7 +189,7 @@ player_avo_get_current_original_wrapper:
  * It just so happens that things get thrown in the same regs, so the patch is
  * the same for both.
  */
-display_true_skill_level_hook:
+display_true_skill_level_hook_ae:
 display_true_skill_color_hook:
     sub $0x28, %rsp
 
@@ -186,6 +197,19 @@ display_true_skill_color_hook:
     call get_player_avo
     mov %rax, %rcx
     mov %edi, %edx
+
+    // Call the unmodified function.
+    call player_avo_get_current_unchecked
+
+    add $0x28, %rsp
+    ret
+display_true_skill_level_hook_se:
+    sub $0x28, %rsp
+
+    // Reimplement replaced setup.
+    call get_player_avo
+    mov %rax, %rcx
+    mov %esi, %edx // esi was changed to edi in AE.
 
     // Call the unmodified function.
     call player_avo_get_current_unchecked

@@ -47,17 +47,26 @@ disarray::disarray! {
             name: "GetSkillCap",
             enabled: settings::is_skill_cap_enabled,
             hook: Hook::Call12 {
-                entry: skill_cap_patch_wrapper as *const u8,
+                entry: skill_cap_patch_wrapper_ae as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id { id: AddrId::All { se: 40554, ae: 41561 }, offset: 0x5e },
+            loc: GameLocation::Id { id: AddrId::Ae(41561), offset: 0x72 },
             sig: signature![
-                0x48, 0x8b, 0x0d, ?, ?, ?, ?,
-                0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
-                0x48, 0x8b, 0x01,
-                0xff, 0x50, 0x18,
                 0x44, 0x0f, 0x28, 0xc0,
-                0xf3, 0x44, 0x0f, 0x10, 0x15, ?, ?, ?, ?; 33
+                0xf3, 0x44, 0x0f, 0x10, 0x15, ?, ?, ?, ?; 13
+            ]
+        },
+        Descriptor::Patch {
+            name: "GetSkillCap",
+            enabled: settings::is_skill_cap_enabled,
+            hook: Hook::Call12 {
+                entry: skill_cap_patch_wrapper_se as *const u8,
+                clobber: Register::Rax
+            },
+            loc: GameLocation::Id { id: AddrId::Se(40554), offset: 0x48 },
+            sig: signature![
+                0xf3, 0x44, 0x0f, 0x10, 0x05, ?, ?, ?, ?,
+                0x0f, 0x28, 0xf0; 12
             ]
         },
 
@@ -151,15 +160,31 @@ disarray::disarray! {
             name: "DisplayTrueSkillLevel",
             enabled: settings::is_skill_formula_cap_enabled,
             hook: Hook::Call12 {
-                entry: display_true_skill_level_hook as *const u8,
+                entry: display_true_skill_level_hook_ae as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id { id: AddrId::All { se: 51652, ae: 52525 }, offset: 0x10d },
+            loc: GameLocation::Id { id: AddrId::Ae(52525), offset: 0x10d },
             sig: signature![
                 0x48, 0x8b, 0x0d, ?, ?, ?, ?,
                 0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
                 0x48, 0x8b, 0x01,
                 0x8b, 0xd7,
+                0xff, 0x50, 0x08; 22
+            ]
+        },
+        Descriptor::Patch {
+            name: "DisplayTrueSkillLevel",
+            enabled: settings::is_skill_formula_cap_enabled,
+            hook: Hook::Call12 {
+                entry: display_true_skill_level_hook_se as *const u8,
+                clobber: Register::Rax
+            },
+            loc: GameLocation::Id { id: AddrId::Se(51652), offset: 0x108 },
+            sig: signature![
+                0x48, 0x8b, 0x0d, ?, ?, ?, ?,
+                0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
+                0x48, 0x8b, 0x01,
+                0x8b, 0xd6,
                 0xff, 0x50, 0x08; 22
             ]
         },
@@ -169,6 +194,8 @@ disarray::disarray! {
         // call the original function.
         //
         // This patch exists for the same reason as the above patch.
+        //
+        // TODO: Remove this comment. I have confirmed this one is AE+SE compatible
         //
         Descriptor::Patch {
             name: "DisplayTrueSkillColor",

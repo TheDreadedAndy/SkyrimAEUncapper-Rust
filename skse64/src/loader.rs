@@ -5,7 +5,7 @@
 //! @bug No known bugs.
 //!
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use racy_cell::RacyCell;
 
 use crate::version::{RUNNING_GAME_VERSION, RUNNING_SKSE_VERSION, RUNTIME_VERSION_1_5_97};
 use crate::plugin_api::{SkseInterface, SksePluginVersionData, PluginInfo};
@@ -22,6 +22,42 @@ extern "Rust" {
 }
 
 ///
+/// Initializes SKSE logging and addressing.
+///
+/// If this function is called more than once, only the first call will be acted on.
+///
+unsafe fn init_skse(
+    skse: *const SkseInterface
+) -> bool {
+    static DO_ONCE: RacyCell<Option<bool>> = RacyCell::new(None);
+    if let Some(ret) = *DO_ONCE.get() {
+        return ret;
+    }
+
+    RelocAddr::init_manager();
+
+    // Set panics to print to the log (if it exists) and halt the plugin.
+    std::panic::set_hook(Box::new(skse_panic));
+
+    // Before we do anything else, we try and open up a log file.
+    log::open();
+
+    // "yup, no more editor. obscript is gone (mostly)" ~ianpatt
+    assert!(!skse.is_null());
+    if (*skse).is_editor != 0 {
+        *DO_ONCE.get() = Some(false);
+        return false;
+    }
+
+    // Set running version to the given value.
+    RUNNING_SKSE_VERSION.init((*skse).skse_version.unwrap());
+    RUNNING_GAME_VERSION.init((*skse).runtime_version.unwrap());
+
+    *DO_ONCE.get() = Some(true);
+    return true;
+}
+
+///
 /// SKSE plugin query function.
 ///
 /// Only really necessary for SE, as part of the load process.
@@ -31,12 +67,18 @@ pub unsafe extern "system" fn SKSEPlugin_Query(
     skse: *const SkseInterface,
     info: *mut PluginInfo
 ) -> bool {
-    assert!(!skse.is_null());
+    if !init_skse(skse) { return false; }
     assert!(!info.is_null());
-    *info = PluginInfo::from_ae(&SKSEPlugin_Version);
 
     // If this is ever false, then I will have several questions.
-    return (*skse).runtime_version.unwrap() <= RUNTIME_VERSION_1_5_97;
+    *info = PluginInfo::from_ae(&SKSEPlugin_Version);
+    if (*skse).runtime_version.unwrap() <= RUNTIME_VERSION_1_5_97 {
+        log::skse_message!("Plugin query complete, marking as compatible.");
+        return true;
+    } else {
+        log::skse_error!("Unknown game version. Marking as incompatible.");
+        return false;
+    }
 }
 
 ///
@@ -50,27 +92,16 @@ pub unsafe extern "system" fn SKSEPlugin_Load(
     skse: *const SkseInterface
 ) -> bool {
     // Prevent reinit.
-    static IS_INIT: AtomicBool = AtomicBool::new(false);
-    if IS_INIT.swap(true, Ordering::Relaxed) {
+    static DO_ONCE: RacyCell<bool> = RacyCell::new(true);
+    if !*DO_ONCE.get() {
         log::skse_error!("Cannot reinitialize library!");
         return false;
+    } else {
+        *DO_ONCE.get() = false;
     }
 
-    RelocAddr::init_manager();
-
-    // Set panics to print to the log (if it exists) and halt the plugin.
-    std::panic::set_hook(Box::new(skse_panic));
-
-    // Before we do anything else, we try and open up a log file.
-    log::open();
-
-    // "yup, no more editor. obscript is gone (mostly)" ~ianpatt
-    assert!(!(skse.is_null()));
-    if (*skse).is_editor != 0 { return false; }
-
-    // Set running version to the given value.
-    RUNNING_SKSE_VERSION.init((*skse).skse_version.unwrap());
-    RUNNING_GAME_VERSION.init((*skse).runtime_version.unwrap());
+    // If we're running on an AE version, we haven't done this yet.
+    if !init_skse(skse) { return false; }
 
     // Call the rust entry point.
     return skse_plugin_rust_entry(skse.as_ref().unwrap()).is_ok();
