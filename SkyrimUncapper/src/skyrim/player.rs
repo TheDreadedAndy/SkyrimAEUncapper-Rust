@@ -7,7 +7,7 @@
 
 use core::cell::Cell;
 
-use skse64::version::{RUNTIME_VERSION_1_6_317, RUNTIME_VERSION_1_6_629};
+use skse64::version::RUNTIME_VERSION_1_6_629;
 
 skse64::util::abstract_type! {
     /// The player actor class.
@@ -45,8 +45,6 @@ impl PlayerCharacter {
         compat: usize
     ) -> *mut T {
         let version = skse64::version::current_runtime();
-        assert!(version >= RUNTIME_VERSION_1_6_317); // AE.
-
         let offset: usize = if version >= RUNTIME_VERSION_1_6_629 { current } else { compat };
         let player = self as *const Self as *mut Self;
         player.cast::<u8>().add(offset).cast()

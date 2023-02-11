@@ -111,6 +111,7 @@ skill_cap_patch_wrapper_ae:
 
     add $0x28, %rsp
     ret
+
 skill_cap_patch_wrapper_se:
     sub $0x28, %rsp
 
@@ -135,6 +136,16 @@ max_charge_begin_wrapper_ae:
     movss %xmm0, 0x160(%rsp)
 
     mov %r14d, %ecx // Enchantment type is in r14d.
+    jmp _max_charge_begin_wrapper
+
+max_charge_begin_wrapper_se:
+    SAVEALL
+
+    movss %xmm0, 0x180(%rsp) // Max charge is now at 0xc0(%rsp) in caller.
+
+    mov %r15d, %ecx // Enchantment type is in r15d.
+
+_max_charge_begin_wrapper:
     call max_charge_begin_hook
 
     RESTOREALL
@@ -143,58 +154,37 @@ max_charge_begin_wrapper_ae:
     // block unwinds below us anyway.
     test %rcx, %rcx // Reimplement replaced test.
     ret
-max_charge_begin_wrapper_se:
-    SAVEALL
-
-    movss %xmm0, 0x180(%rsp) // Max charge is now at 0xc0(%rsp) in caller.
-
-    mov %r15d, %ecx // Enchantment type is in r15d.
-    call max_charge_begin_hook
-
-    RESTOREALL
-    test %rcx, %rcx // Reimplement replaced test.
-    ret
 
 /*
  * Ends a max_charge calculation by returning the skill formula equation
  * to using the magnitude formula cap, if necessary.
  */
 max_charge_end_wrapper_ae:
-    SAVEALL
-
-    call max_charge_end_hook
-
     // Reimplement overwritten instructions.
-    movss 0x160(%rsp), %xmm0 // Get max_charge
+    movss 0xa0(%rsp), %xmm0 // Get max_charge
     maxss %xmm9, %xmm0 // MAX(max_charge, 0)
-
-    RESTOREALL retfpr=1
-    ret
+    jmp _max_charge_end_wrapper
 
 max_charge_end_wrapper_se:
-    SAVEALL
-
-    call max_charge_end_hook
-
-    // Reimplement overwritten instructions.
-    movss 0x180(%rsp), %xmm0 // Max charge is now at 0xc0(%rsp) in caller.
+    movss 0xc0(%rsp), %xmm0 // Max charge is now at 0xc0(%rsp) in caller.
     maxss %xmm8, %xmm0 // MAX(max_charge, 0)
 
-    RESTOREALL retfpr=1
+_max_charge_end_wrapper:
+    SAVEALL
+    call max_charge_end_hook
+    RESTOREALL
     ret
 
 /*
- * Wraps our calculate_charge_points_per_use() function. We use this wrapper to
- * get access to the maxCharge argument that our caller gets, which is its 5th
- * argument (rsp + a0). We replace the call to the original function, so no
- * reg save. We're just adding an arg.
+ * Wraps our calculate_charge_points_per_use() function. We use this wrapper
+ * to get access to our callers max_charge value. We replace the call to the
+ * original function, so no reg save. We're just changing the args.
  */
 calculate_charge_points_per_use_wrapper:
-    // Get &max_charge. It was stored as arg5 of an fn call earlier, and doesn't get
-    // in any version. This is more stable than 0xa0/0xc0, which differs between SE/AE.
+    // A previous function call had &max_charge as its fifth arg, and it is
+    // never overwritten.
     mov 0x28(%rsp), %rax
-
-    movss (%rax), %xmm1 // Get max_charge.
+    movss (%rax), %xmm1 // Get max_charge
     movaps %xmm7, %xmm0 // Get base_points
     xorps %xmm2, %xmm2 // Reimplement max from original code.
     maxss %xmm2, %xmm1
@@ -229,7 +219,7 @@ player_avo_get_current_original_wrapper_se:
  * true skill level/color instead of the damaged value by calling the OG function.
  *
  * It just so happens that things get thrown in the same regs, so the patch is
- * the same for both.
+ * the same for both (for AE, at least).
  */
 display_true_skill_level_hook_ae:
 display_true_skill_color_hook:
@@ -357,7 +347,7 @@ legendary_reset_skill_level_wrapper:
     mov %rax, 0xa8(%rsp) // Move player avo into arg 1 (saved rcx).
     mov (%rax), %rax     // Load v-table for the call we return to.
 
-    RESTOREALL
+    RESTOREALL retgpr=1
     ret
 
 /*

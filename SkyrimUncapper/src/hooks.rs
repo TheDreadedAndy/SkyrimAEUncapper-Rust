@@ -144,8 +144,8 @@ disarray::disarray! {
                 clobber: Register::Rax
             },
             loc: GameLocation::Id(IdLocation::All {
-                id_se: 50557,
                 id_ae: 51449,
+                id_se: 50557,
                 offset_se: 0x344,
                 offset_ae: 0x314
             }),
@@ -338,7 +338,7 @@ disarray::disarray! {
             enabled: settings::is_level_exp_enabled,
             hook: Hook::Call12 {
                 entry: improve_level_exp_by_skill_level_wrapper_ae as *const u8,
-                clobber: Register::Rcx
+                clobber: Register::Rdx // Rax/rcx holds an address we need. Rdx stable in SE/AE.
             },
             loc: GameLocation::Id(IdLocation::Ae { id: 41561, offset: 0x2d7 }),
             sig: signature![
@@ -353,7 +353,7 @@ disarray::disarray! {
             enabled: settings::is_level_exp_enabled,
             hook: Hook::Call12 {
                 entry: improve_level_exp_by_skill_level_wrapper_se as *const u8,
-                clobber: Register::Rcx
+                clobber: Register::Rdx
             },
             loc: GameLocation::Id(IdLocation::Se { id: 40554, offset: 0x230 }),
             sig: signature![
