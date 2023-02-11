@@ -7,6 +7,8 @@
 
 use std::ffi::c_int;
 
+use crate::settings::SkillMult;
+
 macro_rules! attr_name {
     ( $pre:literal, $attr:expr ) => {
         match $attr {
@@ -85,6 +87,7 @@ mod _private {
     pub trait Sealed {}
     impl Sealed for f32 {}
     impl Sealed for u32 {}
+    impl Sealed for crate::settings::SkillMult {}
 }
 
 pub trait HungarianAttribute: _private::Sealed + Copy {
@@ -156,6 +159,14 @@ impl HungarianAttribute for u32 {
         attr: ActorAttribute
     ) -> &'static str {
         attr_name!("i", attr)
+    }
+}
+
+impl HungarianAttribute for SkillMult {
+    fn hungarian_attr(
+        attr: ActorAttribute
+    ) -> &'static str {
+        attr_name!("f", attr)
     }
 }
 

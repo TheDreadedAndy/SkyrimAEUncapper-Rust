@@ -13,6 +13,7 @@ mod leveled;
 
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::str::FromStr;
 
 use later::Later;
 use configparser::ini::Ini;
@@ -23,6 +24,13 @@ use skills::IniSkillManager;
 use leveled::LeveledIniSection;
 use config::{DefaultIniSection, DefaultIniField, IniDefaultReadable};
 use crate::skyrim::ActorAttribute;
+
+/// Manages the loading of a skill multiplier, which contains both a base and offset multiplier.
+#[derive(Default, Copy, Clone)]
+pub (in crate) struct SkillMult {
+    base: f32,
+    offset: f32
+}
 
 struct GeneralSettings {
     skill_caps_en: DefaultIniField<IniField<bool>>,
@@ -55,9 +63,9 @@ struct Settings {
     legendary: LegendarySettings,
     skill_caps: DefaultIniSection<IniSkillManager<IniField<u32>>>,
     skill_formula_caps: DefaultIniSection<IniSkillManager<IniField<u32>>>,
-    skill_exp_mults: DefaultIniSection<IniSkillManager<IniField<f32>>>,
-    skill_exp_mults_with_skills: DefaultIniSection<IniSkillManager<LeveledIniSection<f32>>>,
-    skill_exp_mults_with_pc_lvl: DefaultIniSection<IniSkillManager<LeveledIniSection<f32>>>,
+    skill_exp_mults: DefaultIniSection<IniSkillManager<IniField<SkillMult>>>,
+    skill_exp_mults_with_skills: DefaultIniSection<IniSkillManager<LeveledIniSection<SkillMult>>>,
+    skill_exp_mults_with_pc_lvl: DefaultIniSection<IniSkillManager<LeveledIniSection<SkillMult>>>,
     level_exp_mults: DefaultIniSection<IniSkillManager<IniField<f32>>>,
     level_exp_mults_with_skills: DefaultIniSection<IniSkillManager<LeveledIniSection<f32>>>,
     level_exp_mults_with_pc_lvl: DefaultIniSection<IniSkillManager<LeveledIniSection<f32>>>,
@@ -76,11 +84,37 @@ struct Settings {
     cw_at_sp_lvl_up: DefaultIniSection<LeveledIniSection<u32>>
 }
 
+/// By default, skill exp multiplication is disabled.
+const DEFAULT_SKILL_EXP_MULT: SkillMult = SkillMult { base: 1.0, offset: 1.0 };
+
 /// Holds the global settings configuration, which is created when init() is called.
 static SETTINGS: Later<Settings> = Later::new();
 
 /// Used to ensure that the max_charge critical section is not entered twice.
 static IS_USING_CHARGE_CAP: AtomicBool = AtomicBool::new(false);
+
+/// Allows for the optional loading of an offset multiplier.
+impl FromStr for SkillMult {
+    type Err = <f32 as FromStr>::Err;
+
+    fn from_str(
+        s: &str
+    ) -> Result<Self, Self::Err> {
+        if let Some(s) = s.split_once('/') {
+            // Since there is a mode symbol, the offset has been specified in some way.
+            if s.1.trim().is_empty() {
+                // We have been asked to duplicate the first number for both.
+                Ok(Self { base: f32::from_str(s.0)?, offset: f32::from_str(s.0)? })
+            } else {
+                // Both values were given.
+                Ok(Self { base: f32::from_str(s.0)?, offset: f32::from_str(s.1)? })
+            }
+        } else {
+            // Compat mode: Assume offset mult is 1.0 and parse as single float.
+            Ok(Self { base: f32::from_str(s)?, offset: 1.0 })
+        }
+    }
+}
 
 impl Settings {
     /// Creates a new settings structure, with default values for missing fields.
@@ -113,14 +147,14 @@ impl Settings {
             },
             skill_caps: DefaultIniSection::new("SkillCaps", 100),
             skill_formula_caps: DefaultIniSection::new("SkillFormulaCaps", 100),
-            skill_exp_mults: DefaultIniSection::new("SkillExpGainMults", 1.00),
+            skill_exp_mults: DefaultIniSection::new("SkillExpGainMults", DEFAULT_SKILL_EXP_MULT),
             skill_exp_mults_with_skills: DefaultIniSection::new(
                 "SkillExpGainMults\\BaseSkillLevel",
-                1.00
+                DEFAULT_SKILL_EXP_MULT
             ),
             skill_exp_mults_with_pc_lvl: DefaultIniSection::new(
                 "SkillExpGainMults\\CharacterLevel",
-                1.00
+                DEFAULT_SKILL_EXP_MULT
             ),
             level_exp_mults: DefaultIniSection::new("LevelSkillExpMults", 1.00),
             level_exp_mults_with_skills: DefaultIniSection::new(
@@ -307,8 +341,8 @@ pub fn get_skill_exp_mult(
     let skill_mult = SETTINGS.skill_exp_mults_with_skills.get(skill).get_nearest(skill_level);
     let pc_mult = SETTINGS.skill_exp_mults_with_pc_lvl.get(skill).get_nearest(player_level);
 
-    // FIXME: Offset mult.
-    (base_mult * skill_mult * pc_mult, 1.0)
+    (base_mult.base * skill_mult.base * pc_mult.base,
+     base_mult.offset * skill_mult.offset * pc_mult.offset)
 }
 
 /// Calculates the level exp gain multiplier for the given skill, skill level, and player level.
