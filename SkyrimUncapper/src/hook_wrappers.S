@@ -25,7 +25,8 @@
 .global max_charge_begin_wrapper_se
 .global max_charge_end_wrapper_ae
 .global max_charge_end_wrapper_se
-.global calculate_charge_points_per_use_wrapper
+.global calculate_charge_points_per_use_wrapper_ae
+.global calculate_charge_points_per_use_wrapper_se
 .global player_avo_get_current_original_wrapper_ae
 .global player_avo_get_current_original_wrapper_se
 .global display_true_skill_level_hook_ae
@@ -161,12 +162,12 @@ _max_charge_begin_wrapper:
  */
 max_charge_end_wrapper_ae:
     // Reimplement overwritten instructions.
-    movss 0xa0(%rsp), %xmm0 // Get max_charge
+    movss 0xa8(%rsp), %xmm0 // Get max_charge
     maxss %xmm9, %xmm0 // MAX(max_charge, 0)
     jmp _max_charge_end_wrapper
 
 max_charge_end_wrapper_se:
-    movss 0xc0(%rsp), %xmm0 // Max charge is now at 0xc0(%rsp) in caller.
+    movss 0xc8(%rsp), %xmm0 // Max charge is now at 0xc0(%rsp) in caller.
     maxss %xmm8, %xmm0 // MAX(max_charge, 0)
 
 _max_charge_end_wrapper:
@@ -180,10 +181,14 @@ _max_charge_end_wrapper:
  * to get access to our callers max_charge value. We replace the call to the
  * original function, so no reg save. We're just changing the args.
  */
-calculate_charge_points_per_use_wrapper:
-    // A previous function call had &max_charge as its fifth arg, and it is
-    // never overwritten.
-    mov 0x28(%rsp), %rax
+calculate_charge_points_per_use_wrapper_ae:
+    lea 0xa8(%rsp), %rax
+    jmp _calculate_charge_points_per_use_wrapper
+
+calculate_charge_points_per_use_wrapper_se:
+    lea 0xc8(%rsp), %rax
+
+_calculate_charge_points_per_use_wrapper:
     movss (%rax), %xmm1 // Get max_charge
     movaps %xmm7, %xmm0 // Get base_points
     xorps %xmm2, %xmm2 // Reimplement max from original code.

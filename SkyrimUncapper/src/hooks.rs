@@ -140,15 +140,29 @@ disarray::disarray! {
             name: "CalculateChargePointsPerUse",
             enabled: settings::is_enchant_patch_enabled,
             hook: Hook::Call12 {
-                entry: calculate_charge_points_per_use_wrapper as *const u8,
+                entry: calculate_charge_points_per_use_wrapper_ae as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id(IdLocation::All {
-                id_ae: 51449,
-                id_se: 50557,
-                offset_se: 0x344,
-                offset_ae: 0x314
-            }),
+            loc: GameLocation::Id(IdLocation::Ae { id: 51449, offset: 0x314 }),
+            sig: signature![
+                0x48, 0x8b, 0x0d, ?, ?, ?, ?,
+                0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
+                0x48, 0x8b, 0x01,
+                0xba, 0x17, 0x00, 0x00, 0x00,
+                0xff, 0x50, 0x08,
+                0x0f, 0x28, 0xc8,
+                0x0f, 0x28, 0xc7,
+                0xe8, ?, ?, ?, ?; 36
+            ]
+        },
+        Descriptor::Patch {
+            name: "CalculateChargePointsPerUse",
+            enabled: settings::is_enchant_patch_enabled,
+            hook: Hook::Call12 {
+                entry: calculate_charge_points_per_use_wrapper_se as *const u8,
+                clobber: Register::Rax
+            },
+            loc: GameLocation::Id(IdLocation::Se { id: 50557, offset: 0x344, }),
             sig: signature![
                 0x48, 0x8b, 0x0d, ?, ?, ?, ?,
                 0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,

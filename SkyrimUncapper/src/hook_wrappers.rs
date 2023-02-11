@@ -12,7 +12,8 @@ extern "system" {
     pub fn max_charge_begin_wrapper_se();
     pub fn max_charge_end_wrapper_ae();
     pub fn max_charge_end_wrapper_se();
-    pub fn calculate_charge_points_per_use_wrapper();
+    pub fn calculate_charge_points_per_use_wrapper_ae();
+    pub fn calculate_charge_points_per_use_wrapper_se();
     pub fn display_true_skill_level_hook_ae();
     pub fn display_true_skill_level_hook_se();
     pub fn display_true_skill_color_hook();
