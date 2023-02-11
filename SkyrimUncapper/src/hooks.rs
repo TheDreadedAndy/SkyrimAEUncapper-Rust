@@ -337,14 +337,29 @@ disarray::disarray! {
             name: "ImproveLevelExpBySkillLevel",
             enabled: settings::is_level_exp_enabled,
             hook: Hook::Call12 {
-                entry: improve_level_exp_by_skill_level_wrapper as *const u8,
+                entry: improve_level_exp_by_skill_level_wrapper_ae as *const u8,
                 clobber: Register::Rcx
             },
-            loc: GameLocation::Id(IdLocation::All { id_se: 40554, id_ae: 41561, offset_se: 0x2d7, offset_ae: 0x2d7 }),
+            loc: GameLocation::Id(IdLocation::Ae { id: 41561, offset: 0x2d7 }),
             sig: signature![
                 0xf3, 0x0f, 0x58, 0x08,
                 0xf3, 0x0f, 0x11, 0x08,
                 0x8b, 0xd6,
+                0x48, 0x8b, 0x0d, ?, ?, ?, ?; 17
+            ]
+        },
+        Descriptor::Patch {
+            name: "ImproveLevelExpBySkillLevel",
+            enabled: settings::is_level_exp_enabled,
+            hook: Hook::Call12 {
+                entry: improve_level_exp_by_skill_level_wrapper_se as *const u8,
+                clobber: Register::Rcx
+            },
+            loc: GameLocation::Id(IdLocation::Se { id: 40554, offset: 0x230 }),
+            sig: signature![
+                0xf3, 0x0f, 0x58, 0x01,
+                0x8b, 0xd6,
+                0xf3, 0x0f, 0x11, 0x01,
                 0x48, 0x8b, 0x0d, ?, ?, ?, ?; 17
             ]
         },
@@ -362,8 +377,6 @@ disarray::disarray! {
         // It also means the game settings which would usually control these attributes are
         // ignored.
         //
-        // FIXME: Verify this is actually ok.
-        //
         Descriptor::Patch {
             name: "ImproveAttributeWhenLevelUp",
             enabled: settings::is_attr_points_enabled,
@@ -371,13 +384,22 @@ disarray::disarray! {
                 entry: improve_attribute_when_level_up_wrapper as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id(IdLocation::All { id_se: 51037, id_ae: 51917, offset_se: 0x93, offset_ae: 0x93 }),
+            loc: GameLocation::Id(IdLocation::All {
+                id_se: 51037,
+                id_ae: 51917,
+                offset_se: 0x93,
+                offset_ae: 0x93
+            }),
             sig: signature![
-                0xff, 0x50, 0x28, 0x83, 0x7f, 0x18, 0x1a, 0x75,
-                0x22, 0x48, 0x8b, 0x0d,    ?,    ?,    ?,    ?,
-                0x48, 0x81, 0xc1,    ?, 0x00, 0x00, 0x00, 0x48,
-                0x8b, 0x01, 0xf3, 0x0f, 0x10, 0x1d,    ?,    ?,
-                   ?,    ?, 0x33, 0xd2, 0x44, 0x8d, 0x42, 0x20,
+                0xff, 0x50, 0x28,
+                0x83, 0x7f, 0x18, 0x1a,
+                0x75, 0x22,
+                0x48, 0x8b, 0x0d, ?, ?, ?, ?,
+                0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
+                0x48, 0x8b, 0x01,
+                0xf3, 0x0f, 0x10, 0x1d, ?, ?, ?, ?,
+                0x33, 0xd2,
+                0x44, 0x8d, 0x42, 0x20,
                 0xff, 0x50, 0x30; 0x2b
             ]
         },
@@ -393,10 +415,15 @@ disarray::disarray! {
                 entry: legendary_reset_skill_level_wrapper as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id(IdLocation::All { id_se: 51714, id_ae: 52591, offset_se: 0, offset_ae: 0x1d0 }),
+            loc: GameLocation::Id(IdLocation::All {
+                id_se: 51714,
+                id_ae: 52591,
+                offset_se: 0x236,
+                offset_ae: 0x1d0
+            }),
             sig: signature![
                 0x0f, 0x2f, 0x05, ?, ?, ?, ?,
-                0x0f, 0x82, 0x27, 0x01, 0x00, 0x00,
+                0x0f, 0x82, ?, ?, 0x00, 0x00,
                 0x48, 0x8b, 0x0d, ?, ?, ?, ?,
                 0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
                 0x48, 0x8b, 0x01,
@@ -412,7 +439,12 @@ disarray::disarray! {
                 entry: check_condition_for_legendary_skill_wrapper as *const u8,
                 clobber: Register::Rdx
             },
-            loc: GameLocation::Id(IdLocation::All { id_se: 51647, id_ae: 52520, offset_se: 0, offset_ae: 0x14e }),
+            loc: GameLocation::Id(IdLocation::All {
+                id_se: 51647,
+                id_ae: 52520,
+                offset_se: 0x155,
+                offset_ae: 0x14e
+            }),
             sig: signature![
                 0x8b, 0xd0,
                 0x48, 0x8d, 0x8f, ?, 0x00, 0x00, 0x00,
@@ -425,10 +457,15 @@ disarray::disarray! {
             name: "CheckConditionForLegendarySkillAlt",
             enabled: settings::is_legendary_enabled,
             hook: Hook::Call12 {
-                entry: check_condition_for_legendary_skill_alt_wrapper as *const u8,
+                entry: check_condition_for_legendary_skill_wrapper as *const u8,
                 clobber: Register::Rdx
             },
-            loc: GameLocation::Id(IdLocation::All { id_se: 51638, id_ae: 52510, offset_se: 0, offset_ae: 0x4d5 }),
+            loc: GameLocation::Id(IdLocation::All {
+                id_se: 51638,
+                id_ae: 52510,
+                offset_se: 0x4cc,
+                offset_ae: 0x4d5
+            }),
             sig: signature![
                 0x8b, 0xd0,
                 0x48, 0x8d, 0x8f, ?, 0x00, 0x00, 0x00,
@@ -441,16 +478,32 @@ disarray::disarray! {
             name: "HideLegendaryButton",
             enabled: settings::is_legendary_enabled,
             hook: Hook::Call12 {
-                entry: hide_legendary_button_wrapper as *const u8,
+                entry: hide_legendary_button_wrapper_ae as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id(IdLocation::All { id_se: 51654, id_ae: 52527, offset_se: 0, offset_ae: 0x153 }),
+            loc: GameLocation::Id(IdLocation::Ae { id: 52527, offset: 0x153 }),
             sig: signature![
                 0x48, 0x8b, 0x0d, ?, ?, ?, ?,
                 0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
                 0x48, 0x8b, 0x01,
                 0x41, 0x8b, 0xd7,
                 0xff, 0x50, 0x18; 23
+            ]
+        },
+        Descriptor::Patch {
+            name: "HideLegendaryButton",
+            enabled: settings::is_legendary_enabled,
+            hook: Hook::Call12 {
+                entry: hide_legendary_button_wrapper_se as *const u8,
+                clobber: Register::Rax
+            },
+            loc: GameLocation::Id(IdLocation::Se { id: 51654, offset: 0x146 }),
+            sig: signature![
+                0x48, 0x8b, 0x0d, ?, ?, ?, ?,
+                0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
+                0x48, 0x8b, 0x01,
+                0x8b, 0xd6,
+                0xff, 0x50, 0x18; 22
             ]
         },
 
@@ -475,16 +528,32 @@ disarray::disarray! {
             name: "ClearLegendaryButton",
             enabled: settings::is_legendary_enabled,
             hook: Hook::Call12 {
-                entry: clear_legendary_button_wrapper as *const u8,
+                entry: clear_legendary_button_wrapper_ae as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id(IdLocation::All { id_se: 51654, id_ae: 52527, offset_se: 0, offset_ae: 0x16dd }),
+            loc: GameLocation::Id(IdLocation::Ae { id: 52527, offset: 0x16dd }),
             sig: signature![
                 0x48, 0x8b, 0x0d, ?, ?, ?, ?,
                 0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
                 0x48, 0x8b, 0x01,
                 0x41, 0x8b, 0xd7,
                 0xff, 0x50, 0x08; 23
+            ]
+        },
+        Descriptor::Patch {
+            name: "ClearLegendaryButton",
+            enabled: settings::is_legendary_enabled,
+            hook: Hook::Call12 {
+                entry: clear_legendary_button_wrapper_se as *const u8,
+                clobber: Register::Rax
+            },
+            loc: GameLocation::Id(IdLocation::Se { id: 51654, offset: 0x1621 }),
+            sig: signature![
+                0x48, 0x8b, 0x0d, ?, ?, ?, ?,
+                0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
+                0x48, 0x8b, 0x01,
+                0x8b, 0xd6,
+                0xff, 0x50, 0x08; 22
             ]
         }
     ];

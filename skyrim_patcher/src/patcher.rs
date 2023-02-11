@@ -475,7 +475,7 @@ pub fn apply<const NUM_PATCHES: usize>(
     #[cfg(feature = "alloc_trampoline")]
     let mut alloc_size: usize = 0;
 
-    skse_message!("--------------------- Skyrim Patcher 1.0.2 ---------------------");
+    skse_message!("--------------------- Skyrim Patcher 1.0.3 ---------------------");
 
     // Attempt to locate all of the patch signatures.
     let mut fails = 0;

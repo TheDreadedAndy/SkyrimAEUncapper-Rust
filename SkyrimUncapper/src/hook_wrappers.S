@@ -35,13 +35,15 @@
 .global improve_player_skill_points_wrapper_se
 .global modify_perk_pool_wrapper_ae
 .global modify_perk_pool_wrapper_se
-.global improve_level_exp_by_skill_level_wrapper
+.global improve_level_exp_by_skill_level_wrapper_ae
+.global improve_level_exp_by_skill_level_wrapper_se
 .global improve_attribute_when_level_up_wrapper
 .global legendary_reset_skill_level_wrapper
 .global check_condition_for_legendary_skill_wrapper
-.global check_condition_for_legendary_skill_alt_wrapper
-.global hide_legendary_button_wrapper
-.global clear_legendary_button_wrapper
+.global hide_legendary_button_wrapper_ae
+.global hide_legendary_button_wrapper_se
+.global clear_legendary_button_wrapper_ae
+.global clear_legendary_button_wrapper_se
 
 // Saves all caller saved registers.
 .macro SAVEALL is_jump
@@ -116,7 +118,7 @@ skill_cap_patch_wrapper_se:
 
     mov %esi, %ecx // Move skill ID back into first arg.
     call get_skill_cap_hook
-    movss %xmm0, %xmm10 // Replace max with fn result.
+    movss %xmm0, %xmm8  // Replace max with fn result.
     movaps %xmm6, %xmm0 // Restore xmm0, just in case :)
 
     add $0x28, %rsp
@@ -168,6 +170,7 @@ max_charge_end_wrapper_ae:
 
     RESTOREALL retfpr=1
     ret
+
 max_charge_end_wrapper_se:
     SAVEALL
 
@@ -211,6 +214,7 @@ player_avo_get_current_original_wrapper_ae:
     push %r15
     sub $0x50, %rsp
     jmp *player_avo_get_current_return_trampoline(%rip)
+
 player_avo_get_current_original_wrapper_se:
     push %rbp
     push %rsi
@@ -229,27 +233,19 @@ player_avo_get_current_original_wrapper_se:
  */
 display_true_skill_level_hook_ae:
 display_true_skill_color_hook:
-    sub $0x28, %rsp
+    push %rdi
+    jmp _display_true_skill_hook
 
-    // Reimplement replaced setup.
-    call get_player_avo
-    mov %rax, %rcx
-    mov %edi, %edx
-
-    // Call the unmodified function.
-    call player_avo_get_current_unchecked
-
-    add $0x28, %rsp
-    ret
 display_true_skill_level_hook_se:
-    sub $0x28, %rsp
+    push %rsi
+
+_display_true_skill_hook:
+    sub $0x20, %rsp
 
     // Reimplement replaced setup.
     call get_player_avo
     mov %rax, %rcx
-    mov %esi, %edx // esi was changed to edi in AE.
-
-    // Call the unmodified function.
+    mov 0x20(%rsp), %edx
     call player_avo_get_current_unchecked
 
     add $0x28, %rsp
@@ -260,23 +256,19 @@ display_true_skill_level_hook_se:
  * where the game applies the skill experience base multiplier and offset.
  */
 improve_player_skill_points_wrapper_ae:
+    movaps %xmm6, %xmm0 // base exp in AE.
+    jmp _improve_player_skill_points_wrapper
+
+improve_player_skill_points_wrapper_se:
+    movaps %xmm7, %xmm0 // base exp in SE.
+
+_improve_player_skill_points_wrapper:
     SAVEALL
 
     mov %esi, %ecx          // Get actor attribute.
     movss 0xf0(%rsp), %xmm1 // Get skill use mult.
-    mulss %xmm6, %xmm1      // exp_base = base * mult
+    mulss %xmm0, %xmm1      // exp_base = base * mult
     movss 0xf4(%rsp), %xmm2 // Get skill offset
-    call improve_player_skill_points_hook
-
-    RESTOREALL retfpr=1
-    ret
-improve_player_skill_points_wrapper_se:
-    SAVEALL
-
-    mov %esi, %ecx
-    movss 0xf0(%rsp), %xmm1
-    mulss %xmm7, %xmm1      // SE has the exp base in xmm7
-    movss 0xf4(%rsp), %xmm2
     call improve_player_skill_points_hook
 
     RESTOREALL retfpr=1
@@ -294,6 +286,7 @@ modify_perk_pool_wrapper_ae:
     call modify_perk_pool_hook
     RESTOREALL
     ret
+
 modify_perk_pool_wrapper_se:
     SAVEALL
     mov %bl, %cl // Get modification count (%ebx in SE).
@@ -306,7 +299,7 @@ modify_perk_pool_wrapper_se:
  * Note that the code here is rather different than the OG implementation
  * because the original improve_level_exp_by_skill_level() function got inlined.
  */
-improve_level_exp_by_skill_level_wrapper:
+improve_level_exp_by_skill_level_wrapper_ae:
     SAVEALL
 
     movss %xmm1, %xmm0 // xmm1 contains level exp
@@ -314,6 +307,18 @@ improve_level_exp_by_skill_level_wrapper:
     call improve_level_exp_by_skill_level_hook
 
     mov 0xb0(%rsp), %rax // Get the saved value for rax.
+    jmp _improve_level_exp_by_skill_level_wrapper
+
+improve_level_exp_by_skill_level_wrapper_se:
+    SAVEALL
+
+    // xmm0 already contains level exp
+    mov %esi, %edx // esi contains skill_id.
+    call improve_level_exp_by_skill_level_hook
+
+    mov 0xa8(%rsp), %rax // Get the saved value for rcx.
+
+_improve_level_exp_by_skill_level_wrapper:
     addss (%rax), %xmm0 // This is the code we overwrote, except we
     movss %xmm0, (%rax) // now use xmm0 instead of xmm1.
 
@@ -323,7 +328,6 @@ improve_level_exp_by_skill_level_wrapper:
     mov %rsi, 0xa0(%rsp) // Move into saved rdx.
 
     RESTOREALL
-
     ret
 
 /*
@@ -353,7 +357,7 @@ legendary_reset_skill_level_wrapper:
     mov %rax, 0xa8(%rsp) // Move player avo into arg 1 (saved rcx).
     mov (%rax), %rax     // Load v-table for the call we return to.
 
-    RESTOREALL retgpr=1
+    RESTOREALL
     ret
 
 /*
@@ -363,7 +367,6 @@ legendary_reset_skill_level_wrapper:
  * Since we are overwriting another fn call, we dont need to reg save.
  */
 check_condition_for_legendary_skill_wrapper:
-check_condition_for_legendary_skill_alt_wrapper:
     mov %eax, %ecx
     jmp check_condition_for_legendary_skill_hook
 
@@ -372,14 +375,22 @@ check_condition_for_legendary_skill_alt_wrapper:
  * We are overwriting another function call here, so we dont need to save
  * the register state.
  */
-hide_legendary_button_wrapper:
+hide_legendary_button_wrapper_ae:
     mov %r15d, %ecx
+    jmp hide_legendary_button_hook
+
+hide_legendary_button_wrapper_se:
+    mov %esi, %ecx
     jmp hide_legendary_button_hook
 
 /*
  * Forces the game to clear the legendary button in accordance with
  * what our mod expects when scrolling in the skill menu.
  */
-clear_legendary_button_wrapper:
+clear_legendary_button_wrapper_ae:
     mov %r15d, %ecx
+    jmp clear_legendary_button_hook
+
+clear_legendary_button_wrapper_se:
+    mov %esi, %ecx
     jmp clear_legendary_button_hook
