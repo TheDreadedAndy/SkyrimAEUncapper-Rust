@@ -12,7 +12,7 @@
 
 use std::ffi::c_int;
 
-use skyrim_patcher::{Descriptor, Hook, Register, GameLocation, IdLocation, GameRef, signature};
+use skyrim_patcher::{Descriptor, Hook, Register, GameLocation, GameRef, signature};
 
 use crate::settings;
 use crate::hook_wrappers::*;
@@ -46,7 +46,7 @@ disarray::disarray! {
                 entry: skill_cap_patch_wrapper_ae as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id(IdLocation::Ae { id: 41561, offset: 0x72 }),
+            loc: GameLocation::Ae { id: 41561, offset: 0x72 },
             sig: signature![
                 0x44, 0x0f, 0x28, 0xc0,
                 0xf3, 0x44, 0x0f, 0x10, 0x15, ?, ?, ?, ?; 13
@@ -59,7 +59,7 @@ disarray::disarray! {
                 entry: skill_cap_patch_wrapper_se as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id(IdLocation::Se { id: 40554, offset: 0x48 }),
+            loc: GameLocation::Se { id: 40554, offset: 0x48 },
             sig: signature![
                 0xf3, 0x44, 0x0f, 0x10, 0x05, ?, ?, ?, ?,
                 0x0f, 0x28, 0xf0; 12
@@ -79,7 +79,7 @@ disarray::disarray! {
                 entry: max_charge_begin_wrapper_ae as *const u8,
                 clobber: Register::Rax // Tmp from earlier cmove. Not used again.
             },
-            loc: GameLocation::Id(IdLocation::Ae { id: 51449, offset: 0xe9 }),
+            loc: GameLocation::Ae { id: 51449, offset: 0xe9 },
             sig: signature![
                 0xf3, 0x0f, 0x11, 0x84, 0x24, 0xa0, 0x00, 0x00, 0x00,
                 0x48, 0x85, 0xc9; 12
@@ -92,7 +92,7 @@ disarray::disarray! {
                 entry: max_charge_begin_wrapper_se as *const u8,
                 clobber: Register::Rax // Tmp from earlier cmove. Not used again.
             },
-            loc: GameLocation::Id(IdLocation::Se { id: 50557, offset: 0xe8 }),
+            loc: GameLocation::Se { id: 50557, offset: 0xe8 },
             sig: signature![
                 0xf3, 0x0f, 0x11, 0x84, 0x24, 0xc0, 0x00, 0x00, 0x00,
                 0x48, 0x85, 0xc9; 12
@@ -105,7 +105,7 @@ disarray::disarray! {
                 entry: max_charge_end_wrapper_ae as *const u8,
                 clobber: Register::Rcx // Patch follows a function call.
             },
-            loc: GameLocation::Id(IdLocation::Ae { id: 51449, offset: 0x179 }),
+            loc: GameLocation::Ae { id: 51449, offset: 0x179 },
             sig: signature![
                 0xf3, 0x0f, 0x10, 0x84, 0x24, 0xa0, 0x00, 0x00, 0x00,
                 0xf3, 0x41, 0x0f, 0x5f, 0xc1; 14
@@ -118,7 +118,7 @@ disarray::disarray! {
                 entry: max_charge_end_wrapper_se as *const u8,
                 clobber: Register::Rcx // Patch follows a function call.
             },
-            loc: GameLocation::Id(IdLocation::Se { id: 50557, offset: 0x207 }),
+            loc: GameLocation::Se { id: 50557, offset: 0x207 },
             sig: signature![
                 0xf3, 0x0f, 0x10, 0x84, 0x24, 0xc0, 0x00, 0x00, 0x00,
                 0x41, 0x0f, 0x2f, 0xc0,
@@ -143,7 +143,7 @@ disarray::disarray! {
                 entry: calculate_charge_points_per_use_wrapper_ae as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id(IdLocation::Ae { id: 51449, offset: 0x314 }),
+            loc: GameLocation::Ae { id: 51449, offset: 0x314 },
             sig: signature![
                 0x48, 0x8b, 0x0d, ?, ?, ?, ?,
                 0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
@@ -162,7 +162,7 @@ disarray::disarray! {
                 entry: calculate_charge_points_per_use_wrapper_se as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id(IdLocation::Se { id: 50557, offset: 0x344, }),
+            loc: GameLocation::Se { id: 50557, offset: 0x344, },
             sig: signature![
                 0x48, 0x8b, 0x0d, ?, ?, ?, ?,
                 0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
@@ -186,7 +186,7 @@ disarray::disarray! {
                 clobber: Register::Rax,
                 trampoline: player_avo_get_current_return_trampoline.inner()
             },
-            loc: GameLocation::Id(IdLocation::Ae { id: 38462, offset: 0 }),
+            loc: GameLocation::Ae { id: 38462, offset: 0 },
             sig: signature![
                 0x4c, 0x8b, 0xdc, 0x55, 0x56, 0x57, 0x41, 0x56,
                 0x41, 0x57, 0x48, 0x83, 0xec, 0x50; 14
@@ -200,7 +200,7 @@ disarray::disarray! {
                 clobber: Register::Rax,
                 trampoline: player_avo_get_current_return_trampoline.inner()
             },
-            loc: GameLocation::Id(IdLocation::Se { id: 37517, offset: 0 }),
+            loc: GameLocation::Se { id: 37517, offset: 0 },
             sig: signature![
                 0x40, 0x55, 0x56, 0x57, 0x41, 0x56, 0x41, 0x57,
                 0x48, 0x83, 0xec, 0x40; 12
@@ -220,7 +220,7 @@ disarray::disarray! {
                 entry: display_true_skill_level_hook_ae as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id(IdLocation::Ae { id: 52525, offset: 0x10d }),
+            loc: GameLocation::Ae { id: 52525, offset: 0x10d },
             sig: signature![
                 0x48, 0x8b, 0x0d, ?, ?, ?, ?,
                 0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
@@ -236,7 +236,7 @@ disarray::disarray! {
                 entry: display_true_skill_level_hook_se as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id(IdLocation::Se { id: 51652, offset: 0x108 }),
+            loc: GameLocation::Se { id: 51652, offset: 0x108 },
             sig: signature![
                 0x48, 0x8b, 0x0d, ?, ?, ?, ?,
                 0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
@@ -259,12 +259,12 @@ disarray::disarray! {
                 entry: display_true_skill_color_hook as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id(IdLocation::All {
+            loc: GameLocation::All {
                 id_se: 52059,
                 id_ae: 52945,
                 offset_se: 0x24,
                 offset_ae: 0x24
-            }),
+            },
             sig: signature![
                 0x48, 0x8b, 0x86, ?, 0x00, 0x00, 0x00,
                 0x48, 0x8d, 0x8e, ?, 0x00, 0x00, 0x00,
@@ -280,7 +280,7 @@ disarray::disarray! {
                 entry: improve_player_skill_points_wrapper_ae as *const u8,
                 clobber: Register::Rax // Written to after this patch.
             },
-            loc: GameLocation::Id(IdLocation::Ae { id: 41561, offset: 0xf1 }),
+            loc: GameLocation::Ae { id: 41561, offset: 0xf1 },
             sig: signature![
                 0xf3, 0x0f, 0x10, 0x44, 0x24, 0x30,
                 0xf3, 0x0f, 0x59, 0xc6,
@@ -294,7 +294,7 @@ disarray::disarray! {
                 entry: improve_player_skill_points_wrapper_se as *const u8,
                 clobber: Register::Rax // Written to after this patch.
             },
-            loc: GameLocation::Id(IdLocation::Se { id: 40554, offset: 0xdc }),
+            loc: GameLocation::Se { id: 40554, offset: 0xdc },
             sig: signature![
                 0xf3, 0x0f, 0x10, 0x44, 0x24, 0x30,
                 0xf3, 0x0f, 0x59, 0xc7,
@@ -313,7 +313,7 @@ disarray::disarray! {
                 entry: modify_perk_pool_wrapper_ae as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id(IdLocation::Ae { id: 52538, offset: 0x62 }),
+            loc: GameLocation::Ae { id: 52538, offset: 0x62 },
             sig: signature![
                 0x48, 0x8b, 0x15, ?, ?, ?, ?,
                 0x0f, 0xb6, 0x8a, ?, 0x0b, 0x00, 0x00,
@@ -331,7 +331,7 @@ disarray::disarray! {
                 entry: modify_perk_pool_wrapper_se as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id(IdLocation::Se { id: 51665, offset: 0x8f }),
+            loc: GameLocation::Se { id: 51665, offset: 0x8f },
             sig: signature![
                 0x48, 0x8b, 0x15, ?, ?, ?, ?,
                 0x0f, 0xb6, 0x8a, ?, 0x0b, 0x00, 0x00,
@@ -354,7 +354,7 @@ disarray::disarray! {
                 entry: improve_level_exp_by_skill_level_wrapper_ae as *const u8,
                 clobber: Register::Rdx // Will be smashed after this hook anyway.
             },
-            loc: GameLocation::Id(IdLocation::Ae { id: 41561, offset: 0x2cb }),
+            loc: GameLocation::Ae { id: 41561, offset: 0x2cb },
             sig: signature![
                 0xf3, 0x0f, 0x5c, 0xca,
                 0xf3, 0x0f, 0x59, 0x0d, ?, ?, ?, ?; 12
@@ -367,7 +367,7 @@ disarray::disarray! {
                 entry: improve_level_exp_by_skill_level_wrapper_se as *const u8,
                 clobber: Register::Rax // Smashed earlier in the function.
             },
-            loc: GameLocation::Id(IdLocation::Se { id: 40576, offset: 0x70 }),
+            loc: GameLocation::Se { id: 40576, offset: 0x70 },
             sig: signature![
                 0xf3, 0x0f, 0x5c, 0xc1,
                 0xf3, 0x0f, 0x59, 0x05, ?, ?, ?, ?; 12
@@ -394,12 +394,12 @@ disarray::disarray! {
                 entry: improve_attribute_when_level_up_wrapper as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id(IdLocation::All {
+            loc: GameLocation::All {
                 id_se: 51037,
                 id_ae: 51917,
                 offset_se: 0x93,
                 offset_ae: 0x93
-            }),
+            },
             sig: signature![
                 0xff, 0x50, 0x28,
                 0x83, 0x7f, 0x18, 0x1a,
@@ -425,12 +425,12 @@ disarray::disarray! {
                 entry: legendary_reset_skill_level_wrapper as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id(IdLocation::All {
+            loc: GameLocation::All {
                 id_se: 51714,
                 id_ae: 52591,
                 offset_se: 0x236,
                 offset_ae: 0x1d0
-            }),
+            },
             sig: signature![
                 0x0f, 0x2f, 0x05, ?, ?, ?, ?,
                 0x0f, 0x82, ?, ?, 0x00, 0x00,
@@ -449,12 +449,12 @@ disarray::disarray! {
                 entry: check_condition_for_legendary_skill_wrapper as *const u8,
                 clobber: Register::Rdx
             },
-            loc: GameLocation::Id(IdLocation::All {
+            loc: GameLocation::All {
                 id_se: 51647,
                 id_ae: 52520,
                 offset_se: 0x155,
                 offset_ae: 0x14e
-            }),
+            },
             sig: signature![
                 0x8b, 0xd0,
                 0x48, 0x8d, 0x8f, ?, 0x00, 0x00, 0x00,
@@ -470,12 +470,12 @@ disarray::disarray! {
                 entry: check_condition_for_legendary_skill_wrapper as *const u8,
                 clobber: Register::Rdx
             },
-            loc: GameLocation::Id(IdLocation::All {
+            loc: GameLocation::All {
                 id_se: 51638,
                 id_ae: 52510,
                 offset_se: 0x4cc,
                 offset_ae: 0x4d5
-            }),
+            },
             sig: signature![
                 0x8b, 0xd0,
                 0x48, 0x8d, 0x8f, ?, 0x00, 0x00, 0x00,
@@ -491,7 +491,7 @@ disarray::disarray! {
                 entry: hide_legendary_button_wrapper_ae as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id(IdLocation::Ae { id: 52527, offset: 0x153 }),
+            loc: GameLocation::Ae { id: 52527, offset: 0x153 },
             sig: signature![
                 0x48, 0x8b, 0x0d, ?, ?, ?, ?,
                 0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
@@ -507,7 +507,7 @@ disarray::disarray! {
                 entry: hide_legendary_button_wrapper_se as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id(IdLocation::Se { id: 51654, offset: 0x146 }),
+            loc: GameLocation::Se { id: 51654, offset: 0x146 },
             sig: signature![
                 0x48, 0x8b, 0x0d, ?, ?, ?, ?,
                 0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
@@ -541,7 +541,7 @@ disarray::disarray! {
                 entry: clear_legendary_button_wrapper_ae as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id(IdLocation::Ae { id: 52527, offset: 0x16dd }),
+            loc: GameLocation::Ae { id: 52527, offset: 0x16dd },
             sig: signature![
                 0x48, 0x8b, 0x0d, ?, ?, ?, ?,
                 0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
@@ -557,7 +557,7 @@ disarray::disarray! {
                 entry: clear_legendary_button_wrapper_se as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Id(IdLocation::Se { id: 51654, offset: 0x1621 }),
+            loc: GameLocation::Se { id: 51654, offset: 0x1621 },
             sig: signature![
                 0x48, 0x8b, 0x0d, ?, ?, ?, ?,
                 0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,

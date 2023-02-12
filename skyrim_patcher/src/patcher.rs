@@ -29,18 +29,11 @@ use crate::sig::{Signature, BinarySig};
 pub use skse64::safe::Register;
 
 /// Contains a version independent address ID for the specified skyrim versions.
-pub enum IdLocation {
+pub enum GameLocation {
     Base { se: usize, ae: usize },
     Se { id: usize, offset: usize },
     Ae { id: usize, offset: usize },
     All { id_se: usize, offset_se: usize, id_ae: usize, offset_ae: usize}
-}
-
-/// Tracks a location in the skyrim game binary.
-pub enum GameLocation {
-    #[cfg(feature = "by_offset")]
-    Offset { base: RelocAddr, offset: usize },
-    Id(IdLocation)
 }
 
 /// Encodes the type of hook which is being used by a patch.
@@ -135,7 +128,27 @@ type FindResult = Result<RelocAddr, DescriptorError>;
 #[repr(transparent)]
 pub struct GameRef<T>(UnsafeCell<usize>, std::marker::PhantomData<T>);
 
-impl IdLocation {
+impl GameLocation {
+    /// Finds the game address specified by this location.
+    fn find(
+        &self,
+        db: &VersionDb
+    ) -> FindResult {
+        let (id, offset) = self.get()?;
+        if let Ok(ra) = db.find_addr_by_id(id) {
+            Ok(ra + offset)
+        } else {
+            Err(DescriptorError::Missing)
+        }
+    }
+
+    /// Checks if the game location is compatible with the running version.
+    fn compatible(
+        &self
+    ) -> bool {
+        self.get().is_ok()
+    }
+
     /// Gets the address independent location, if it is compatible with the running game version.
     fn get(
         &self
@@ -155,67 +168,16 @@ impl IdLocation {
     }
 }
 
-impl GameLocation {
-    /// Finds the game address specified by this location.
-    fn find(
-        &self,
-        db: &VersionDb
-    ) -> FindResult {
-        match self {
-            #[cfg(feature = "by_offset")]
-            Self::Offset { base, offset } => {
-                if let Ok(id) = db.find_id_by_addr(*base) {
-                    skse_message!("Offset {:#x} has ID {}", base.offset(), id);
-                    Ok(*base + *offset)
-                } else {
-                    Err(DescriptorError::Missing)
-                }
-            },
-            Self::Id(id) => {
-                let (id, offset) = id.get()?;
-                if let Ok(ra) = db.find_addr_by_id(id) {
-                    Ok(ra + offset)
-                } else {
-                    Err(DescriptorError::Missing)
-                }
-            }
-        }
-    }
-
-    /// Checks if the game location is compatible with the running version.
-    fn compatible(
-        &self
-    ) -> bool {
-        match self {
-            Self::Id(id) => id.get().is_ok(),
-            #[cfg(feature = "by_offset")]
-            Self::Offset { .. } => true
-        }
-    }
-}
-
 impl std::fmt::Display for GameLocation {
     fn fmt(
         &self,
         f: &mut std::fmt::Formatter<'_>
     ) -> Result<(), std::fmt::Error> {
-        match self {
-            #[cfg(feature = "by_offset")]
-            Self::Offset { base, offset } => {
-                if *offset == 0 {
-                    write!(f, "[BASE: {:#x}]", base.offset())
-                } else {
-                    write!(f, "([BASE: {:#x}] + {:#x})", base.offset(), offset)
-                }
-            },
-            Self::Id(id) => {
-                let (id, offset) = id.get().unwrap();
-                if offset == 0 {
-                    write!(f, "[ID: {}]", id)
-                } else {
-                    write!(f, "([ID: {}] + {:#x})", id, offset)
-                }
-            }
+        let (id, offset) = self.get().unwrap();
+        if offset == 0 {
+            write!(f, "[ID: {}]", id)
+        } else {
+            write!(f, "([ID: {}] + {:#x})", id, offset)
         }
     }
 }

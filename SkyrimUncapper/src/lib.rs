@@ -32,7 +32,12 @@ include!(concat!(env!("OUT_DIR"), "/git_version.rs"));
 const NUM_PATCHES: usize = NUM_GAME_SIGNATURES + NUM_HOOK_SIGNATURES;
 
 skse64::plugin_version_data! {
-    version: SkseVersion::new(2, 1, 1, 0),
+    version: SkseVersion::new(
+        unsigned_from_str(env!("CARGO_PKG_VERSION_MAJOR")),
+        unsigned_from_str(env!("CARGO_PKG_VERSION_MINOR")),
+        unsigned_from_str(env!("CARGO_PKG_VERSION_PATCH")),
+        unsigned_from_str(env!("CARGO_PKG_VERSION_PRE"))
+    ),
     name: "SkyrimUncapper",
     author: "Andrew Spaulding (Kasplat)",
     email: "andyespaulding@gmail.com",
@@ -79,4 +84,20 @@ pub fn skse_plugin_rust_entry(
 
     skse_message!("Initialization complete!");
     Ok(())
+}
+
+// Converts strings to ints in const context, for version numbers.
+const fn unsigned_from_str(
+    s: &str
+) -> u32 {
+    let s = s.as_bytes();
+    let mut i = 0;
+    let mut res = 0;
+    while i < s.len() {
+        assert!(b'0' <= s[i] && s[i] <= b'9');
+        res *= 10;
+        res += (s[i] - b'0') as u32;
+        i += 1;
+    }
+    return res;
 }

@@ -1,6 +1,6 @@
 [package]
 name = "SkyrimUncapper"
-version = "2.1.1"
+version = "2.1.2"
 edition = "2021"
 
 [lib]
@@ -9,7 +9,6 @@ crate-type = ["cdylib"]
 
 [features]
 alloc_trampoline = ["skyrim_patcher/alloc_trampoline"]
-by_offset = ["skyrim_patcher/by_offset"]
 
 [dependencies]
 racy_cell = { path = "../racy_cell" }

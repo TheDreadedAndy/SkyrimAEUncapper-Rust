@@ -12,7 +12,6 @@ name = "vdb-dump"
 required-features = [ "dump" ]
 
 [features]
-by_offset = []
 dump = [ "skse64/disas", "skse64/not_plugin" ]
 
 [dependencies]

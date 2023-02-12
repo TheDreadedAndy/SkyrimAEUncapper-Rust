@@ -7,7 +7,7 @@
 
 use std::ffi::c_int;
 
-use skyrim_patcher::{GameRef, Descriptor, GameLocation, IdLocation};
+use skyrim_patcher::{GameRef, Descriptor, GameLocation};
 
 use super::PlayerCharacter;
 use super::{ActorValueOwner, ActorAttribute};
@@ -51,73 +51,73 @@ disarray::disarray! {
     pub static GAME_SIGNATURES: [Descriptor; NUM_GAME_SIGNATURES] = [
         Descriptor::Object {
             name: "fEnchantingSkillCostBase",
-            loc: GameLocation::Id(IdLocation::Base { se: 506021, ae: 375771 }),
+            loc: GameLocation::Base { se: 506021, ae: 375771 },
             result: ENCHANTING_SKILL_COST_BASE.inner()
         },
 
         Descriptor::Object {
             name: "fEnchantingSkillCostMult",
-            loc: GameLocation::Id(IdLocation::Base { se: 506023, ae: 375774 }),
+            loc: GameLocation::Base { se: 506023, ae: 375774 },
             result: ENCHANTING_SKILL_COST_MULT.inner()
         },
 
         Descriptor::Object {
             name: "fEnchantingSkillCostScale",
-            loc: GameLocation::Id(IdLocation::Base { se: 506025, ae: 375777 }),
+            loc: GameLocation::Base { se: 506025, ae: 375777 },
             result: ENCHANTING_SKILL_COST_SCALE.inner()
         },
 
         Descriptor::Object {
             name: "fEnchantingCostExponent",
-            loc: GameLocation::Id(IdLocation::Base { se: 506027, ae: 375780 }),
+            loc: GameLocation::Base { se: 506027, ae: 375780 },
             result: ENCHANTING_COST_EXPONENT.inner()
         },
 
         Descriptor::Object {
             name: "fXPPerSkillRank",
-            loc: GameLocation::Id(IdLocation::Base { se: 505484, ae: 374914 }),
+            loc: GameLocation::Base { se: 505484, ae: 374914 },
             result: XP_PER_SKILL_RANK.inner()
         },
 
         Descriptor::Object {
             name: "fLegendarySkillResetValue",
-            loc: GameLocation::Id(IdLocation::Base { se: 507065, ae: 377771 }),
+            loc: GameLocation::Base { se: 507065, ae: 377771 },
             result: LEGENDARY_SKILL_RESET_VALUE.inner()
         },
 
         Descriptor::Object {
             name: "g_thePlayer",
-            loc: GameLocation::Id(IdLocation::Base { se: 517014, ae: 403521 }),
+            loc: GameLocation::Base { se: 517014, ae: 403521 },
             result: PLAYER_OBJECT.inner()
         },
 
         Descriptor::Function {
             name: "GetLevel",
-            loc: GameLocation::Id(IdLocation::Base { se: 36344, ae: 37334 }),
+            loc: GameLocation::Base { se: 36344, ae: 37334 },
             result: get_level_entry.inner()
         },
 
         Descriptor::Function {
             name: "PlayerAVOGetBase",
-            loc: GameLocation::Id(IdLocation::Base { se: 37519, ae: 38464 }),
+            loc: GameLocation::Base { se: 37519, ae: 38464 },
             result: player_avo_get_base_entry.inner()
         },
 
         Descriptor::Function {
             name: "PlayerAVOGetCurrent",
-            loc: GameLocation::Id(IdLocation::Base { se: 37517, ae: 38462 }),
+            loc: GameLocation::Base { se: 37517, ae: 38462 },
             result: player_avo_get_current_entry.inner()
         },
 
         Descriptor::Function {
             name: "PlayerAVOModBase",
-            loc: GameLocation::Id(IdLocation::Base { se: 37521, ae: 38466 }),
+            loc: GameLocation::Base { se: 37521, ae: 38466 },
             result: player_avo_mod_base_entry.inner()
         },
 
         Descriptor::Function {
             name: "PlayerAVOModCurrent",
-            loc: GameLocation::Id(IdLocation::Base { se: 37522, ae: 38467 }),
+            loc: GameLocation::Base { se: 37522, ae: 38467 },
             result: player_avo_mod_current_entry.inner()
         }
     ];

@@ -12,7 +12,7 @@ const NATIVE_WRAPPERS: &str = "src/skyrim/native_wrappers.cpp";
 
 const RC_AUTHOR: &str = "Kasplat";
 const RC_NAME: &str = "Skyrim Uncapper AE";
-const RC_VERSION: &str = "2.1.1.0";
+const RC_VERSION: &str = env!("CARGO_PKG_VERSION");
 const RC_FILE: &str = "SkyrimUncapper.dll";
 
 fn main() {

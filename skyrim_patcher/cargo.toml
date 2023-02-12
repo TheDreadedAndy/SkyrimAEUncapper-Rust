@@ -4,7 +4,6 @@ version = "1.0.4"
 edition = "2021"
 
 [features]
-by_offset = ["versionlib/by_offset"]
 alloc_trampoline = ["skse64/trampoline"]
 
 [dependencies]

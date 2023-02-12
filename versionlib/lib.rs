@@ -21,7 +21,6 @@ use skse64::reloc::RelocAddr;
 /// A version database, which allows for offsets/ids to be searched for by each other.
 pub struct VersionDb {
     pub (in crate) by_id: HashMap<usize, usize>,
-    #[cfg(all(feature = "by_offset", not(feature = "dump")))] by_offset: HashMap<usize, usize>,
     #[cfg(not(feature = "dump"))] version: SkseVersion
 }
 
@@ -126,8 +125,6 @@ impl VersionDb {
         format: u32
     ) -> Self {
         let mut by_id = HashMap::<usize, usize>::new();
-        #[cfg(feature = "by_offset")]
-        let mut by_offset = HashMap::<usize, usize>::new();
 
         let (ptr_size, addr_count) = Self::parse_header(f, format);
         let (mut pid, mut poffset) = (0, 0);
@@ -136,16 +133,12 @@ impl VersionDb {
 
             assert!(by_id.insert(id, offset).is_none());
 
-            #[cfg(feature = "by_offset")]
-            assert!(by_offset.insert(offset, id).is_none());
-
             pid = id;
             poffset = offset;
         }
 
         Self {
             by_id,
-            #[cfg(all(feature = "by_offset", not(feature = "dump")))] by_offset,
             #[cfg(not(feature = "dump"))] version: _version
         }
     }
@@ -156,15 +149,6 @@ impl VersionDb {
         &self
     ) -> SkseVersion {
         self.version
-    }
-
-    /// Attempts to find the address independent id for the given offset.
-    #[cfg(all(feature = "by_offset", not(feature = "dump")))]
-    pub fn find_id_by_addr(
-        &self,
-        addr: RelocAddr
-    ) -> Result<usize, ()> {
-        self.by_offset.get(&addr.offset()).map(|id| *id).ok_or(())
     }
 
     /// Attempts to find the offset of the given address independent id.
