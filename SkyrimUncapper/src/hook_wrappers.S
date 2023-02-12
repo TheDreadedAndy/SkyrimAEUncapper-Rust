@@ -293,24 +293,29 @@ modify_perk_pool_wrapper_se:
  * Passes the EXP gain to our function for further modification.
  * Note that the code here is rather different than the OG implementation
  * because the original improve_level_exp_by_skill_level() function got inlined.
+ *
+ * Note also that SE expects exp to be in xmm0 while ae expects it in xmm1.
  */
 improve_level_exp_by_skill_level_wrapper_ae:
     SAVEALL
 
     subss %xmm2, %xmm1 // Reimplement replaced code.
     movss %xmm1, %xmm0 // xmm1 contains level exp (without mult)
-    jmp _improve_level_exp_by_skill_level_wrapper
-
-improve_level_exp_by_skill_level_wrapper_se:
-    SAVEALL
-    subss %xmm1, %xmm0 // Reimplement replaced code.
-
-_improve_level_exp_by_skill_level_wrapper:
     mov %esi, %edx     // esi contains skill_id.
     call improve_level_exp_by_skill_level_hook
     movdqu %xmm0, 0x30(%rsp) // Replace xmm1 with our result.
 
     RESTOREALL
+    ret
+
+improve_level_exp_by_skill_level_wrapper_se:
+    SAVEALL
+
+    subss %xmm1, %xmm0 // Reimplement replaced code.
+    mov %esi, %edx     // esi contains skill_id.
+    call improve_level_exp_by_skill_level_hook
+
+    RESTOREALL retfpr=1
     ret
 
 /*
