@@ -5,9 +5,6 @@
 //! @bug No known bugs.
 //!
 
-use std::fs::File;
-use std::io::Write;
-
 const NATIVE_WRAPPERS: &str = "src/skyrim/native_wrappers.cpp";
 
 const RC_AUTHOR: &str = "Kasplat";
@@ -16,6 +13,9 @@ const RC_VERSION: &str = env!("CARGO_PKG_VERSION");
 const RC_FILE: &str = "SkyrimUncapper.dll";
 
 fn main() {
+    // Always rerun this build script.
+    println!("cargo:rerun-if-changed=../");
+
     // Build C++ exception nets.
     println!("cargo:rerun-if-changed={}", NATIVE_WRAPPERS);
     cc::Build::new().cpp(true).file(NATIVE_WRAPPERS).compile("nets");
@@ -40,10 +40,5 @@ fn main() {
         "--tags"
     ]).output().unwrap();
     let version = String::from_utf8(stdout).unwrap();
-
-    // Write git version to a file.
-    let mut f = File::create(
-        format!("{}/git_version.rs", std::env::var("OUT_DIR").unwrap())
-    ).unwrap();
-    write!(&mut f, "pub (in crate) const GIT_VERSION: &str = \"{}\";", version.trim()).unwrap();
+    println!("cargo:rustc-env=UNCAPPER_GIT_VERSION={}", version.trim());
 }
