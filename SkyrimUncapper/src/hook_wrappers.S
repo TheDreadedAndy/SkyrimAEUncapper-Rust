@@ -297,30 +297,18 @@ modify_perk_pool_wrapper_se:
 improve_level_exp_by_skill_level_wrapper_ae:
     SAVEALL
 
-    movss %xmm1, %xmm0 // xmm1 contains level exp
-    mov %esi, %edx // esi contains skill_id.
-    call improve_level_exp_by_skill_level_hook
-
-    mov 0xb0(%rsp), %rax // Get the saved value for rax.
+    subss %xmm2, %xmm1 // Reimplement replaced code.
+    movss %xmm1, %xmm0 // xmm1 contains level exp (without mult)
     jmp _improve_level_exp_by_skill_level_wrapper
 
 improve_level_exp_by_skill_level_wrapper_se:
     SAVEALL
-
-    // xmm0 already contains level exp
-    mov %esi, %edx // esi contains skill_id.
-    call improve_level_exp_by_skill_level_hook
-
-    mov 0xa8(%rsp), %rax // Get the saved value for rcx.
+    subss %xmm1, %xmm0 // Reimplement replaced code.
 
 _improve_level_exp_by_skill_level_wrapper:
-    addss (%rax), %xmm0 // This is the code we overwrote, except we
-    movss %xmm0, (%rax) // now use xmm0 instead of xmm1.
-
-    // Set up args for the call we return to.
-    call get_player
-    mov %rax, 0xa8(%rsp) // Move into saved rcx.
-    mov %rsi, 0xa0(%rsp) // Move into saved rdx.
+    mov %esi, %edx     // esi contains skill_id.
+    call improve_level_exp_by_skill_level_hook
+    movdqu %xmm0, 0x30(%rsp) // Replace xmm1 with our result.
 
     RESTOREALL
     ret

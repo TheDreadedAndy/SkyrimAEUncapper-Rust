@@ -19,6 +19,7 @@ pub static ENCHANTING_SKILL_COST_BASE: GameRef<&'static f32> = GameRef::new();
 pub static ENCHANTING_SKILL_COST_SCALE: GameRef<&'static f32> = GameRef::new();
 pub static ENCHANTING_COST_EXPONENT: GameRef<&'static f32> = GameRef::new();
 pub static ENCHANTING_SKILL_COST_MULT: GameRef<&'static f32> = GameRef::new();
+pub static XP_PER_SKILL_RANK: GameRef<&'static f32> = GameRef::new();
 pub static LEGENDARY_SKILL_RESET_VALUE: GameRef<&'static f32> = GameRef::new();
 
 // Game functions. These are wrapped by C++ catchers and then safe implementations later.
@@ -70,6 +71,12 @@ disarray::disarray! {
             name: "fEnchantingCostExponent",
             loc: GameLocation::Id(IdLocation::Base { se: 506027, ae: 375780 }),
             result: ENCHANTING_COST_EXPONENT.inner()
+        },
+
+        Descriptor::Object {
+            name: "fXPPerSkillRank",
+            loc: GameLocation::Id(IdLocation::Base { se: 505484, ae: 374914 }),
+            result: XP_PER_SKILL_RANK.inner()
         },
 
         Descriptor::Object {

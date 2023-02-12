@@ -352,14 +352,12 @@ disarray::disarray! {
             enabled: settings::is_level_exp_enabled,
             hook: Hook::Call12 {
                 entry: improve_level_exp_by_skill_level_wrapper_ae as *const u8,
-                clobber: Register::Rdx // Rax/rcx holds an address we need. Rdx stable in SE/AE.
+                clobber: Register::Rdx // Will be smashed after this hook anyway.
             },
-            loc: GameLocation::Id(IdLocation::Ae { id: 41561, offset: 0x2d7 }),
+            loc: GameLocation::Id(IdLocation::Ae { id: 41561, offset: 0x2cb }),
             sig: signature![
-                0xf3, 0x0f, 0x58, 0x08,
-                0xf3, 0x0f, 0x11, 0x08,
-                0x8b, 0xd6,
-                0x48, 0x8b, 0x0d, ?, ?, ?, ?; 17
+                0xf3, 0x0f, 0x5c, 0xca,
+                0xf3, 0x0f, 0x59, 0x0d, ?, ?, ?, ?; 12
             ]
         },
         Descriptor::Patch {
@@ -367,14 +365,12 @@ disarray::disarray! {
             enabled: settings::is_level_exp_enabled,
             hook: Hook::Call12 {
                 entry: improve_level_exp_by_skill_level_wrapper_se as *const u8,
-                clobber: Register::Rdx
+                clobber: Register::Rax // Smashed earlier in the function.
             },
-            loc: GameLocation::Id(IdLocation::Se { id: 40554, offset: 0x230 }),
+            loc: GameLocation::Id(IdLocation::Se { id: 40576, offset: 0x70 }),
             sig: signature![
-                0xf3, 0x0f, 0x58, 0x01,
-                0x8b, 0xd6,
-                0xf3, 0x0f, 0x11, 0x01,
-                0x48, 0x8b, 0x0d, ?, ?, ?, ?; 17
+                0xf3, 0x0f, 0x5c, 0xc1,
+                0xf3, 0x0f, 0x59, 0x05, ?, ?, ?, ?; 12
             ]
         },
 
@@ -704,7 +700,7 @@ extern "system" fn improve_level_exp_by_skill_level_hook(
         );
     }
 
-    exp
+    exp * *XP_PER_SKILL_RANK.get()
 }
 
 ///
