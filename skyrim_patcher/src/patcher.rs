@@ -330,8 +330,14 @@ impl Descriptor {
             Self::Object { loc, .. } => loc.find(db),
             Self::Function { loc, .. } => loc.find(db),
             Self::Patch { enabled, loc, sig, .. } => {
+                // Incompatible game version needs to take priority, or we'll try to report on
+                // a patch that should be invisible.
+                if !loc.compatible() {
+                    return Err(DescriptorError::IncompatibleGameVersion);
+                }
+
                 if !enabled() {
-                    return Err(DescriptorError::Disabled)
+                    return Err(DescriptorError::Disabled);
                 }
 
                 let addr = loc.find(db)?;
@@ -475,7 +481,7 @@ pub fn apply<const NUM_PATCHES: usize>(
     #[cfg(feature = "alloc_trampoline")]
     let mut alloc_size: usize = 0;
 
-    skse_message!("--------------------- Skyrim Patcher 1.0.3 ---------------------");
+    skse_message!("--------------------- Skyrim Patcher 1.0.4 ---------------------");
 
     // Attempt to locate all of the patch signatures.
     let mut fails = 0;

@@ -32,7 +32,7 @@ include!(concat!(env!("OUT_DIR"), "/git_version.rs"));
 const NUM_PATCHES: usize = NUM_GAME_SIGNATURES + NUM_HOOK_SIGNATURES;
 
 skse64::plugin_version_data! {
-    version: SkseVersion::new(2, 1, 0, 0),
+    version: SkseVersion::new(2, 1, 1, 0),
     name: "SkyrimUncapper",
     author: "Andrew Spaulding (Kasplat)",
     email: "andyespaulding@gmail.com",
