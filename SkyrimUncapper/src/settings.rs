@@ -35,6 +35,7 @@ pub (in crate) struct SkillMult {
 struct GeneralSettings {
     skill_caps_en: DefaultIniField<IniField<bool>>,
     skill_formula_caps_en: DefaultIniField<IniField<bool>>,
+    skill_formula_ui_fix_en: DefaultIniField<IniField<bool>>,
     enchanting_patch_en: DefaultIniField<IniField<bool>>,
     skill_exp_mults_en: DefaultIniField<IniField<bool>>,
     level_exp_mults_en: DefaultIniField<IniField<bool>>,
@@ -127,6 +128,11 @@ impl Settings {
             general: GeneralSettings {
                 skill_caps_en: DefaultIniField::new(GEN_SEC, "bUseSkillCaps", true),
                 skill_formula_caps_en: DefaultIniField::new(GEN_SEC, "bUseSkillFormulaCaps", true),
+                skill_formula_ui_fix_en: DefaultIniField::new(
+                    GEN_SEC,
+                    "bUseSkillFormulaCapsUIFix",
+                    true
+                ),
                 enchanting_patch_en: DefaultIniField::new(GEN_SEC, "bUseEnchanterCaps", true),
                 skill_exp_mults_en: DefaultIniField::new(GEN_SEC, "bUseSkillExpGainMults", true),
                 level_exp_mults_en: DefaultIniField::new(GEN_SEC, "bUsePCLevelSkillExpMults", true),
@@ -188,6 +194,7 @@ impl Settings {
     ) {
         self.general.skill_caps_en.read_ini_default(ini);
         self.general.skill_formula_caps_en.read_ini_default(ini);
+        self.general.skill_formula_ui_fix_en.read_ini_default(ini);
         self.general.enchanting_patch_en.read_ini_default(ini);
         self.general.skill_exp_mults_en.read_ini_default(ini);
         self.general.level_exp_mults_en.read_ini_default(ini);
@@ -250,6 +257,11 @@ pub fn is_skill_cap_enabled() -> bool {
 /// Checks if the skill formula cap patches are enabled.
 pub fn is_skill_formula_cap_enabled() -> bool {
     SETTINGS.general.skill_formula_caps_en.get()
+}
+
+/// Checks if the skill formula cap UI fixes are enabled.
+pub fn is_skill_formula_cap_ui_fix_enabled() -> bool {
+    SETTINGS.general.skill_formula_caps_en.get() && SETTINGS.general.skill_formula_ui_fix_en.get()
 }
 
 /// Checks if the enchanting patches are enabled.

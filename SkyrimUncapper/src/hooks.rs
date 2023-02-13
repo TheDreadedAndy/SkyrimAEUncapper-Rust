@@ -215,7 +215,7 @@ disarray::disarray! {
         //
         Descriptor::Patch {
             name: "DisplayTrueSkillLevel",
-            enabled: settings::is_skill_formula_cap_enabled,
+            enabled: settings::is_skill_formula_cap_ui_fix_enabled,
             hook: Hook::Call12 {
                 entry: display_true_skill_level_hook_ae as *const u8,
                 clobber: Register::Rax
@@ -231,7 +231,7 @@ disarray::disarray! {
         },
         Descriptor::Patch {
             name: "DisplayTrueSkillLevel",
-            enabled: settings::is_skill_formula_cap_enabled,
+            enabled: settings::is_skill_formula_cap_ui_fix_enabled,
             hook: Hook::Call12 {
                 entry: display_true_skill_level_hook_se as *const u8,
                 clobber: Register::Rax
@@ -254,7 +254,7 @@ disarray::disarray! {
         //
         Descriptor::Patch {
             name: "DisplayTrueSkillColor",
-            enabled: settings::is_skill_formula_cap_enabled,
+            enabled: settings::is_skill_formula_cap_ui_fix_enabled,
             hook: Hook::Call12 {
                 entry: display_true_skill_color_hook as *const u8,
                 clobber: Register::Rax
