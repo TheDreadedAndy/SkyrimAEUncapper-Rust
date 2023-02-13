@@ -35,6 +35,7 @@ disarray::disarray! {
         //
         // Injects the code which alters the real skill cap of each skill.
         //
+        // IMPORTANT: THIS PATCH MUST BE AT LEAST 14 BYTES LONG.
         // Note that the last two bytes of this patch must be overwritten with NOPs
         // and returned to, at the request of the author of the eXPerience mod (17751).
         // This is handled by the patcher, we need only make our signature long enough.
@@ -46,10 +47,11 @@ disarray::disarray! {
                 entry: skill_cap_patch_wrapper_ae as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Ae { id: 41561, offset: 0x72 },
+            loc: GameLocation::Ae { id: 41561, offset: 0x6f },
             sig: signature![
+                0xff, 0x50, 0x18,
                 0x44, 0x0f, 0x28, 0xc0,
-                0xf3, 0x44, 0x0f, 0x10, 0x15, ?, ?, ?, ?; 13
+                0xf3, 0x44, 0x0f, 0x10, 0x15, ?, ?, ?, ?; 16
             ]
         },
         Descriptor::Patch {
@@ -59,10 +61,11 @@ disarray::disarray! {
                 entry: skill_cap_patch_wrapper_se as *const u8,
                 clobber: Register::Rax
             },
-            loc: GameLocation::Se { id: 40554, offset: 0x48 },
+            loc: GameLocation::Se { id: 40554, offset: 0x45 },
             sig: signature![
+                0xff, 0x50, 0x18,
                 0xf3, 0x44, 0x0f, 0x10, 0x05, ?, ?, ?, ?,
-                0x0f, 0x28, 0xf0; 12
+                0x0f, 0x28, 0xf0; 15
             ]
         },
 
@@ -278,7 +281,7 @@ disarray::disarray! {
             enabled: settings::is_skill_exp_enabled,
             hook: Hook::Call12 {
                 entry: improve_player_skill_points_wrapper_ae as *const u8,
-                clobber: Register::Rax // Written to after this patch.
+                clobber: Register::Rcx // Written to after this patch.
             },
             loc: GameLocation::Ae { id: 41561, offset: 0xf1 },
             sig: signature![
@@ -292,7 +295,7 @@ disarray::disarray! {
             enabled: settings::is_skill_exp_enabled,
             hook: Hook::Call12 {
                 entry: improve_player_skill_points_wrapper_se as *const u8,
-                clobber: Register::Rax // Written to after this patch.
+                clobber: Register::Rcx // Written to after this patch, garbage before patch.
             },
             loc: GameLocation::Se { id: 40554, offset: 0xdc },
             sig: signature![

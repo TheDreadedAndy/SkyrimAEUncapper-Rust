@@ -155,8 +155,7 @@ unsafe extern "system" fn handle_ffi_exception(
 }
 
 /// Helper for assembly code to get the player pointer.
-#[no_mangle]
-extern "system" fn get_player() -> *mut PlayerCharacter {
+fn get_player() -> *mut PlayerCharacter {
     unsafe {
         // SAFETY: The GameRef struct ensures our player pointer is valid.
         *(PLAYER_OBJECT.get())

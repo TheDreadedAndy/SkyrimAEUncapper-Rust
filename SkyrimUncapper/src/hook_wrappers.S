@@ -107,6 +107,7 @@
 skill_cap_patch_wrapper_ae:
     SAVEALL
 
+    call player_avo_get_base_unchecked // Reimplement replaced call.
     movaps %xmm0, %xmm8 // Reimplement original move.
     mov %esi, %ecx // Move skill ID back into first arg.
     call get_skill_cap_hook
@@ -118,6 +119,7 @@ skill_cap_patch_wrapper_ae:
 skill_cap_patch_wrapper_se:
     SAVEALL
 
+    call player_avo_get_base_unchecked // Reimplement replaced call.
     movaps %xmm0, %xmm6 // Reimplement og move.
     mov %esi, %ecx // Move skill ID back into first arg.
     call get_skill_cap_hook
