@@ -182,7 +182,7 @@ disarray::disarray! {
             name: "PlayerAVOGetCurrent",
             enabled: settings::is_skill_formula_cap_enabled,
             hook: Hook::Jump12 {
-                entry: player_avo_get_current_hook as *const u8,
+                entry: player_avo_get_current_wrapper as *const u8,
                 clobber: Register::Rax,
                 trampoline: player_avo_get_current_return_trampoline.inner()
             },
@@ -196,7 +196,7 @@ disarray::disarray! {
             name: "PlayerAVOGetCurrent",
             enabled: settings::is_skill_formula_cap_enabled,
             hook: Hook::Jump12 {
-                entry: player_avo_get_current_hook as *const u8,
+                entry: player_avo_get_current_wrapper as *const u8,
                 clobber: Register::Rax,
                 trampoline: player_avo_get_current_return_trampoline.inner()
             },
@@ -631,6 +631,7 @@ extern "system" fn calculate_charge_points_per_use_hook(
 }
 
 /// Caps the formula results for each skill.
+#[no_mangle]
 extern "system" fn player_avo_get_current_hook(
     av: *mut ActorValueOwner,
     attr: c_int

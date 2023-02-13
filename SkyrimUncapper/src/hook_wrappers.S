@@ -17,6 +17,11 @@
  * stack space for any called functions to use above the return address.
  * Another important point is that once an epilogue starts nothing else can
  * happen except for that epilogue (for unwinding).
+ *
+ * Note also that the compiler can sometimes optimize out the saving of
+ * caller saved registers if it knows the function its calling wont trash
+ * them. This means we really can't make any assumptions about reg saving,
+ * unfortunately.
  */
 
 .global skill_cap_patch_wrapper_ae
@@ -27,6 +32,7 @@
 .global max_charge_end_wrapper_se
 .global calculate_charge_points_per_use_wrapper_ae
 .global calculate_charge_points_per_use_wrapper_se
+.global player_avo_get_current_wrapper
 .global player_avo_get_current_original_wrapper_ae
 .global player_avo_get_current_original_wrapper_se
 .global display_true_skill_level_hook_ae
@@ -97,33 +103,27 @@
 /*
  * This function gets injected in the middle of another, so we must use the call
  * injection macros to protect the register state.
- *
- * This immediately follows a call, so no need to reg save other than the return value.
  */
 skill_cap_patch_wrapper_ae:
-    sub $0x28, %rsp
+    SAVEALL
 
     movaps %xmm0, %xmm8 // Reimplement original move.
-
     mov %esi, %ecx // Move skill ID back into first arg.
     call get_skill_cap_hook
     movss %xmm0, %xmm10 // Replace maximum with fn result.
-    movaps %xmm8, %xmm0 // Restore xmm0 for comparison.
 
-    add $0x28, %rsp
+    RESTOREALL
     ret
 
 skill_cap_patch_wrapper_se:
-    sub $0x28, %rsp
+    SAVEALL
 
     movaps %xmm0, %xmm6 // Reimplement og move.
-
     mov %esi, %ecx // Move skill ID back into first arg.
     call get_skill_cap_hook
     movss %xmm0, %xmm8  // Replace max with fn result.
-    movaps %xmm6, %xmm0 // Restore xmm0, just in case :)
 
-    add $0x28, %rsp
+    RESTOREALL
     ret
 
 /*
@@ -178,8 +178,10 @@ _max_charge_end_wrapper:
 
 /*
  * Wraps our calculate_charge_points_per_use() function. We use this wrapper
- * to get access to our callers max_charge value. We replace the call to the
- * original function, so no reg save. We're just changing the args.
+ * to get access to our callers max_charge value.
+ *
+ * Note that rax is smashed in the code we overwrite, so we're safe to trash
+ * it here.
  */
 calculate_charge_points_per_use_wrapper_ae:
     lea 0xa8(%rsp), %rax
@@ -189,11 +191,27 @@ calculate_charge_points_per_use_wrapper_se:
     lea 0xc8(%rsp), %rax
 
 _calculate_charge_points_per_use_wrapper:
+    SAVEALL
+
     movss (%rax), %xmm1 // Get max_charge
+    xorps %xmm0, %xmm0 // Reimplement max from original code.
+    maxss %xmm0, %xmm1
     movaps %xmm7, %xmm0 // Get base_points
-    xorps %xmm2, %xmm2 // Reimplement max from original code.
-    maxss %xmm2, %xmm1
-    jmp calculate_charge_points_per_use_hook
+    call calculate_charge_points_per_use_hook
+
+    RESTOREALL retfpr=1
+    ret
+
+/*
+ * This is mostly here out of paranoia. Since the compiler could technically
+ * optimize out register saving here, we save everything except our return
+ * value.
+ */
+player_avo_get_current_wrapper:
+    SAVEALL
+    call player_avo_get_current_hook
+    RESTOREALL retfpr=1
+    ret
 
 /*
  * This function allows us to call the OG player_avo_get_current() function by
@@ -228,27 +246,31 @@ player_avo_get_current_original_wrapper_se:
  */
 display_true_skill_level_hook_ae:
 display_true_skill_color_hook:
-    push %rdi
+    SAVEALL
+
+    call get_player_avo
+    mov %edi, %edx
     jmp _display_true_skill_hook
 
 display_true_skill_level_hook_se:
-    push %rsi
+    SAVEALL
+
+    call get_player_avo
+    mov %esi, %edx
 
 _display_true_skill_hook:
-    sub $0x20, %rsp
-
-    // Reimplement replaced setup.
-    call get_player_avo
     mov %rax, %rcx
-    mov 0x20(%rsp), %edx
     call player_avo_get_current_unchecked
 
-    add $0x28, %rsp
+    RESTOREALL retfpr=1
     ret
 
 /*
  * Applies additional multipliers to the skill experience gained in the location
  * where the game applies the skill experience base multiplier and offset.
+ *
+ * Note well that this is an example of a location where the compiler expects
+ * every caller saved gpr except eax to not be smashed (in SE, at least).
  */
 improve_player_skill_points_wrapper_ae:
     movaps %xmm6, %xmm0 // base exp in AE.
@@ -272,8 +294,6 @@ _improve_player_skill_points_wrapper:
 /*
  * Reads in the number of perk points to add to the players pool and then updates
  * the pool based on the sign of that number and our config settings.
- *
- * We save all registers, since this is an injected call.
  */
 modify_perk_pool_wrapper_ae:
     SAVEALL
@@ -322,8 +342,11 @@ improve_level_exp_by_skill_level_wrapper_se:
  * Fixes the arguments before jumping to the hook.
  */
 improve_attribute_when_level_up_wrapper:
+    SAVEALL
     mov %edx, %ecx
-    jmp improve_attribute_when_level_up_hook
+    call improve_attribute_when_level_up_hook
+    RESTOREALL
+    ret
 
 /*
  * Modifies the rest level of legendarying a skill depending on the user
@@ -351,34 +374,45 @@ legendary_reset_skill_level_wrapper:
 /*
  * Overwrites the call to the original legendary skill condition check
  * with a call to our own condition check.
- *
- * Since we are overwriting another fn call, we dont need to reg save.
  */
 check_condition_for_legendary_skill_wrapper:
+    SAVEALL
     mov %eax, %ecx
-    jmp check_condition_for_legendary_skill_hook
+    call check_condition_for_legendary_skill_hook
+    RESTOREALL retfpr=1
+    ret
 
 /*
  * Allows the legendary button to be hidden based on an INI setting.
- * We are overwriting another function call here, so we dont need to save
- * the register state.
  */
 hide_legendary_button_wrapper_ae:
+    SAVEALL
     mov %r15d, %ecx
-    jmp hide_legendary_button_hook
+    call hide_legendary_button_hook
+    RESTOREALL retfpr=1
+    ret
 
 hide_legendary_button_wrapper_se:
+    SAVEALL
     mov %esi, %ecx
-    jmp hide_legendary_button_hook
+    call hide_legendary_button_hook
+    RESTOREALL retfpr=1
+    ret
 
 /*
  * Forces the game to clear the legendary button in accordance with
  * what our mod expects when scrolling in the skill menu.
  */
 clear_legendary_button_wrapper_ae:
+    SAVEALL
     mov %r15d, %ecx
-    jmp clear_legendary_button_hook
+    call clear_legendary_button_hook
+    RESTOREALL retfpr=1
+    ret
 
 clear_legendary_button_wrapper_se:
+    SAVEALL
     mov %esi, %ecx
-    jmp clear_legendary_button_hook
+    call clear_legendary_button_hook
+    RESTOREALL retfpr=1
+    ret

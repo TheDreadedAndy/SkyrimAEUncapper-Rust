@@ -14,6 +14,7 @@ extern "system" {
     pub fn max_charge_end_wrapper_se();
     pub fn calculate_charge_points_per_use_wrapper_ae();
     pub fn calculate_charge_points_per_use_wrapper_se();
+    pub fn player_avo_get_current_wrapper();
     pub fn display_true_skill_level_hook_ae();
     pub fn display_true_skill_level_hook_se();
     pub fn display_true_skill_color_hook();
