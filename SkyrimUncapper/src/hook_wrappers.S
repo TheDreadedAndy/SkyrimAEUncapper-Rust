@@ -112,8 +112,9 @@ skill_cap_patch_wrapper_ae:
     mov %esi, %ecx // Move skill ID back into first arg.
     call get_skill_cap_hook
     movss %xmm0, %xmm10 // Replace maximum with fn result.
+    movss %xmm8, %xmm0 // Restore skill level for comparison.
 
-    RESTOREALL
+    RESTOREALL retfpr=1
     ret
 
 skill_cap_patch_wrapper_se:
@@ -124,6 +125,7 @@ skill_cap_patch_wrapper_se:
     mov %esi, %ecx // Move skill ID back into first arg.
     call get_skill_cap_hook
     movss %xmm0, %xmm8  // Replace max with fn result.
+    movss %xmm6, %xmm0  // Fix xmm0 out of paranoia.
 
     RESTOREALL
     ret
