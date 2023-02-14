@@ -127,7 +127,7 @@ skill_cap_patch_wrapper_se:
     movss %xmm0, %xmm8  // Replace max with fn result.
     movss %xmm6, %xmm0  // Fix xmm0 out of paranoia.
 
-    RESTOREALL
+    RESTOREALL retfpr=1
     ret
 
 /*
