@@ -21,6 +21,15 @@ use crate::skyrim::*;
 /// The base game threshold for legendarying a skill.
 const BASE_LEGENDARY_THRESHOLD: f32 = 100.0;
 
+// Mods we conflict with.
+const MEH_CUSTOM_SKILL: &str = "CustomSkill.dll";
+const ZAX_EXPERIENCE: &str = "Experience.dll";
+
+// Conflicts for each patch group.
+const FORMULA_UI_CONFLICTS: &[&str] = &[MEH_CUSTOM_SKILL];
+const LEGENDARY_CONFLICTS: &[&str] = &[MEH_CUSTOM_SKILL];
+const LEVEL_MULT_CONFLICTS: &[&str] = &[ZAX_EXPERIENCE];
+
 //
 // Trampolines used by hooks to return to game code.
 //
@@ -43,6 +52,7 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "GetSkillCap",
             enabled: settings::is_skill_cap_enabled,
+            conflicts: None,
             hook: Hook::Call12 {
                 entry: skill_cap_patch_wrapper_ae as *const u8,
                 clobber: Register::Rax
@@ -57,6 +67,7 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "GetSkillCap",
             enabled: settings::is_skill_cap_enabled,
+            conflicts: None,
             hook: Hook::Call12 {
                 entry: skill_cap_patch_wrapper_se as *const u8,
                 clobber: Register::Rax
@@ -78,6 +89,7 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "BeginMaxChargeCalculation",
             enabled: settings::is_enchant_patch_enabled,
+            conflicts: None,
             hook: Hook::Call12 {
                 entry: max_charge_begin_wrapper_ae as *const u8,
                 clobber: Register::Rax // Tmp from earlier cmove. Not used again.
@@ -91,6 +103,7 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "BeginMaxChargeCalculation",
             enabled: settings::is_enchant_patch_enabled,
+            conflicts: None,
             hook: Hook::Call12 {
                 entry: max_charge_begin_wrapper_se as *const u8,
                 clobber: Register::Rax // Tmp from earlier cmove. Not used again.
@@ -104,6 +117,7 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "EndMaxChargeCalculation",
             enabled: settings::is_enchant_patch_enabled,
+            conflicts: None,
             hook: Hook::Call12 {
                 entry: max_charge_end_wrapper_ae as *const u8,
                 clobber: Register::Rcx // Patch follows a function call.
@@ -117,6 +131,7 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "EndMaxChargeCalculation",
             enabled: settings::is_enchant_patch_enabled,
+            conflicts: None,
             hook: Hook::Call12 {
                 entry: max_charge_end_wrapper_se as *const u8,
                 clobber: Register::Rcx // Patch follows a function call.
@@ -142,6 +157,7 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "CalculateChargePointsPerUse",
             enabled: settings::is_enchant_patch_enabled,
+            conflicts: None,
             hook: Hook::Call12 {
                 entry: calculate_charge_points_per_use_wrapper_ae as *const u8,
                 clobber: Register::Rax
@@ -161,6 +177,7 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "CalculateChargePointsPerUse",
             enabled: settings::is_enchant_patch_enabled,
+            conflicts: None,
             hook: Hook::Call12 {
                 entry: calculate_charge_points_per_use_wrapper_se as *const u8,
                 clobber: Register::Rax
@@ -184,6 +201,7 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "PlayerAVOGetCurrent",
             enabled: settings::is_skill_formula_cap_enabled,
+            conflicts: None,
             hook: Hook::Jump12 {
                 entry: player_avo_get_current_wrapper as *const u8,
                 clobber: Register::Rax,
@@ -198,6 +216,7 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "PlayerAVOGetCurrent",
             enabled: settings::is_skill_formula_cap_enabled,
+            conflicts: None,
             hook: Hook::Jump12 {
                 entry: player_avo_get_current_wrapper as *const u8,
                 clobber: Register::Rax,
@@ -219,6 +238,7 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "DisplayTrueSkillLevel",
             enabled: settings::is_skill_formula_cap_ui_fix_enabled,
+            conflicts: Some(FORMULA_UI_CONFLICTS),
             hook: Hook::Call12 {
                 entry: display_true_skill_level_hook_ae as *const u8,
                 clobber: Register::Rax
@@ -235,6 +255,7 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "DisplayTrueSkillLevel",
             enabled: settings::is_skill_formula_cap_ui_fix_enabled,
+            conflicts: Some(FORMULA_UI_CONFLICTS),
             hook: Hook::Call12 {
                 entry: display_true_skill_level_hook_se as *const u8,
                 clobber: Register::Rax
@@ -258,6 +279,7 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "DisplayTrueSkillColor",
             enabled: settings::is_skill_formula_cap_ui_fix_enabled,
+            conflicts: Some(FORMULA_UI_CONFLICTS),
             hook: Hook::Call12 {
                 entry: display_true_skill_color_hook as *const u8,
                 clobber: Register::Rax
@@ -279,6 +301,7 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "ImprovePlayerSkillPoints",
             enabled: settings::is_skill_exp_enabled,
+            conflicts: None,
             hook: Hook::Call12 {
                 entry: improve_player_skill_points_wrapper_ae as *const u8,
                 clobber: Register::Rcx // Written to after this patch.
@@ -293,6 +316,7 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "ImprovePlayerSkillPoints",
             enabled: settings::is_skill_exp_enabled,
+            conflicts: None,
             hook: Hook::Call12 {
                 entry: improve_player_skill_points_wrapper_se as *const u8,
                 clobber: Register::Rcx // Written to after this patch, garbage before patch.
@@ -312,6 +336,7 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "ModifyPerkPool",
             enabled: settings::is_perk_points_enabled,
+            conflicts: None,
             hook: Hook::Call12 {
                 entry: modify_perk_pool_wrapper_ae as *const u8,
                 clobber: Register::Rax
@@ -330,6 +355,7 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "ModifyPerkPool",
             enabled: settings::is_perk_points_enabled,
+            conflicts: None,
             hook: Hook::Call12 {
                 entry: modify_perk_pool_wrapper_se as *const u8,
                 clobber: Register::Rax
@@ -353,6 +379,7 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "ImproveLevelExpBySkillLevel",
             enabled: settings::is_level_exp_enabled,
+            conflicts: Some(LEVEL_MULT_CONFLICTS),
             hook: Hook::Call12 {
                 entry: improve_level_exp_by_skill_level_wrapper_ae as *const u8,
                 clobber: Register::Rdx // Will be smashed after this hook anyway.
@@ -366,6 +393,7 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "ImproveLevelExpBySkillLevel",
             enabled: settings::is_level_exp_enabled,
+            conflicts: Some(LEVEL_MULT_CONFLICTS),
             hook: Hook::Call12 {
                 entry: improve_level_exp_by_skill_level_wrapper_se as *const u8,
                 clobber: Register::Rax // Smashed earlier in the function.
@@ -393,6 +421,7 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "ImproveAttributeWhenLevelUp",
             enabled: settings::is_attr_points_enabled,
+            conflicts: None,
             hook: Hook::Call12 {
                 entry: improve_attribute_when_level_up_wrapper as *const u8,
                 clobber: Register::Rax
@@ -424,6 +453,7 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "LegendaryResetSkillLevel",
             enabled: settings::is_legendary_enabled,
+            conflicts: Some(LEGENDARY_CONFLICTS),
             hook: Hook::Call12 {
                 entry: legendary_reset_skill_level_wrapper as *const u8,
                 clobber: Register::Rax
@@ -448,6 +478,7 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "CheckConditionForLegendarySkill",
             enabled: settings::is_legendary_enabled,
+            conflicts: Some(LEGENDARY_CONFLICTS),
             hook: Hook::Call12 {
                 entry: check_condition_for_legendary_skill_wrapper as *const u8,
                 clobber: Register::Rdx
@@ -469,6 +500,7 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "CheckConditionForLegendarySkillAlt",
             enabled: settings::is_legendary_enabled,
+            conflicts: Some(LEGENDARY_CONFLICTS),
             hook: Hook::Call12 {
                 entry: check_condition_for_legendary_skill_wrapper as *const u8,
                 clobber: Register::Rdx
@@ -490,6 +522,7 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "HideLegendaryButton",
             enabled: settings::is_legendary_enabled,
+            conflicts: Some(LEGENDARY_CONFLICTS),
             hook: Hook::Call12 {
                 entry: hide_legendary_button_wrapper_ae as *const u8,
                 clobber: Register::Rax
@@ -506,6 +539,7 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "HideLegendaryButton",
             enabled: settings::is_legendary_enabled,
+            conflicts: Some(LEGENDARY_CONFLICTS),
             hook: Hook::Call12 {
                 entry: hide_legendary_button_wrapper_se as *const u8,
                 clobber: Register::Rax
@@ -540,6 +574,7 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "ClearLegendaryButton",
             enabled: settings::is_legendary_enabled,
+            conflicts: Some(LEGENDARY_CONFLICTS),
             hook: Hook::Call12 {
                 entry: clear_legendary_button_wrapper_ae as *const u8,
                 clobber: Register::Rax
@@ -556,6 +591,7 @@ disarray::disarray! {
         Descriptor::Patch {
             name: "ClearLegendaryButton",
             enabled: settings::is_legendary_enabled,
+            conflicts: Some(LEGENDARY_CONFLICTS),
             hook: Hook::Call12 {
                 entry: clear_legendary_button_wrapper_se as *const u8,
                 clobber: Register::Rax

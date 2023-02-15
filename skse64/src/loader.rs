@@ -76,7 +76,7 @@ pub unsafe extern "system" fn SKSEPlugin_Query(
         log::skse_message!("Plugin query complete, marking as compatible.");
         return true;
     } else {
-        log::skse_error!("Unknown game version. Marking as incompatible.");
+        log::skse_message!("Unknown game version. Marking as incompatible.");
         return false;
     }
 }
@@ -94,7 +94,7 @@ pub unsafe extern "system" fn SKSEPlugin_Load(
     // Prevent reinit.
     static DO_ONCE: RacyCell<bool> = RacyCell::new(true);
     if !*DO_ONCE.get() {
-        log::skse_error!("Cannot reinitialize library!");
+        log::skse_message!("Cannot reinitialize library!");
         return false;
     } else {
         *DO_ONCE.get() = false;

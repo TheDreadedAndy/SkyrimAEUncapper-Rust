@@ -13,9 +13,12 @@ use std::io::Write;
 
 use later::Later;
 use racy_cell::RacyCell;
-use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxA, MB_ICONERROR};
+use windows_sys::Win32::UI::WindowsAndMessaging::MessageBoxA;
 use windows_sys::Win32::UI::Shell::{SHGetFolderPathA, CSIDL_MYDOCUMENTS, SHGFP_TYPE_CURRENT};
 use windows_sys::Win32::Foundation::MAX_PATH;
+
+#[doc(hidden)]
+pub use windows_sys::Win32::UI::WindowsAndMessaging::{MB_ICONERROR, MB_ICONWARNING};
 
 use crate::loader::SKSEPlugin_Version;
 
@@ -29,6 +32,14 @@ use crate::loader::SKSEPlugin_Version;
 struct LogBuf {
     buf: [u8; Self::BUF_SIZE],
     len: usize
+}
+
+// Enumeration to determine how an error will be presented to the user.
+#[doc(hidden)]
+pub enum LogType {
+    File,
+    Window(u32),
+    Both(u32)
 }
 
 /// The global file we log our output to.
@@ -49,18 +60,28 @@ impl LogBuf {
         }
     }
 
-    /// Gets the current length of the buffer.
-    const fn len(
-        &self
-    ) -> usize {
-        self.len
-    }
-
     /// Gets the underlying &[u8] in the buffer, excluding the null.
     fn as_bytes(
         &self
     ) -> &[u8] {
         self.buf.split_at(self.len).0
+    }
+
+    /// Gets the underlying &[u8] in the buffer, with the null.
+    fn as_bytes_nul(
+        &self
+    ) -> &[u8] {
+        self.buf.split_at(self.len + 1).0
+    }
+
+    /// Formats the given arguments into the buffer, adding a newline.
+    fn formatln(
+        &mut self,
+        args: Arguments<'_>
+    ) -> Result<(), std::fmt::Error> {
+        fmt::write(self, args)?;
+        <dyn fmt::Write>::write_str(self, "\n")?;
+        Ok(())
     }
 
     ///
@@ -85,7 +106,7 @@ impl LogBuf {
     }
 
     /// Erases the contents of the buffer.
-    fn flush(
+    fn clear(
         &mut self
     ) {
         self.buf[0] = 0;
@@ -109,12 +130,58 @@ impl fmt::Write for LogBuf {
     }
 }
 
+impl LogType {
+    //
+    // Attempts to write a message to the requested log types.
+    //
+    // The given message must be nul-terminated.
+    //
+    // Note that this function does not panic, since it may be called from the panic impl.
+    //
+    unsafe fn log(
+        &self,
+        msg: &[u8]
+    ) -> Result<(), ()> {
+        if msg[msg.len() - 1] != 0 {
+            return Err(());
+        }
+
+        let win_res = match self {
+            Self::Window(ico) | Self::Both(ico) => {
+                let res = MessageBoxA(
+                    0,
+                    msg.as_ptr(),
+                    SKSEPlugin_Version.name.as_ptr().cast(),
+                    *ico
+                );
+
+                if res == 0 { Err(()) } else { Ok(()) }
+            },
+            _ => Ok(())
+        };
+
+        let log_res = match self {
+            Self::File | Self::Both(_) => {
+                if LOG_FILE.is_init() &&
+                        (*LOG_FILE.get()).write(msg.split_at(msg.len() - 1).0).is_ok() {
+                    Ok(())
+                } else {
+                    Err(())
+                }
+            },
+            _ => Ok(())
+        };
+
+        win_res.and(log_res)
+    }
+}
+
 /// Opens a log file with the given name in the SKSE log directory.
 pub (in crate) fn open() {
     unsafe {
         // SAFETY: Single threaded library, protected from double init by skse.
         // SAFETY: The buffer is empty, and its size is larger than MAX_PATH (260).
-        (*LOG_BUFFER.get()).flush();
+        (*LOG_BUFFER.get()).clear();
         (*LOG_BUFFER.get()).write_ffi(|buf| {
             assert!(buf.len() > MAX_PATH as usize);
             SHGetFolderPathA(
@@ -136,23 +203,21 @@ pub (in crate) fn open() {
         ));
 
         // Clear out file path.
-        (*LOG_BUFFER.get()).flush();
+        (*LOG_BUFFER.get()).clear();
     }
 }
 
-// Writes out the given format string to the opened log file.
+// Logs a message to the requested log types.
 #[doc(hidden)]
 pub fn write(
+    log_type: LogType,
     args: Arguments<'_>
 ) {
     unsafe {
         // SAFETY: This library is single threaded.
-        fmt::write(LOG_BUFFER.get().as_mut().unwrap_unchecked(), args).unwrap();
-        <dyn fmt::Write>::write_str(&mut *LOG_BUFFER.get(), "\n").unwrap();
-        assert!((*LOG_FILE.get()).write(
-            (*LOG_BUFFER.get()).as_bytes()
-        ).unwrap() == (*LOG_BUFFER.get()).len());
-        (*LOG_BUFFER.get()).flush();
+        (*LOG_BUFFER.get()).formatln(args).unwrap();
+        log_type.log((*LOG_BUFFER.get()).as_bytes_nul()).unwrap();
+        (*LOG_BUFFER.get()).clear();
     }
 }
 
@@ -163,48 +228,73 @@ pub fn write(
 //
 #[doc(hidden)]
 pub fn fatal(
+    log_type: LogType,
     args: Arguments<'_>
 ) {
     unsafe {
         // SAFETY: This library is single threaded.
-        let msg = if let Ok(_) = fmt::write(LOG_BUFFER.get().as_mut().unwrap_unchecked(), args) {
-            // Try to add a newline.
-            let _ = <dyn fmt::Write>::write_str(&mut *LOG_BUFFER.get(), "\n");
-
-            (*LOG_BUFFER.get()).as_bytes()
+        let msg = if let Ok(_) = (*LOG_BUFFER.get()).formatln(args) {
+            (*LOG_BUFFER.get()).as_bytes_nul()
         } else {
             "The plugin encountered an unknown fatal error.\n\0".as_bytes()
         };
 
-        // Attempt to show a message box and print it to the log.
-        MessageBoxA(0, msg.as_ptr(), SKSEPlugin_Version.name.as_ptr().cast(), MB_ICONERROR);
-        if LOG_FILE.is_init() {
-            let _ = (*LOG_FILE.get()).write(msg.split_at(msg.len() - 1).0);
-        }
+        let _ = log_type.log(msg);
+        (*LOG_BUFFER.get()).clear();
     }
 }
 
 #[macro_export]
 macro_rules! skse_message {
     ( $($fmt:tt)* ) => {
-        $crate::log::write(::std::format_args!($($fmt)*));
+        $crate::log::write($crate::log::LogType::File, ::std::format_args!($($fmt)*));
     };
 }
 
 #[macro_export]
-macro_rules! skse_error {
-    ( $($fmt:tt)* ) => {
-        $crate::log::write(::std::format_args!($($fmt)*));
+macro_rules! skse_warning {
+    ( $($fmt:tt),* => window ) => {
+        $crate::log::write(
+            $crate::log::LogType::Window($crate::log::MB_ICONWARNING),
+            ::std::format_args!($($fmt),*)
+        );
+    };
+    ( $($fmt:tt),* => log ) => {
+        $crate::log::write(
+            $crate::log::LogType::File,
+            ::std::format_args!($($fmt),*)
+        );
+    };
+    ( $($fmt:tt),* ) => {
+        $crate::log::write(
+            $crate::log::LogType::Both($crate::log::MB_ICONWARNING),
+            ::std::format_args!($($fmt),*)
+        );
     };
 }
 
 #[macro_export]
 macro_rules! skse_fatal {
-    ( $($fmt:tt)* ) => {
-        $crate::log::fatal(::std::format_args!($($fmt)*));
+    ( $($fmt:tt),* => window ) => {
+        $crate::log::fatal(
+            $crate::log::LogType::Window($crate::log::MB_ICONERROR),
+            ::std::format_args!($($fmt),*)
+        );
+    };
+    ( $($fmt:tt),* => log ) => {
+        $crate::log::fatal(
+            $crate::log::LogType::File,
+            ::std::format_args!($($fmt),*)
+        );
+    };
+    ( $($fmt:tt),* ) => {
+        $crate::log::fatal(
+            $crate::log::LogType::Both($crate::log::MB_ICONERROR),
+            ::std::format_args!($($fmt),*)
+        );
     };
 }
 
 pub use skse_message;
-pub use skse_error;
+pub use skse_warning;
 pub use skse_fatal;

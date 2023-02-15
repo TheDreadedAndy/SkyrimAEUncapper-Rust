@@ -8,6 +8,7 @@
 pub mod version;
 pub mod util;
 
+#[cfg(not(feature = "not_plugin"))] pub mod query;
 #[cfg(not(feature = "not_plugin"))] mod errors;
 #[cfg(not(feature = "not_plugin"))] pub mod log;
 #[cfg(not(feature = "not_plugin"))] pub mod reloc;

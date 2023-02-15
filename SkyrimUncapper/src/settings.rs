@@ -17,7 +17,7 @@ use std::str::FromStr;
 
 use later::Later;
 use configparser::ini::Ini;
-use skse64::log::{skse_message, skse_error};
+use skse64::log::{skse_message, skse_warning};
 
 use field::IniField;
 use skills::IniSkillManager;
@@ -241,7 +241,7 @@ pub fn init(
     let mut settings = Settings::new();
     let mut ini = Ini::new_cs();
     if let Err(_) = ini.load(path) {
-        skse_error!("[ERROR] Could not load INI file. Defaults will be used.");
+        skse_warning!("Could not load INI file. Defaults will be used.");
     }
     settings.read_ini(&ini);
     SETTINGS.init(settings);

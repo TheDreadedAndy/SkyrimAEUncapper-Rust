@@ -15,11 +15,12 @@
 
 use std::cell::UnsafeCell;
 use std::ptr::NonNull;
+use std::collections::HashSet;
 
 #[cfg(feature = "alloc_trampoline")]
 use skse64::trampoline::Trampoline;
 
-use skse64::log::skse_message;
+use skse64::log::{skse_message, skse_warning};
 use skse64::reloc::RelocAddr;
 use skse64::safe::{write_flow, Flow};
 use versionlib::VersionDb;
@@ -37,7 +38,6 @@ pub enum GameLocation {
 }
 
 /// Encodes the type of hook which is being used by a patch.
-#[allow(dead_code)]
 pub enum Hook {
     None,
 
@@ -102,6 +102,7 @@ pub enum Descriptor {
     Patch {
         name: &'static str,
         enabled: fn() -> bool,
+        conflicts: Option<&'static [ &'static str ]>,
         hook: Hook,
         loc: GameLocation,
         sig: Signature,
@@ -113,6 +114,7 @@ pub enum Descriptor {
 enum DescriptorError {
     IncompatibleGameVersion,
     Disabled,
+    Conflicts(&'static str),
     Missing,
     Mismatch(Signature, BinarySig)
 }
@@ -286,12 +288,13 @@ impl Descriptor {
     /// Finds the address and verifies its signature, if applicable.
     fn find(
         &self,
-        db: &VersionDb
+        db: &VersionDb,
+        loaded_plugins: &HashSet<String>
     ) -> FindResult {
         match self {
             Self::Object { loc, .. } => loc.find(db),
             Self::Function { loc, .. } => loc.find(db),
-            Self::Patch { enabled, loc, sig, .. } => {
+            Self::Patch { enabled, conflicts, loc, sig, .. } => {
                 // Incompatible game version needs to take priority, or we'll try to report on
                 // a patch that should be invisible.
                 if !loc.compatible() {
@@ -300,6 +303,14 @@ impl Descriptor {
 
                 if !enabled() {
                     return Err(DescriptorError::Disabled);
+                }
+
+                if let Some(plugins) = conflicts {
+                    for plugin in plugins.iter() {
+                        if loaded_plugins.contains(*plugin) {
+                            return Err(DescriptorError::Conflicts(plugin));
+                        }
+                    }
                 }
 
                 let addr = loc.find(db)?;
@@ -327,6 +338,16 @@ impl Descriptor {
             },
             Err(DescriptorError::Disabled) => {
                 skse_message!("[SKIPPED] {} is disabled", self);
+            },
+            Err(DescriptorError::Conflicts(conflict)) => {
+                skse_message!("[SKIPPED] {} conflicts with {}", self, conflict);
+                skse_warning!(
+                    "The patch {} could not be applied because it is known to conflict\
+                     with {}. To suppress this warning, please disable the patch in the\
+                     INI file.",
+                    self,
+                    conflict => window
+                );
             },
             Err(DescriptorError::Missing) => {
                 skse_message!("[FAILURE] {} was not in the version database!", self);
@@ -438,6 +459,7 @@ pub fn apply<const NUM_PATCHES: usize>(
     patches: [&Descriptor; NUM_PATCHES]
 ) -> Result<(), ()> {
     let db = VersionDb::new(None);
+    let loaded_plugins = skse64::query::loaded_plugins();
     let mut res_addrs: [usize; NUM_PATCHES] = [0; NUM_PATCHES];
 
     #[cfg(feature = "alloc_trampoline")]
@@ -448,7 +470,7 @@ pub fn apply<const NUM_PATCHES: usize>(
     // Attempt to locate all of the patch signatures.
     let mut fails = 0;
     for (i, sig) in patches.iter().enumerate() {
-        let res = sig.find(&db);
+        let res = sig.find(&db, &loaded_plugins);
         sig.report(&res);
 
         match res {
@@ -461,7 +483,9 @@ pub fn apply<const NUM_PATCHES: usize>(
                     alloc_size += h.alloc_size();
                 }
             },
-            Err(DescriptorError::Disabled) | Err(DescriptorError::IncompatibleGameVersion) => (),
+            Err(DescriptorError::Disabled) |
+            Err(DescriptorError::Conflicts(_)) |
+            Err(DescriptorError::IncompatibleGameVersion) => (),
             _ => {
                 fails += 1;
             }
