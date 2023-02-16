@@ -142,6 +142,30 @@ impl Patch {
     ) {
         std::ptr::copy(self.buf.as_ptr(), self.addr as *mut u8, self.len);
     }
+
+    /// Verifies that the given region of code contains the patch, protecting the region.
+    unsafe fn verify(
+        self
+    ) -> Result<(), ()> {
+        let mut ret = Err(());
+        use_region(self.addr, self.len, || {
+            ret = self.verify_unchecked();
+        });
+        return ret;
+    }
+
+    ///
+    /// Verifies that the given region of game code contains the invoking patch.
+    ///
+    /// Does not protect the region of code.
+    ///
+    unsafe fn verify_unchecked(
+        self
+    ) -> Result<(), ()> {
+        let patch = self.buf.split_at(self.len).0;
+        let code = std::slice::from_raw_parts(self.addr as *mut u8, self.len);
+        if code == patch { Ok(()) } else { Err(()) }
+    }
 }
 
 impl Flow {
@@ -238,4 +262,30 @@ pub unsafe fn write_flow_unchecked(
 ) -> Result<(), ()> {
     flow.as_patch(addr, target)?.apply_unchecked();
     Ok(())
+}
+
+///
+/// Verifies that the given control flow operation was installed correctly to the given address.
+///
+/// This function may be called on code which is not currently marked read/write.
+///
+/// In order to use this function safely, the given address must be in the skyrim binary.
+///
+pub unsafe fn verify_flow(
+    addr: usize,
+    target: usize,
+    flow: Flow
+) -> Result<(), ()> {
+    flow.as_patch(addr, target)?.verify()
+}
+
+///
+/// Implementation of verify_flow() which requires the address region to already be read/write.
+///
+pub unsafe fn verify_flow_unchecked(
+    addr: usize,
+    target: usize,
+    flow: Flow
+) -> Result<(), ()> {
+    flow.as_patch(addr, target)?.verify_unchecked()
 }

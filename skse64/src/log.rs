@@ -246,26 +246,26 @@ pub fn fatal(
 
 #[macro_export]
 macro_rules! skse_message {
-    ( $($fmt:tt)* ) => {
-        $crate::log::write($crate::log::LogType::File, ::std::format_args!($($fmt)*));
+    ( $($fmt:expr),* ) => {
+        $crate::log::write($crate::log::LogType::File, ::std::format_args!($($fmt),*));
     };
 }
 
 #[macro_export]
 macro_rules! skse_warning {
-    ( $($fmt:tt),* => window ) => {
+    ( $($fmt:expr),* => window ) => {
         $crate::log::write(
             $crate::log::LogType::Window($crate::log::MB_ICONWARNING),
             ::std::format_args!($($fmt),*)
         );
     };
-    ( $($fmt:tt),* => log ) => {
+    ( $($fmt:expr),* => log ) => {
         $crate::log::write(
             $crate::log::LogType::File,
             ::std::format_args!($($fmt),*)
         );
     };
-    ( $($fmt:tt),* ) => {
+    ( $($fmt:expr),* ) => {
         $crate::log::write(
             $crate::log::LogType::Both($crate::log::MB_ICONWARNING),
             ::std::format_args!($($fmt),*)
@@ -275,19 +275,19 @@ macro_rules! skse_warning {
 
 #[macro_export]
 macro_rules! skse_fatal {
-    ( $($fmt:tt),* => window ) => {
+    ( $($fmt:expr),* => window ) => {
         $crate::log::fatal(
             $crate::log::LogType::Window($crate::log::MB_ICONERROR),
             ::std::format_args!($($fmt),*)
         );
     };
-    ( $($fmt:tt),* => log ) => {
+    ( $($fmt:expr),* => log ) => {
         $crate::log::fatal(
             $crate::log::LogType::File,
             ::std::format_args!($($fmt),*)
         );
     };
-    ( $($fmt:tt),* ) => {
+    ( $($fmt:expr),* ) => {
         $crate::log::fatal(
             $crate::log::LogType::Both($crate::log::MB_ICONERROR),
             ::std::format_args!($($fmt),*)

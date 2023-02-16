@@ -16,13 +16,14 @@
 use std::cell::UnsafeCell;
 use std::ptr::NonNull;
 use std::collections::HashSet;
+use std::vec::Vec;
 
 #[cfg(feature = "alloc_trampoline")]
 use skse64::trampoline::Trampoline;
 
-use skse64::log::{skse_message, skse_warning};
+use skse64::log::{skse_message, skse_warning, skse_fatal};
 use skse64::reloc::RelocAddr;
-use skse64::safe::{write_flow, Flow};
+use skse64::safe::{verify_flow, write_flow, Flow};
 use versionlib::VersionDb;
 
 use crate::sig::{Signature, BinarySig};
@@ -38,6 +39,7 @@ pub enum GameLocation {
 }
 
 /// Encodes the type of hook which is being used by a patch.
+#[derive(Clone)]
 pub enum Hook {
     None,
 
@@ -129,6 +131,17 @@ type FindResult = Result<RelocAddr, DescriptorError>;
 ///
 #[repr(transparent)]
 pub struct GameRef<T>(UnsafeCell<usize>, std::marker::PhantomData<T>);
+
+/// Contains information about a patch necessary to verify its integrity.
+struct PatchResult {
+    name: &'static str,
+    conflicts: Option<&'static [ &'static str ]>,
+    hook: Hook,
+    loc: RelocAddr
+}
+
+/// Contains the set of patches installed by a call to apply().
+pub struct PatchSet(Vec<PatchResult>);
 
 impl GameLocation {
     /// Finds the game address specified by this location.
@@ -282,6 +295,42 @@ impl Hook {
             Self::None => panic!("Cannot install to a None hook!"),
         }
     }
+
+    ///
+    /// Verifies that the given patch was installed correctly.
+    ///
+    /// In order to use this function safely, the given address must be a part of the games code.
+    ///
+    unsafe fn verify(
+        &self,
+        addr: usize
+    ) -> Result<(), ()> {
+        match self {
+            #[cfg(feature = "alloc_trampoline")]
+            Self::Jump5 { .. } | Self::Call5(_) | Self::Jump6 { .. } | Self::Call5(_) => {
+                todo!();
+            },
+            Self::Jump12 { entry, clobber, .. } => {
+                verify_flow(addr, *entry as usize, Flow::JumpRegAbsolute(*clobber))
+            },
+            Self::Call12 { entry, clobber, .. } => {
+                verify_flow(addr, *entry as usize, Flow::CallRegAbsolute(*clobber))
+            },
+            Self::Jump14 { entry, .. } => {
+                verify_flow(addr, *entry as usize, Flow::JumpAbsolute)
+            },
+            Self::Call16(entry) => {
+                verify_flow(addr, *entry as usize, Flow::CallAbsolute)
+            },
+            Self::DirectJump { entry, .. } => {
+                verify_flow(addr, *entry as usize, Flow::JumpRelative)
+            },
+            Self::DirectCall(entry) => {
+                verify_flow(addr, *entry as usize, Flow::CallRelative)
+            },
+            Self::None => Ok(()),
+        }
+    }
 }
 
 impl Descriptor {
@@ -342,8 +391,8 @@ impl Descriptor {
             Err(DescriptorError::Conflicts(conflict)) => {
                 skse_message!("[SKIPPED] {} conflicts with {}", self, conflict);
                 skse_warning!(
-                    "The patch {} could not be applied because it is known to conflict\
-                     with {}. To suppress this warning, please disable the patch in the\
+                    "{} could not be applied because it is known to conflict \
+                     with {}. To suppress this warning, please disable the patch in the \
                      INI file.",
                     self,
                     conflict => window
@@ -362,6 +411,24 @@ impl Descriptor {
                 skse_message!(" \\-----> [FOUND...] {}", bsig);
             },
             Err(DescriptorError::IncompatibleGameVersion) => (), // Invalid, so we ignore it.
+        }
+    }
+
+    /// Creates a patch result for the descriptor, if the descriptor is a patch.
+    fn patch_result(
+        &self,
+        addr: RelocAddr
+    ) -> Option<PatchResult> {
+        match self {
+            Self::Patch { name, hook, conflicts, .. } => {
+                Some(PatchResult {
+                    name: *name,
+                    hook: hook.clone(),
+                    conflicts: *conflicts,
+                    loc: addr
+                })
+            },
+            _ => None
         }
     }
 
@@ -449,6 +516,88 @@ impl<T> GameRef<T> {
     }
 }
 
+impl PatchResult {
+    /// Checks if this patch conflicts with any of the loaded dll files.
+    fn check_conflicts(
+        &self,
+        loaded: &HashSet<String>,
+        suppress: &HashSet<String>
+    ) -> Result<(), &'static str> {
+        if let Some(conflicts) = self.conflicts {
+            for plugin in conflicts.iter() {
+                if loaded.contains(*plugin) && !suppress.contains(*plugin) {
+                    return Err(*plugin);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Verifies that the given patch is installed to the game code.
+    fn verify(
+        &self
+    ) -> Result<(), ()> {
+        unsafe {
+            // SAFETY: We give this hook the address it was installed to.
+            self.hook.verify(self.loc.addr())
+        }
+    }
+}
+
+impl PatchSet {
+    /// Checks if any patch in the given set conflicts with other loaded plugins.
+    pub fn warn_conflicts(
+        &self,
+        suppress: &HashSet<String>
+    ) {
+        let loaded = skse64::query::loaded_plugins();
+        for patch in self.0.iter() {
+            if let Err(plugin) = patch.check_conflicts(&loaded, suppress) {
+                skse_message!(
+                    "[WARNING] Patch {} has a known conflict with {}",
+                    patch.name,
+                    plugin
+                );
+                skse_warning!(
+                    "The patch {} has been loaded with the plugin {}, which is \
+                     known to conflict with it.\n\n\
+                     To suppress this warning, modify the INI file to either disable \
+                     the patch or suppress warnings for {}.",
+                    patch.name,
+                    plugin,
+                    plugin => window
+                );
+            }
+        }
+    }
+
+    /// Verifies that the given patch set has correctly been installed.
+    pub fn verify(
+        &self
+    ) {
+        let mut fails = 0;
+        for patch in self.0.iter() {
+            if let Err(_) = patch.verify() {
+                skse_message!("[ERROR] Patch {} has been clobbered!", patch.name);
+                skse_fatal!(
+                    "The integrity checker has determined that the patch {} was \
+                     partially or completely overwritten by a conflicting plugin. \
+                     This is fatal. Please disable the conflicting plugin or modify \
+                     the INI file to disable this patch to resolve this error.",
+                    patch.name => window
+                );
+
+                fails += 1;
+            }
+        }
+
+        if fails > 0 {
+            panic!("Patch integrity verification found one or more installation errors");
+        }
+    }
+}
+
 // SAFETY: The patcher is protected by the single initialization of skse.
 unsafe impl Sync for Hook {}
 unsafe impl Sync for Descriptor {}
@@ -457,15 +606,18 @@ unsafe impl<T> Sync for GameRef<T> {}
 /// Locates any game functions/objects, and applies any code patches.
 pub fn apply<const NUM_PATCHES: usize>(
     patches: [&Descriptor; NUM_PATCHES]
-) -> Result<(), ()> {
+) -> Result<PatchSet, ()> {
     let db = VersionDb::new(None);
     let loaded_plugins = skse64::query::loaded_plugins();
     let mut res_addrs: [usize; NUM_PATCHES] = [0; NUM_PATCHES];
+    let mut installed_patches: Vec<PatchResult> = Vec::new();
 
     #[cfg(feature = "alloc_trampoline")]
     let mut alloc_size: usize = 0;
 
-    skse_message!("--------------------- Skyrim Patcher 1.0.4 ---------------------");
+    skse_message!("{:?}", loaded_plugins);
+
+    skse_message!("--------------------- Skyrim Patcher 1.0.5 ---------------------");
 
     // Attempt to locate all of the patch signatures.
     let mut fails = 0;
@@ -481,6 +633,10 @@ pub fn apply<const NUM_PATCHES: usize>(
                 #[cfg(feature = "alloc_trampoline")]
                 if let Some(h) = sig.hook() {
                     alloc_size += h.alloc_size();
+                }
+
+                if let Some(patch_result) = sig.patch_result(addr) {
+                    installed_patches.push(patch_result);
                 }
             },
             Err(DescriptorError::Disabled) |
@@ -514,6 +670,7 @@ pub fn apply<const NUM_PATCHES: usize>(
 
     // Install our patches.
     for (i, sig) in patches.iter().enumerate() {
+        if res_addrs[i] == 0 { continue; }
         if sig.disabled() { continue; }
 
         let hook_size = sig.hook().map(|h| h.patch_size()).unwrap_or(0);
@@ -552,5 +709,5 @@ pub fn apply<const NUM_PATCHES: usize>(
     skse_message!("[SUCCESS] Applied game patches.");
     skse_message!("----------------------------------------------------------------");
 
-    Ok(())
+    Ok(PatchSet(installed_patches))
 }

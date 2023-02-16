@@ -12,8 +12,8 @@ use std::vec::Vec;
 use std::str::FromStr;
 use std::str;
 
-use windows_sys::Win32::System::LibraryLoader::GetModuleHandleA;
-use windows_sys::Win32::System::ProcessStatus::{K32EnumProcessModules, K32GetModuleBaseNameA};
+use windows_sys::Win32::System::ProcessStatus::{K32EnumProcessModulesEx, K32GetModuleBaseNameA};
+use windows_sys::Win32::System::ProcessStatus::LIST_MODULES_64BIT;
 use windows_sys::Win32::Foundation::{HANDLE, MAX_PATH};
 
 pub fn loaded_plugins() -> HashSet<String> {
@@ -26,13 +26,24 @@ pub fn loaded_plugins() -> HashSet<String> {
         // Get the number of modules loaded by Skyrim.
         let proc = -1 as HANDLE;
         let mut mod_bytes: u32 = 0;
-        assert!(K32EnumProcessModules(proc, ptr::null_mut(), 0, &mut mod_bytes) != 0,
-            "Error: {}", windows_sys::Win32::Foundation::GetLastError());
+        assert!(K32EnumProcessModulesEx(
+            proc,
+            ptr::null_mut(),
+            0,
+            &mut mod_bytes,
+            LIST_MODULES_64BIT
+        ) != 0);
 
         // Get the list of modules.
         let mut modules: Vec<HANDLE> = Vec::new();
         modules.resize(mod_bytes as usize / size_of::<HANDLE>(), 0);
-        assert!(K32EnumProcessModules(proc, modules.as_mut_ptr(), mod_bytes, &mut mod_bytes) != 0);
+        assert!(K32EnumProcessModulesEx(
+            proc,
+            modules.as_mut_ptr(),
+            mod_bytes,
+            &mut mod_bytes,
+            LIST_MODULES_64BIT
+        ) != 0);
 
         // Add each module to the set.
         for module in modules.iter() {
