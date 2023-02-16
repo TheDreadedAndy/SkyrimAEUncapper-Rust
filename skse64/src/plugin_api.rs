@@ -38,7 +38,25 @@ macro_rules! plugin_version_data {
 }
 pub use plugin_version_data;
 
-// Plugin query info returned to skse for SE.
+/// Plugin interface IDs.
+#[repr(u32)]
+pub enum InterfaceId {
+    Invalid,
+    Scaleform,
+    Papyrus,
+    Serialization,
+    Task,
+    Messaging,
+    Object,
+    Trampoline,
+    Max
+}
+
+/// The ID assigned to a loaded plugin. SKSE docs request this be used as an abstract type.
+#[repr(transparent)]
+pub struct PluginHandle(u32);
+
+/// Plugin query info returned to skse for SE.
 #[repr(C)]
 pub struct PluginInfo {
     pub info_version: u32,
@@ -46,20 +64,51 @@ pub struct PluginInfo {
     pub version: Option<SkseVersion>
 }
 
-// IMPORTANT: the bottom three fields DO NOT EXIST for SE.
+/// IMPORTANT: the bottom three fields DO NOT EXIST for SE.
 #[repr(C)]
 pub struct SkseInterface {
     pub skse_version: Option<SkseVersion>,
     pub runtime_version: Option<SkseVersion>,
     pub editor_version: u32,
     pub is_editor: u32,
-    pub query_interface: unsafe extern "system" fn(u32) -> *mut c_void,
-    pub get_plugin_handle: unsafe extern "system" fn() -> u32,
+    pub query_interface: unsafe extern "system" fn(InterfaceId) -> *mut c_void,
+    pub get_plugin_handle: unsafe extern "system" fn() -> PluginHandle,
     pub get_release_index: unsafe extern "system" fn() -> u32,
     pub get_plugin_info: unsafe extern "system" fn(*const c_char) -> *const PluginInfo
 }
 
-// Plugin info exported to skse for AE.
+/// A message which can be received from/sent to other skse plugins.
+#[repr(C)]
+pub struct Message {
+    pub sender: *const c_char,
+    pub msg_type: u32,
+    pub data_len: u32,
+    pub data: *mut u8
+}
+
+/// A callback function registered as a message listener.
+pub type MessageCallback = extern "system" fn(*mut Message);
+
+/// The interface SKSE returns for messaging it and other SKSE plugins.
+#[repr(C)]
+pub struct SkseMessagingInterface {
+    pub interface_version: u32,
+    pub register_listener: unsafe extern "system" fn(
+        PluginHandle,
+        *const c_char,
+        MessageCallback
+    ) -> bool,
+    pub dispatch: unsafe extern "system" fn(
+        PluginHandle,
+        u32,
+        *mut c_void,
+        u32,
+        *const c_char
+    ) -> bool,
+    pub get_event_dispatcher: unsafe extern "system" fn(u32) -> *mut c_void
+}
+
+/// Plugin info exported to skse for AE.
 #[repr(C)]
 pub struct SksePluginVersionData {
     pub data_version: u32, // Self::VERSION
@@ -86,6 +135,23 @@ impl PluginInfo {
             version: Some(ae.plugin_version)
         }
     }
+}
+
+impl Message {
+    // Messages which SKSE itself can send.
+    pub const SKSE_POST_LOAD: u32 = 0;
+    pub const SKSE_POST_POST_LOAD: u32 = 1;
+    pub const SKSE_PRE_LOAD_GAME: u32 = 2;
+    pub const SKSE_POST_LOAD_GAME: u32 = 3;
+    pub const SKSE_SAVE_GAME: u32 = 4;
+    pub const SKSE_DELETE_GAME: u32 = 5;
+    pub const SKSE_INPUT_LOADED: u32 = 6;
+    pub const SKSE_NEW_GAME: u32 = 7;
+    pub const SKSE_DATA_LOADED: u32 = 8;
+}
+
+impl SkseMessagingInterface {
+    pub const VERSION: u32 = 2;
 }
 
 impl SksePluginVersionData {

@@ -116,7 +116,6 @@ pub enum Descriptor {
 enum DescriptorError {
     IncompatibleGameVersion,
     Disabled,
-    Conflicts(&'static str),
     Missing,
     Mismatch(Signature, BinarySig)
 }
@@ -337,13 +336,12 @@ impl Descriptor {
     /// Finds the address and verifies its signature, if applicable.
     fn find(
         &self,
-        db: &VersionDb,
-        loaded_plugins: &HashSet<String>
+        db: &VersionDb
     ) -> FindResult {
         match self {
             Self::Object { loc, .. } => loc.find(db),
             Self::Function { loc, .. } => loc.find(db),
-            Self::Patch { enabled, conflicts, loc, sig, .. } => {
+            Self::Patch { enabled, loc, sig, .. } => {
                 // Incompatible game version needs to take priority, or we'll try to report on
                 // a patch that should be invisible.
                 if !loc.compatible() {
@@ -352,14 +350,6 @@ impl Descriptor {
 
                 if !enabled() {
                     return Err(DescriptorError::Disabled);
-                }
-
-                if let Some(plugins) = conflicts {
-                    for plugin in plugins.iter() {
-                        if loaded_plugins.contains(*plugin) {
-                            return Err(DescriptorError::Conflicts(plugin));
-                        }
-                    }
                 }
 
                 let addr = loc.find(db)?;
@@ -387,16 +377,6 @@ impl Descriptor {
             },
             Err(DescriptorError::Disabled) => {
                 skse_message!("[SKIPPED] {} is disabled", self);
-            },
-            Err(DescriptorError::Conflicts(conflict)) => {
-                skse_message!("[SKIPPED] {} conflicts with {}", self, conflict);
-                skse_warning!(
-                    "{} could not be applied because it is known to conflict \
-                     with {}. To suppress this warning, please disable the patch in the \
-                     INI file.",
-                    self,
-                    conflict => window
-                );
             },
             Err(DescriptorError::Missing) => {
                 skse_message!("[FAILURE] {} was not in the version database!", self);
@@ -608,21 +588,18 @@ pub fn apply<const NUM_PATCHES: usize>(
     patches: [&Descriptor; NUM_PATCHES]
 ) -> Result<PatchSet, ()> {
     let db = VersionDb::new(None);
-    let loaded_plugins = skse64::query::loaded_plugins();
     let mut res_addrs: [usize; NUM_PATCHES] = [0; NUM_PATCHES];
     let mut installed_patches: Vec<PatchResult> = Vec::new();
 
     #[cfg(feature = "alloc_trampoline")]
     let mut alloc_size: usize = 0;
 
-    skse_message!("{:?}", loaded_plugins);
-
     skse_message!("--------------------- Skyrim Patcher 1.0.5 ---------------------");
 
     // Attempt to locate all of the patch signatures.
     let mut fails = 0;
     for (i, sig) in patches.iter().enumerate() {
-        let res = sig.find(&db, &loaded_plugins);
+        let res = sig.find(&db);
         sig.report(&res);
 
         match res {
@@ -639,9 +616,7 @@ pub fn apply<const NUM_PATCHES: usize>(
                     installed_patches.push(patch_result);
                 }
             },
-            Err(DescriptorError::Disabled) |
-            Err(DescriptorError::Conflicts(_)) |
-            Err(DescriptorError::IncompatibleGameVersion) => (),
+            Err(DescriptorError::Disabled) | Err(DescriptorError::IncompatibleGameVersion) => (),
             _ => {
                 fails += 1;
             }
@@ -670,7 +645,6 @@ pub fn apply<const NUM_PATCHES: usize>(
 
     // Install our patches.
     for (i, sig) in patches.iter().enumerate() {
-        if res_addrs[i] == 0 { continue; }
         if sig.disabled() { continue; }
 
         let hook_size = sig.hook().map(|h| h.patch_size()).unwrap_or(0);
