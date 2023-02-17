@@ -89,14 +89,12 @@ pub fn skse_plugin_rust_entry(
     }
 
     //
-    // We verify the integrity of our patches once the main skyrim window has opened.
+    // Verify the patch integrity just before the main window opens.
     //
-    // We can't do this inside the post-load or post-post-load message handler, since panicking
-    // there would just be caught be SKSE and then prevent other messages of those types from
-    // being sent, causing arbitrary chaos. Additionally, some plugins (Experience, I think)
-    // will inject code during those messages.
+    // Some plugins (e.g. Experience, I think) will apply patches during the post-load phase,
+    // so we can't actually panic there.
     //
-    register_listener(Message::SKSE_INPUT_LOADED, skse_plugin_verify);
+    register_listener(Message::SKSE_POST_POST_LOAD, skse_plugin_verify);
 
     skse_message!("Initialization complete!");
     Ok(())

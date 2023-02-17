@@ -11,7 +11,7 @@ use crate::version::{RUNNING_GAME_VERSION, RUNNING_SKSE_VERSION, RUNTIME_VERSION
 use crate::plugin_api::{SkseInterface, SksePluginVersionData, PluginInfo, PLUGIN_HANDLE};
 use crate::event::init_listener;
 use crate::reloc::RelocAddr;
-use crate::errors::skse_panic;
+use crate::errors::{skse_loader_panic, skse_runtime_panic};
 use crate::log;
 
 extern "Rust" {
@@ -38,7 +38,7 @@ unsafe fn init_skse(
     RelocAddr::init_manager();
 
     // Set panics to print to the log (if it exists) and halt the plugin.
-    std::panic::set_hook(Box::new(skse_panic));
+    std::panic::set_hook(Box::new(skse_loader_panic));
 
     // Before we do anything else, we try and open up a log file.
     log::open();
@@ -109,5 +109,12 @@ pub unsafe extern "system" fn SKSEPlugin_Load(
     if !init_skse(skse) { return false; }
 
     // Call the rust entry point.
-    return skse_plugin_rust_entry(skse.as_ref().unwrap()).is_ok();
+    if let Ok(_) = skse_plugin_rust_entry(skse.as_ref().unwrap()) {
+        // All future panics must terminate skyrim.
+        std::panic::set_hook(Box::new(skse_runtime_panic));
+        return true;
+    } else {
+        // We must embrace pain and burn it as fuel for our journey.
+        return false;
+    }
 }
