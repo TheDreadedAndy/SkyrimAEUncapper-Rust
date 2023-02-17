@@ -7,6 +7,8 @@
 
 use core::ffi::{c_char, c_void};
 
+use later::Later;
+
 use crate::version::SkseVersion;
 
 /// A macro to construct SKSE version data.
@@ -54,6 +56,7 @@ pub enum InterfaceId {
 
 /// The ID assigned to a loaded plugin. SKSE docs request this be used as an abstract type.
 #[repr(transparent)]
+#[derive(Copy, Clone)]
 pub struct PluginHandle(u32);
 
 /// Plugin query info returned to skse for SE.
@@ -87,7 +90,7 @@ pub struct Message {
 }
 
 /// A callback function registered as a message listener.
-pub type MessageCallback = extern "system" fn(*mut Message);
+pub type MessageCallback = unsafe extern "system" fn(*mut Message);
 
 /// The interface SKSE returns for messaging it and other SKSE plugins.
 #[repr(C)]
@@ -122,6 +125,9 @@ pub struct SksePluginVersionData {
     pub se_version_required: Option<SkseVersion> // Minimum SKSE version required.
 }
 
+/// Holds the plugin handle for this plugin.
+pub (in crate) static PLUGIN_HANDLE: Later<PluginHandle> = Later::new();
+
 impl PluginInfo {
     pub const VERSION: u32 = 1;
 
@@ -148,6 +154,7 @@ impl Message {
     pub const SKSE_INPUT_LOADED: u32 = 6;
     pub const SKSE_NEW_GAME: u32 = 7;
     pub const SKSE_DATA_LOADED: u32 = 8;
+    pub const SKSE_MAX: usize = 9;
 }
 
 impl SkseMessagingInterface {
@@ -205,4 +212,9 @@ impl SksePluginVersionData {
 
         ret
     }
+}
+
+/// Gets the handle for this plugin.
+pub fn handle() -> PluginHandle {
+    *PLUGIN_HANDLE
 }

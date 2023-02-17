@@ -8,7 +8,8 @@
 use racy_cell::RacyCell;
 
 use crate::version::{RUNNING_GAME_VERSION, RUNNING_SKSE_VERSION, RUNTIME_VERSION_1_5_97};
-use crate::plugin_api::{SkseInterface, SksePluginVersionData, PluginInfo};
+use crate::plugin_api::{SkseInterface, SksePluginVersionData, PluginInfo, PLUGIN_HANDLE};
+use crate::event::init_listener;
 use crate::reloc::RelocAddr;
 use crate::errors::skse_panic;
 use crate::log;
@@ -52,6 +53,10 @@ unsafe fn init_skse(
     // Set running version to the given value.
     RUNNING_SKSE_VERSION.init((*skse).skse_version.unwrap());
     RUNNING_GAME_VERSION.init((*skse).runtime_version.unwrap());
+
+    // Get our plugin handle and set up our SKSE listener.
+    PLUGIN_HANDLE.init(((*skse).get_plugin_handle)());
+    init_listener(skse.as_ref().unwrap());
 
     *DO_ONCE.get() = Some(true);
     return true;

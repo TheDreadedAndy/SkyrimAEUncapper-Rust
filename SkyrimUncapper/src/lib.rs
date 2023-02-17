@@ -17,16 +17,22 @@ mod settings;
 
 use std::ffi::CStr;
 use std::path::Path;
+use std::collections::HashSet;
 
 use skse64::log::{skse_message, skse_fatal};
 use skse64::version::{SkseVersion, PACKED_SKSE_VERSION, CURRENT_RELEASE_RUNTIME};
-use skse64::plugin_api::{SksePluginVersionData, SkseInterface};
-use skyrim_patcher::flatten_patch_groups;
+use skse64::plugin_api::{SksePluginVersionData, SkseInterface, Message};
+use skse64::event::register_listener;
+use skyrim_patcher::{flatten_patch_groups, PatchSet};
+use racy_cell::RacyCell;
 
 use skyrim::{GAME_SIGNATURES, NUM_GAME_SIGNATURES};
 use hooks::{HOOK_SIGNATURES, NUM_HOOK_SIGNATURES};
 
 const NUM_PATCHES: usize = NUM_GAME_SIGNATURES + NUM_HOOK_SIGNATURES;
+
+/// Holds the patch set result returned by the patcher. Used to verify in later phases.
+static PATCH_SET: RacyCell<Option<PatchSet>> = RacyCell::new(None);
 
 skse64::plugin_version_data! {
     version: SkseVersion::new(
@@ -71,7 +77,10 @@ pub fn skse_plugin_rust_entry(
     settings::init(Path::new("Data\\SKSE\\Plugins\\SkyrimUncapper.ini"));
 
     let patches = flatten_patch_groups::<NUM_PATCHES>(&[&GAME_SIGNATURES, &HOOK_SIGNATURES]);
-    if let Err(_) = skyrim_patcher::apply(patches) {
+    if let Ok(patch_set) = skyrim_patcher::apply(patches) {
+        // SAFETY: We don't have a listener installed yet.
+        unsafe { (*PATCH_SET.get()) = Some(patch_set); }
+    } else {
         skse_fatal!(
             "Failed to install the requested set of game patches. See log for details.\n\
              It is safe to continue playing; none of this mods changes have been applied."
@@ -79,8 +88,33 @@ pub fn skse_plugin_rust_entry(
         return Err(());
     }
 
+    //
+    // We verify the integrity of our patches once the main skyrim window has opened.
+    //
+    // We can't do this inside the post-load or post-post-load message handler, since panicking
+    // there would just be caught be SKSE and then prevent other messages of those types from
+    // being sent, causing arbitrary chaos. Additionally, some plugins (Experience, I think)
+    // will inject code during those messages.
+    //
+    register_listener(Message::SKSE_INPUT_LOADED, skse_plugin_verify);
+
     skse_message!("Initialization complete!");
     Ok(())
+}
+
+///
+/// Verifies the integrity of the patches at the latest step we can, hoping everything else
+/// has actually really for real finished loading.
+///
+/// Nothing in life is promised except death.
+///
+fn skse_plugin_verify(
+    _msg: &Message
+) {
+    let set = unsafe { (*PATCH_SET.get()).take().unwrap() };
+    let suppress = HashSet::new();
+    set.warn_conflicts(&suppress);
+    set.verify();
 }
 
 // Converts strings to ints in const context, for version numbers.

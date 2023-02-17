@@ -13,7 +13,8 @@ use std::str::FromStr;
 use std::str;
 
 use windows_sys::Win32::System::ProcessStatus::{K32EnumProcessModulesEx, K32GetModuleBaseNameA};
-use windows_sys::Win32::System::ProcessStatus::LIST_MODULES_64BIT;
+use windows_sys::Win32::System::ProcessStatus::LIST_MODULES_ALL;
+use windows_sys::Win32::System::Threading::GetCurrentProcess;
 use windows_sys::Win32::Foundation::{HANDLE, MAX_PATH};
 
 pub fn loaded_plugins() -> HashSet<String> {
@@ -24,14 +25,14 @@ pub fn loaded_plugins() -> HashSet<String> {
         //         pointers.
 
         // Get the number of modules loaded by Skyrim.
-        let proc = -1 as HANDLE;
+        let proc = GetCurrentProcess();
         let mut mod_bytes: u32 = 0;
         assert!(K32EnumProcessModulesEx(
             proc,
             ptr::null_mut(),
             0,
             &mut mod_bytes,
-            LIST_MODULES_64BIT
+            LIST_MODULES_ALL
         ) != 0);
 
         // Get the list of modules.
@@ -42,7 +43,7 @@ pub fn loaded_plugins() -> HashSet<String> {
             modules.as_mut_ptr(),
             mod_bytes,
             &mut mod_bytes,
-            LIST_MODULES_64BIT
+            LIST_MODULES_ALL
         ) != 0);
 
         // Add each module to the set.

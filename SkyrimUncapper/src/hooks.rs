@@ -22,7 +22,7 @@ use crate::skyrim::*;
 const BASE_LEGENDARY_THRESHOLD: f32 = 100.0;
 
 // Mods we conflict with.
-const MEH_CUSTOM_SKILL: &str = "CustomSkill.dll";
+const MEH_CUSTOM_SKILL: &str = "CustomSkills.dll";
 const ZAX_EXPERIENCE: &str = "Experience.dll";
 
 // Conflicts for each patch group.
