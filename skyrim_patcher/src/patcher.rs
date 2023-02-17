@@ -15,13 +15,12 @@
 
 use std::cell::UnsafeCell;
 use std::ptr::NonNull;
-use std::collections::HashSet;
 use std::vec::Vec;
 
 #[cfg(feature = "alloc_trampoline")]
 use skse64::trampoline::Trampoline;
 
-use skse64::log::{skse_message, skse_warning, skse_fatal};
+use skse64::log::{skse_message, skse_fatal};
 use skse64::reloc::RelocAddr;
 use skse64::safe::{verify_flow, write_flow, Flow};
 use versionlib::VersionDb;
@@ -104,7 +103,7 @@ pub enum Descriptor {
     Patch {
         name: &'static str,
         enabled: fn() -> bool,
-        conflicts: Option<&'static [ &'static str ]>,
+        conflicts: Option<&'static str>,
         hook: Hook,
         loc: GameLocation,
         sig: Signature,
@@ -134,7 +133,7 @@ pub struct GameRef<T>(UnsafeCell<usize>, std::marker::PhantomData<T>);
 /// Contains information about a patch necessary to verify its integrity.
 struct PatchResult {
     name: &'static str,
-    conflicts: Option<&'static [ &'static str ]>,
+    conflicts: &'static str,
     hook: Hook,
     loc: RelocAddr
 }
@@ -404,7 +403,7 @@ impl Descriptor {
                 Some(PatchResult {
                     name: *name,
                     hook: hook.clone(),
-                    conflicts: *conflicts,
+                    conflicts: conflicts.unwrap_or("None"),
                     loc: addr
                 })
             },
@@ -497,23 +496,6 @@ impl<T> GameRef<T> {
 }
 
 impl PatchResult {
-    /// Checks if this patch conflicts with any of the loaded dll files.
-    fn check_conflicts(
-        &self,
-        loaded: &HashSet<String>,
-        suppress: &HashSet<String>
-    ) -> Result<(), &'static str> {
-        if let Some(conflicts) = self.conflicts {
-            for plugin in conflicts.iter() {
-                if loaded.contains(*plugin) && !suppress.contains(*plugin) {
-                    return Err(*plugin);
-                }
-            }
-        }
-
-        Ok(())
-    }
-
     /// Verifies that the given patch is installed to the game code.
     fn verify(
         &self
@@ -526,32 +508,6 @@ impl PatchResult {
 }
 
 impl PatchSet {
-    /// Checks if any patch in the given set conflicts with other loaded plugins.
-    pub fn warn_conflicts(
-        &self,
-        suppress: &HashSet<String>
-    ) {
-        let loaded = skse64::query::loaded_plugins();
-        for patch in self.0.iter() {
-            if let Err(plugin) = patch.check_conflicts(&loaded, suppress) {
-                skse_message!(
-                    "[WARNING] Patch {} has a known conflict with {}",
-                    patch.name,
-                    plugin
-                );
-                skse_warning!(
-                    "The patch {} has been loaded with the plugin {}, which is \
-                     known to conflict with it.\n\n\
-                     To suppress this warning, modify the INI file to either disable \
-                     the patch or suppress warnings for {}.",
-                    patch.name,
-                    plugin,
-                    plugin => window
-                );
-            }
-        }
-    }
-
     /// Verifies that the given patch set has correctly been installed.
     pub fn verify(
         &self
@@ -564,8 +520,9 @@ impl PatchSet {
                     "The integrity checker has determined that the patch {} was \
                      partially or completely overwritten by a conflicting plugin. \
                      This is fatal. Please disable the conflicting plugin or modify \
-                     the INI file to disable this patch to resolve this error.",
-                    patch.name => window
+                     the INI file to disable this patch.\n\n\
+                     Known conflicts: {}",
+                    patch.name, patch.conflicts => window
                 );
 
                 fails += 1;
@@ -594,7 +551,7 @@ pub fn apply<const NUM_PATCHES: usize>(
     #[cfg(feature = "alloc_trampoline")]
     let mut alloc_size: usize = 0;
 
-    skse_message!("--------------------- Skyrim Patcher 1.0.5 ---------------------");
+    skse_message!("--------------------- Skyrim Patcher 1.1.0 ---------------------");
 
     // Attempt to locate all of the patch signatures.
     let mut fails = 0;

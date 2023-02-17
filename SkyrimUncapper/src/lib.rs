@@ -17,7 +17,6 @@ mod settings;
 
 use std::ffi::CStr;
 use std::path::Path;
-use std::collections::HashSet;
 
 use skse64::log::{skse_message, skse_fatal};
 use skse64::version::{SkseVersion, PACKED_SKSE_VERSION, CURRENT_RELEASE_RUNTIME};
@@ -109,10 +108,7 @@ pub fn skse_plugin_rust_entry(
 fn skse_plugin_verify(
     _msg: &Message
 ) {
-    let set = unsafe { (*PATCH_SET.get()).take().unwrap() };
-    let suppress = HashSet::new();
-    set.warn_conflicts(&suppress);
-    set.verify();
+    unsafe { (*PATCH_SET.get()).take().unwrap().verify(); }
 }
 
 // Converts strings to ints in const context, for version numbers.

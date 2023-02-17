@@ -22,13 +22,13 @@ use crate::skyrim::*;
 const BASE_LEGENDARY_THRESHOLD: f32 = 100.0;
 
 // Mods we conflict with.
-const MEH_CUSTOM_SKILL: &str = "CustomSkills.dll";
-const ZAX_EXPERIENCE: &str = "Experience.dll";
+const MEH_CUSTOM_SKILL: &str = "Meh321's Custom Skills Framework";
+const ZAX_EXPERIENCE: &str = "Zax's Experience";
 
 // Conflicts for each patch group.
-const FORMULA_UI_CONFLICTS: &[&str] = &[MEH_CUSTOM_SKILL];
-const LEGENDARY_CONFLICTS: &[&str] = &[MEH_CUSTOM_SKILL];
-const LEVEL_MULT_CONFLICTS: &[&str] = &[ZAX_EXPERIENCE];
+const FORMULA_UI_CONFLICTS: &str = MEH_CUSTOM_SKILL;
+const LEGENDARY_CONFLICTS: &str = MEH_CUSTOM_SKILL;
+const LEVEL_MULT_CONFLICTS: &str = ZAX_EXPERIENCE;
 
 //
 // Trampolines used by hooks to return to game code.
