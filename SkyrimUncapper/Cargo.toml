@@ -11,12 +11,12 @@ crate-type = ["cdylib"]
 alloc_trampoline = ["skyrim_patcher/alloc_trampoline"]
 
 [dependencies]
-racy_cell = { path = "../racy_cell" }
+racy_cell = { path = "../lib/racy_cell" }
 configparser = "3.0.2"
-later = { path = "../later" }
-disarray = { path = "../disarray" }
-skse64 = { path = "../skse64" }
-skyrim_patcher = { path = "../skyrim_patcher" }
+later = { path = "../lib/later" }
+disarray = { path = "../lib/disarray" }
+skse64 = { path = "../lib/skse64" }
+skyrim_patcher = { path = "../lib/skyrim_patcher" }
 
 [build-dependencies]
 winres = "0.1.12"
