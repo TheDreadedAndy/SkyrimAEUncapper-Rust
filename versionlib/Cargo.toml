@@ -6,13 +6,5 @@ edition = "2021"
 [lib]
 path = "lib.rs"
 
-[[bin]]
-path = "main.rs"
-name = "vdb-dump"
-required-features = [ "dump" ]
-
-[features]
-dump = [ "skse64/disas", "skse64/not_plugin" ]
-
 [dependencies]
-skse64 = { path = "../skse64" }
+skse64_common = { path = "../skse64_common" }

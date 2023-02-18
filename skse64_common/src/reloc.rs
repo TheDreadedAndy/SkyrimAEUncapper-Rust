@@ -18,13 +18,14 @@ pub struct RelocAddr(usize);
 static BASE_ADDR: Later<usize> = Later::new();
 
 impl RelocAddr {
-    pub (in crate) fn init_manager() {
+    #[doc(hidden)]
+    pub fn init_manager() {
         BASE_ADDR.init(unsafe { GetModuleHandleA(std::ptr::null_mut()) as usize });
     }
 
     /// Gets the base address of the skyrim binary.
     pub fn base() -> usize {
-        *BASE_ADDR
+        if BASE_ADDR.is_init() { *BASE_ADDR } else { 0x140000000 }
     }
 
     /// Creates a reloc addr from an offset.

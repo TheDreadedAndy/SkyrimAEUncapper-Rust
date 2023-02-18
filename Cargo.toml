@@ -4,9 +4,11 @@ members = [
     "disarray",
     "later",
     "racy_cell",
+    "skse64_common",
     "skse64",
     "versionlib",
     "skyrim_patcher",
+    "vdb-dump",
     "SkyrimUncapper"
 ]
 

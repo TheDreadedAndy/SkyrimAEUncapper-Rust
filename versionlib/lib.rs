@@ -10,18 +10,13 @@ use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::mem::size_of;
 
-#[cfg(feature = "dump")]
-use std::str::FromStr;
-
-use skse64::version::{SkseVersion, RUNTIME_VERSION_1_6_317};
-
-#[cfg(not(feature = "dump"))]
-use skse64::reloc::RelocAddr;
+use skse64_common::version::{SkseVersion, RUNTIME_VERSION_1_6_317};
+use skse64_common::reloc::RelocAddr;
 
 /// A version database, which allows for offsets/ids to be searched for by each other.
 pub struct VersionDb {
-    pub (in crate) by_id: HashMap<usize, usize>,
-    #[cfg(not(feature = "dump"))] version: SkseVersion
+    pub (in crate) by_id: HashMap<usize, RelocAddr>,
+    version: SkseVersion
 }
 
 ///
@@ -52,13 +47,9 @@ impl Unsigned for u64 {}
 
 impl VersionDb {
     /// Attempts to create a new version database, loading it with the specified version
-    /// (or the current version, if none is provided).
-    #[cfg(not(feature = "dump"))]
     pub fn new(
-        version: Option<SkseVersion>
+        version: SkseVersion
     ) -> Self {
-        let version = version.unwrap_or(skse64::version::current_runtime());
-
         // Figure out what kind of version db we're loading, so we can enforce the format later.
         // It also effects the base of the file name.
         let (file_base, format) = if version < RUNTIME_VERSION_1_6_317 {
@@ -85,10 +76,11 @@ impl VersionDb {
     }
 
     /// Creates a version database from the given path, setting the version based on the file.
-    #[cfg(feature = "dump")]
-    pub fn new(
+    pub fn new_from_path(
         path: &std::path::Path
     ) -> Self {
+        use std::str::FromStr;
+
         const DB_NAME_PARTS: usize = 5;
 
         let db_name = path.file_name().unwrap().to_str().unwrap().split('.').next().unwrap();
@@ -118,33 +110,7 @@ impl VersionDb {
         Self::new_from_file(&mut f, version, format)
     }
 
-    /// Loads in a version database from the given file and version.
-    fn new_from_file(
-        f: &mut File,
-        _version: SkseVersion,
-        format: u32
-    ) -> Self {
-        let mut by_id = HashMap::<usize, usize>::new();
-
-        let (ptr_size, addr_count) = Self::parse_header(f, format);
-        let (mut pid, mut poffset) = (0, 0);
-        for _ in 0..addr_count {
-            let (id, offset) = Self::parse_addr(f, pid, poffset, ptr_size);
-
-            assert!(by_id.insert(id, offset).is_none());
-
-            pid = id;
-            poffset = offset;
-        }
-
-        Self {
-            by_id,
-            #[cfg(not(feature = "dump"))] version: _version
-        }
-    }
-
     /// Gets the version that is currently loaded into the database.
-    #[cfg(not(feature = "dump"))]
     pub fn loaded_version(
         &self
     ) -> SkseVersion {
@@ -152,12 +118,43 @@ impl VersionDb {
     }
 
     /// Attempts to find the offset of the given address independent id.
-    #[cfg(not(feature = "dump"))]
     pub fn find_addr_by_id(
         &self,
         id: usize
     ) -> Result<RelocAddr, ()> {
-        self.by_id.get(&id).map(|o| RelocAddr::from_offset(*o)).ok_or(())
+        self.by_id.get(&id).ok_or(()).copied()
+    }
+
+    /// Gets the underlying map associated with the database.
+    pub fn as_map(
+        &self
+    ) -> &HashMap<usize, RelocAddr> {
+        &self.by_id
+    }
+
+    /// Loads in a version database from the given file and version.
+    fn new_from_file(
+        f: &mut File,
+        version: SkseVersion,
+        format: u32
+    ) -> Self {
+        let mut by_id = HashMap::<usize, RelocAddr>::new();
+
+        let (ptr_size, addr_count) = Self::parse_header(f, format);
+        let (mut pid, mut poffset) = (0, 0);
+        for _ in 0..addr_count {
+            let (id, offset) = Self::parse_addr(f, pid, poffset, ptr_size);
+
+            assert!(by_id.insert(id, RelocAddr::from_offset(offset)).is_none());
+
+            pid = id;
+            poffset = offset;
+        }
+
+        Self {
+            by_id,
+            version: version
+        }
     }
 
     ///

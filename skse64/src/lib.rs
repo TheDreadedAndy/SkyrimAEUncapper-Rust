@@ -5,17 +5,17 @@
 //! @bug No known bugs.
 //!
 
-pub mod version;
-pub mod util;
+pub use skse64_common::reloc;
 
-#[cfg(not(feature = "not_plugin"))] pub mod event;
-#[cfg(not(feature = "not_plugin"))] mod errors;
-#[cfg(not(feature = "not_plugin"))] pub mod log;
-#[cfg(not(feature = "not_plugin"))] pub mod reloc;
-#[cfg(not(feature = "not_plugin"))] pub mod plugin_api;
-#[cfg(all(feature = "trampoline", not(feature = "not_plugin")))] pub mod trampoline;
-#[cfg(not(feature = "not_plugin"))] pub mod safe;
-#[cfg(not(feature = "not_plugin"))] pub mod loader;
+pub mod version;
+pub mod event;
+mod errors;
+pub mod log;
+pub mod util;
+pub mod plugin_api;
+#[cfg(feature = "trampoline")] pub mod trampoline;
+pub mod safe;
+pub mod loader;
 
 // For macros.
 pub use core;

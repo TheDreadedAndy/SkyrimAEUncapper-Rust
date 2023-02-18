@@ -546,7 +546,7 @@ unsafe impl<T> Sync for GameRef<T> {}
 fn locate_patches<const NUM_PATCHES: usize>(
     patches: &[&Descriptor]
 ) -> Result<([usize; NUM_PATCHES], Vec<PatchResult>, usize), ()> {
-    let db = VersionDb::new(None);
+    let db = VersionDb::new(skse64::version::current_runtime());
     let mut res_addrs: [usize; NUM_PATCHES] = [0; NUM_PATCHES];
     let mut installed_patches: Vec<PatchResult> = Vec::new();
 

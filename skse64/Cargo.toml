@@ -5,12 +5,11 @@ edition = "2021"
 
 [features]
 trampoline = []
-disas = []
-not_plugin = []
 
 [dependencies]
 later = { path = "../later" }
 racy_cell = { path = "../racy_cell" }
+skse64_common = { path = "../skse64_common" }
 
 [dependencies.windows-sys]
 version = "0.45.0"
