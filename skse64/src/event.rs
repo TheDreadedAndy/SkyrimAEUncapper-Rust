@@ -12,8 +12,9 @@ use racy_cell::RacyCell;
 use crate::plugin_api::{Message, SkseMessagingInterface, SkseInterface, InterfaceId};
 use crate::plugin_api;
 
-static SKSE_HANDLERS: RacyCell<[Option<fn(&Message)>; Message::SKSE_MAX]>
-    = RacyCell::new([None; Message::SKSE_MAX]);
+const VEC_INIT: Vec<fn(&Message)> = Vec::new();
+static SKSE_HANDLERS: RacyCell<[Vec<fn(&Message)>; Message::SKSE_MAX]>
+    = RacyCell::new([VEC_INIT; Message::SKSE_MAX]);
 
 /// Registers our listener wrapper to the SKSE message sender.
 pub (in crate) fn init_listener(
@@ -37,7 +38,7 @@ pub fn register_listener(
 ) {
     assert!(msg_type < Message::SKSE_MAX as u32);
     unsafe {
-        (*SKSE_HANDLERS.get())[msg_type as usize] = Some(callback);
+        (*SKSE_HANDLERS.get())[msg_type as usize].push(callback);
     }
 }
 
@@ -50,7 +51,7 @@ unsafe extern "system" fn skse_listener(
     // Only handle messages we understand.
     if msg.msg_type >= Message::SKSE_MAX as u32 { return; }
 
-    if let Some(callback) = (*SKSE_HANDLERS.get())[msg.msg_type as usize] {
+    for callback in (*SKSE_HANDLERS.get())[msg.msg_type as usize].iter() {
         callback(msg);
     }
 }

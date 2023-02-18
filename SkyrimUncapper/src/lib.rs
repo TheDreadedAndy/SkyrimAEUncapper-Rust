@@ -20,18 +20,13 @@ use std::path::Path;
 
 use skse64::log::{skse_message, skse_fatal};
 use skse64::version::{SkseVersion, PACKED_SKSE_VERSION, CURRENT_RELEASE_RUNTIME};
-use skse64::plugin_api::{SksePluginVersionData, SkseInterface, Message};
-use skse64::event::register_listener;
-use skyrim_patcher::{flatten_patch_groups, PatchSet};
-use racy_cell::RacyCell;
+use skse64::plugin_api::{SksePluginVersionData, SkseInterface};
+use skyrim_patcher::flatten_patch_groups;
 
 use skyrim::{GAME_SIGNATURES, NUM_GAME_SIGNATURES};
 use hooks::{HOOK_SIGNATURES, NUM_HOOK_SIGNATURES};
 
 const NUM_PATCHES: usize = NUM_GAME_SIGNATURES + NUM_HOOK_SIGNATURES;
-
-/// Holds the patch set result returned by the patcher. Used to verify in later phases.
-static PATCH_SET: RacyCell<Option<PatchSet>> = RacyCell::new(None);
 
 skse64::plugin_version_data! {
     version: SkseVersion::new(
@@ -76,10 +71,7 @@ pub fn skse_plugin_rust_entry(
     settings::init(Path::new("Data\\SKSE\\Plugins\\SkyrimUncapper.ini"));
 
     let patches = flatten_patch_groups::<NUM_PATCHES>(&[&GAME_SIGNATURES, &HOOK_SIGNATURES]);
-    if let Ok(patch_set) = skyrim_patcher::apply(patches) {
-        // SAFETY: We don't have a listener installed yet.
-        unsafe { (*PATCH_SET.get()) = Some(patch_set); }
-    } else {
+    if let Err(_) = skyrim_patcher::apply(patches) {
         skse_fatal!(
             "Failed to install the requested set of game patches. See log for details.\n\
              It is safe to continue playing; none of this mods changes have been applied."
@@ -87,28 +79,8 @@ pub fn skse_plugin_rust_entry(
         return Err(());
     }
 
-    //
-    // Verify the patch integrity just before the main window opens.
-    //
-    // Some plugins (e.g. Experience, I think) will apply patches during the post-load phase,
-    // so we can't actually panic there.
-    //
-    register_listener(Message::SKSE_POST_POST_LOAD, skse_plugin_verify);
-
     skse_message!("Initialization complete!");
     Ok(())
-}
-
-///
-/// Verifies the integrity of the patches at the latest step we can, hoping everything else
-/// has actually really for real finished loading.
-///
-/// Nothing in life is promised except death.
-///
-fn skse_plugin_verify(
-    _msg: &Message
-) {
-    unsafe { (*PATCH_SET.get()).take().unwrap().verify(); }
 }
 
 // Converts strings to ints in const context, for version numbers.

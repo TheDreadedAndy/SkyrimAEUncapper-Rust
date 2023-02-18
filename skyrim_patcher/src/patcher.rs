@@ -23,7 +23,9 @@ use skse64::trampoline::Trampoline;
 use skse64::log::{skse_message, skse_fatal};
 use skse64::reloc::RelocAddr;
 use skse64::safe::{verify_flow, write_flow, Flow};
+use skse64::plugin_api::Message;
 use versionlib::VersionDb;
+use racy_cell::RacyCell;
 
 use crate::sig::{Signature, BinarySig};
 
@@ -139,7 +141,7 @@ struct PatchResult {
 }
 
 /// Contains the set of patches installed by a call to apply().
-pub struct PatchSet(Vec<PatchResult>);
+struct PatchSet(Vec<PatchResult>);
 
 impl GameLocation {
     /// Finds the game address specified by this location.
@@ -540,18 +542,15 @@ unsafe impl Sync for Hook {}
 unsafe impl Sync for Descriptor {}
 unsafe impl<T> Sync for GameRef<T> {}
 
-/// Locates any game functions/objects, and applies any code patches.
-pub fn apply<const NUM_PATCHES: usize>(
-    patches: [&Descriptor; NUM_PATCHES]
-) -> Result<PatchSet, ()> {
+/// Uses the version database to locate the patches that the user requested be installed.
+fn locate_patches<const NUM_PATCHES: usize>(
+    patches: &[&Descriptor]
+) -> Result<([usize; NUM_PATCHES], Vec<PatchResult>, usize), ()> {
     let db = VersionDb::new(None);
     let mut res_addrs: [usize; NUM_PATCHES] = [0; NUM_PATCHES];
     let mut installed_patches: Vec<PatchResult> = Vec::new();
 
-    #[cfg(feature = "alloc_trampoline")]
-    let mut alloc_size: usize = 0;
-
-    skse_message!("--------------------- Skyrim Patcher 1.1.0 ---------------------");
+    let mut _alloc_size: usize = 0;
 
     // Attempt to locate all of the patch signatures.
     let mut fails = 0;
@@ -566,7 +565,7 @@ pub fn apply<const NUM_PATCHES: usize>(
 
                 #[cfg(feature = "alloc_trampoline")]
                 if let Some(h) = sig.hook() {
-                    alloc_size += h.alloc_size();
+                    _alloc_size += h.alloc_size();
                 }
 
                 if let Some(patch_result) = sig.patch_result(addr) {
@@ -580,26 +579,19 @@ pub fn apply<const NUM_PATCHES: usize>(
         }
     }
 
-
-    if fails > 0 {
-        skse_message!("[FAILURE] Could not locate every game signature!");
-        skse_message!("----------------------------------------------------------------");
-        return Err(())
-    }
-
-    // Allocate our branch trampoline.
-    #[cfg(feature = "alloc_trampoline")]
-    if alloc_size > 0 {
-        // SAFETY: We're not giving an image base, so this is actually safe.
-        unsafe { skse64::trampoline::create(Trampoline::Global, alloc_size, None) };
-        skse_message!(
-            "[SUCCESS] Created branch trampoline buffer with a size of {} bytes",
-            alloc_size
-        );
+    if fails == 0 {
+        Ok((res_addrs, installed_patches, _alloc_size))
     } else {
-        skse_message!("[SKIPPED] No patches require a branch trampoline allocation");
+        Err(())
     }
+}
 
+/// Installs the set of previously located patches.
+fn install_patches(
+    patches: &[&Descriptor],
+    res_addrs: &[usize],
+    set: PatchSet
+) {
     // Install our patches.
     for (i, sig) in patches.iter().enumerate() {
         if sig.disabled() { continue; }
@@ -637,8 +629,60 @@ pub fn apply<const NUM_PATCHES: usize>(
         }
     }
 
+    // Register the patches to be verified later.
+    static INSTALLED_PATCHES: RacyCell<Vec<PatchSet>> = RacyCell::new(Vec::new());
+    static DO_ONCE: RacyCell<bool> = RacyCell::new(true);
+    unsafe {
+        // SAFETY: SKSE plugin loading is single threaded, so its safe to mutate here.
+        (*INSTALLED_PATCHES.get()).push(set);
+        if *DO_ONCE.get() {
+            *DO_ONCE.get() = false;
+
+            //
+            // Verify the patch integrity just before the main window opens.
+            //
+            // Some plugins (e.g. Experience, I think) will apply patches during the post-load
+            // phase, so we can't actually panic there.
+            //
+            skse64::event::register_listener(Message::SKSE_POST_POST_LOAD, |_| {
+                for set in (*INSTALLED_PATCHES.get()).drain(0..) {
+                    set.verify();
+                }
+            });
+        }
+    }
+}
+
+/// Locates any game functions/objects, and applies any code patches.
+pub fn apply<const NUM_PATCHES: usize>(
+    patches: [&Descriptor; NUM_PATCHES]
+) -> Result<(), ()> {
+    skse_message!(
+        "--------------------- Skyrim Patcher {} ---------------------",
+        env!("CARGO_PKG_VERSION")
+    );
+
+    let (res_addrs, to_install, _alloc_size) = locate_patches::<NUM_PATCHES>(&patches).map_err(|_| {
+        skse_message!("[FAILURE] Could not locate every game signature!");
+        skse_message!("----------------------------------------------------------------");
+    })?;
+
+    // Allocate our branch trampoline.
+    #[cfg(feature = "alloc_trampoline")]
+    if _alloc_size > 0 {
+        // SAFETY: We're not giving an image base, so this is actually safe.
+        unsafe { skse64::trampoline::create(Trampoline::Global, _alloc_size, None) };
+        skse_message!(
+            "[SUCCESS] Created branch trampoline buffer with a size of {} bytes",
+            _alloc_size
+        );
+    } else {
+        skse_message!("[SKIPPED] No patches require a branch trampoline allocation");
+    }
+
+    install_patches(&patches, &res_addrs, PatchSet(to_install));
+
     skse_message!("[SUCCESS] Applied game patches.");
     skse_message!("----------------------------------------------------------------");
-
-    Ok(PatchSet(installed_patches))
+    Ok(())
 }
