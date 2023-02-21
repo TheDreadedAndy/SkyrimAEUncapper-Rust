@@ -5,16 +5,24 @@
 //! @bug No known bugs.
 //!
 
+use std::ops::Deref;
 use std::rc::Rc;
 use std::vec::Vec;
 use std::collections::HashMap;
-use std::hash::Hash;
+use std::hash::{Hash, Hasher};
 use std::borrow::Borrow;
+
+/// RC wrapper which is used to allow for correct Borrow<T> usage on get/get_mut/etc.
+#[derive(Clone)]
+enum Key<T> {
+    Allocated(Rc<T>),
+    Reference(*const T)
+}
 
 /// A hash-map which maintains a strict ordering on the keys it contains.
 pub struct OrderMap<K, V> {
-    order: Vec<Rc<K>>,
-    map: HashMap<Rc<K>, V>,
+    order: Vec<Key<K>>,
+    map: HashMap<Key<K>, V>,
 }
 
 /// Iterates over the elements in an ordered map, in order.
@@ -22,6 +30,38 @@ pub struct OrderMapIter<'a, K, V> {
     map: &'a OrderMap<K, V>,
     index: usize
 }
+
+impl<T> Deref for Key<T> {
+    type Target = T;
+    fn deref(
+        &self
+    ) -> &Self::Target {
+        match self {
+            Self::Allocated(a) => a.borrow(),
+            Self::Reference(r) => unsafe { r.as_ref().unwrap() }
+        }
+    }
+}
+
+impl<T: Hash> Hash for Key<T> {
+    fn hash<H: Hasher>(
+        &self,
+        state: &mut H
+    ) {
+        self.deref().hash(state);
+    }
+}
+
+impl<T: PartialEq> PartialEq for Key<T> {
+    fn eq(
+        &self,
+        rhs: &Self
+    ) -> bool {
+        self.deref() == rhs.deref()
+    }
+}
+
+impl<T: Eq> Eq for Key<T> {}
 
 impl<K, V> OrderMap<K, V> {
     /// Creates a new ordered hashmap.
@@ -45,10 +85,10 @@ impl<K, V> OrderMap<K, V> {
         key: &Q
     ) -> Option<&'a V>
     where
-        K: Hash + Eq,
-        Q: AsRef<K> + ?Sized
+        Key<K>: Borrow<Q>,
+        Q: Hash + Eq + ?Sized
     {
-        self.map.get(key.as_ref())
+        self.map.get(key)
     }
 
     /// Gets a mutable reference to the element with the given key.
@@ -57,10 +97,10 @@ impl<K, V> OrderMap<K, V> {
         key: &Q
     ) -> Option<&'a mut V>
     where
-        K: Hash + Eq,
-        Q: AsRef<K> + ?Sized
+        K: Borrow<Q>,
+        Q: Hash + Eq + ?Sized
     {
-        self.map.get_mut(key.as_ref())
+        self.map.get_mut(key)
     }
 
     /// Gets the key at the ith position in the map.
@@ -70,7 +110,7 @@ impl<K, V> OrderMap<K, V> {
     ) -> &'a Q
     where
         K: Borrow<Q>,
-        Q: Hash + Eq
+        Q: Hash + Eq + ?Sized
     {
         <K as Borrow<Q>>::borrow(&self.order[i])
     }
@@ -108,8 +148,8 @@ impl<K, V> OrderMap<K, V> {
         K: Hash + Eq
     {
         let key = Rc::new(key);
-        self.order.insert(i, key.clone());
-        self.map.insert(key, val)
+        self.order.insert(i, Key::Allocated(key.clone()));
+        self.map.insert(Key::Allocated(key), val)
     }
 
     /// Gets an iterator for this map.
@@ -123,7 +163,7 @@ impl<K, V> OrderMap<K, V> {
     }
 }
 
-impl<'a, K: Hash + Eq + AsRef<K>, V> Iterator for OrderMapIter<'a, K, V> {
+impl<'a, K: Hash + Eq, V> Iterator for OrderMapIter<'a, K, V> {
     type Item = (&'a K, &'a V);
     fn next(
         &mut self
