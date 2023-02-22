@@ -31,14 +31,13 @@ pub struct OrderMapIter<'a, K, V> {
     index: usize
 }
 
-impl<T> Deref for Key<T> {
-    type Target = T;
-    fn deref(
+impl<T: Borrow<U>, U> Borrow<Key<U>> for Key<T> {
+    fn borrow(
         &self
-    ) -> &Self::Target {
+    ) -> &Key<U> {
         match self {
-            Self::Allocated(a) => a.borrow(),
-            Self::Reference(r) => unsafe { r.as_ref().unwrap() }
+            Self::Allocated(r) => r.borrow().borrow(),
+            Self::Reference(p) => unsafe { p.as_ref().unwrap().borrow() }
         }
     }
 }
