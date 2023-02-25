@@ -5,7 +5,6 @@
 //! @bug No known bugs.
 //!
 
-mod order;
 mod ini;
 
 pub use ini::*;
