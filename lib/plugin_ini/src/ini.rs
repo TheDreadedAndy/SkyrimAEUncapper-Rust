@@ -25,6 +25,16 @@ pub struct Field<'a> {
     meta: &'a FieldMeta
 }
 
+///
+/// An iterator over each field within a section (in order).
+///
+/// Fields merged from another file will appear at the end of the iteration in an undefined order.
+///
+struct FieldIter<'a> {
+    index: usize,
+    data: Vec<(&'a String, &'a FieldMeta)>
+}
+
 /// The metadata associated with each section in the INI file.
 struct SectionMeta {
     seq: Option<usize>,
@@ -39,8 +49,16 @@ pub struct Section<'a> {
     meta: &'a SectionMeta
 }
 
+///
 /// An iterator over the sections in an INI (in order).
-pub struct SectionIter<'a>(Vec<(&'a String, &'a SectionMeta)>);
+///
+/// Sections merged from another file will appear at the end of the iteration in an undefined
+/// order.
+///
+pub struct SectionIter<'a> {
+    index: usize,
+    data: Vec<(&'a String, &'a SectionMeta)>
+}
 
 /// Manages an INI file, allowing it to be updated, read, and written to a file.
 pub struct Ini {
@@ -48,6 +66,89 @@ pub struct Ini {
     sections: HashMap<String, SectionMeta>,
     suffix: Option<String>,
     comment_chars: Vec<char>
+}
+
+impl<'a> Field<'a> {
+    /// Gets the name of the given field.
+    pub fn name(
+        &self
+    ) -> &str {
+        self.field
+    }
+
+    /// Attempts to read the value for the given field.
+    pub fn value<T: FromStr>(
+        &self
+    ) -> Option<T> {
+        self.meta.val.as_ref().and_then(|s| T::from_str(s).ok())
+    }
+}
+
+impl<'a> Iterator for FieldIter<'a> {
+    type Item = Field<'a>;
+    fn next(
+        &mut self
+    ) -> Option<Self::Item> {
+        if self.index < self.data.len() {
+            let ret = Field { field: self.data[self.index].0, meta: self.data[self.index].1 };
+            self.index += 1;
+            Some(ret)
+        } else {
+            None
+        }
+    }
+}
+
+impl<'a> Section<'a> {
+    /// Gets the name of the given section.
+    pub fn name(
+        &self
+    ) -> &str {
+        self.section
+    }
+
+    /// Gets a field in the given section.
+    pub fn field(
+        &self,
+        name: &str
+    ) -> Result<Field<'a>, ()> {
+        let (field, meta) = self.meta.fields.get_pair(name).ok_or(())?;
+        Ok(Field { field, meta })
+    }
+
+    /// Gets an iterator over all the fields in a section.
+    pub fn fields(
+        &self
+    ) -> FieldIter<'a> {
+        let data = {
+            let mut v = Vec::new();
+            for field in self.meta.fields.iter() { v.push(field); }
+            v.sort_by(|lhs, rhs| {
+                lhs.1.seq.unwrap_or(usize::MAX).cmp(&rhs.1.seq.unwrap_or(usize::MAX))
+            });
+            v
+        };
+
+        FieldIter {
+            index: 0,
+            data
+        }
+    }
+}
+
+impl<'a> Iterator for SectionIter<'a> {
+    type Item = Section<'a>;
+    fn next(
+        &mut self
+    ) -> Option<Self::Item> {
+        if self.index < self.data.len() {
+            let ret = Section { section: self.data[self.index].0, meta: self.data[self.index].1 };
+            self.index += 1;
+            Some(ret)
+        } else {
+            None
+        }
+    }
 }
 
 impl Ini {
@@ -77,16 +178,20 @@ impl Ini {
         self.comment_chars = pat;
     }
 
-    /// Writes the contents of the INI object to the given file.
-    pub fn write_file(
-        &self,
-        path: &Path
-    ) -> Result<(), std::io::Error> {
-        let mut f = File::create(path)?;
+    /// Gets a single section within the INI file.
+    pub fn section<'a>(
+        &'a self,
+        section: &str
+    ) -> Result<Section<'a>, ()> {
+        let (section, meta) = self.sections.get_pair(section).ok_or(())?;
+        Ok(Section { section, meta })
+    }
 
-        // Load in and sort the sections by their sequence number, to ensure ordering in the file
-        // is preserved.
-        let sections = {
+    /// Gets an iterator over all sections in the INI file.
+    pub fn sections<'a>(
+        &'a self
+    ) -> SectionIter<'a> {
+        let data = {
             let mut v = Vec::new();
             for section in self.sections.iter() { v.push(section); }
             v.sort_by(|lhs, rhs| {
@@ -95,28 +200,36 @@ impl Ini {
             v
         };
 
+        SectionIter {
+            index: 0,
+            data
+        }
+    }
+
+    // TODO: get
+    // TODO: update
+
+    /// Writes the contents of the INI object to the given file.
+    pub fn write_file(
+        &self,
+        path: &Path
+    ) -> Result<(), std::io::Error> {
+        let mut f = File::create(path)?;
+
         if let Some(ref file_comment) = self.file_comment {
             write!(&mut f, "{}", file_comment)?;
         }
 
-        for (name, meta) in sections.iter() {
-            if let Some(ref pre) = meta.prefix { write!(&mut f, "{}", pre)?; }
-            write!(&mut f, "[{}]", name)?;
-            if let Some(ref comment) = meta.inline_comment { write!(&mut f, " {}", comment)?; }
+        for section in self.sections() {
+            if let Some(ref pre) = section.meta.prefix { write!(&mut f, "{}", pre)?; }
+            write!(&mut f, "[{}]", section.name())?;
+            if let Some(ref comment) = section.meta.inline_comment {
+                write!(&mut f, " {}", comment)?;
+            }
 
-            // Order the fields, for the same reason as the sections.
-            let fields = {
-                let mut v = Vec::new();
-                for field in meta.fields.iter() { v.push(field); }
-                v.sort_by(|lhs, rhs| {
-                    lhs.1.seq.unwrap_or(usize::MAX).cmp(&rhs.1.seq.unwrap_or(usize::MAX))
-                });
-                v
-            };
-
-            for (name, meta) in fields.iter() {
+            for Field { field, meta } in section.fields() {
                 if let Some(ref pre) = meta.prefix { write!(&mut f, "{}", pre)?; }
-                write!(&mut f, "{}", name)?;
+                write!(&mut f, "{}", field)?;
                 if let Some(ref val) = meta.val { write!(&mut f, " = {}", val)?; }
                 if let Some(ref comment) = meta.inline_comment { write!(&mut f, " {}", comment)?; }
             }
