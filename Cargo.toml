@@ -4,7 +4,7 @@ members = [
     "lib/disarray",
     "lib/later",
     "lib/racy_cell",
-    "lib/plugin_ini",
+    #"lib/plugin_ini",
     "lib/skse64_common",
     "lib/skse64",
     "lib/versionlib",
@@ -18,6 +18,7 @@ panic = "abort"
 debug = false
 incremental = false
 opt-level = 'z'
+lto = 'thin'
 
 [profile.dev]
 panic = "abort"
@@ -25,3 +26,4 @@ debug = true
 incremental = false
 # O0 is just impossible to read.
 opt-level = 1
+lto = 'thin'

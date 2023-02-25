@@ -20,4 +20,5 @@ skyrim_patcher = { path = "../lib/skyrim_patcher" }
 
 [build-dependencies]
 winres = "0.1.12"
+embed-resource = "1.8.0"
 cc = "1.0.79"
