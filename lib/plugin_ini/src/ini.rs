@@ -264,14 +264,16 @@ impl Ini {
             if let Some(ref pre) = section.meta.prefix { write!(&mut f, "{}", pre)?; }
             write!(&mut f, "[{}]", section.name())?;
             if let Some(ref comment) = section.meta.inline_comment {
-                write!(&mut f, " {}", comment)?;
+                write!(&mut f, " #{}", comment)?;
             }
+            write!(&mut f, "\n")?;
 
             for Field { field, meta } in section.fields() {
                 if let Some(ref pre) = meta.prefix { write!(&mut f, "{}", pre)?; }
                 write!(&mut f, "{}", field)?;
                 if let Some(ref val) = meta.val { write!(&mut f, " = {}", val)?; }
-                if let Some(ref comment) = meta.inline_comment { write!(&mut f, " {}", comment)?; }
+                if let Some(ref comment) = meta.inline_comment { write!(&mut f, " #{}", comment)?; }
+                write!(&mut f, "\n")?;
             }
         }
 
@@ -322,6 +324,7 @@ impl Ini {
             if first_comment {
                 if is_comment(line, self.comment_chars.as_slice()) {
                     s += line;
+                    s += "\n";
                     continue;
                 } else {
                     first_comment = false;
@@ -333,6 +336,7 @@ impl Ini {
             // Otherwise, determine what this line is a part of.
             if is_comment(line, self.comment_chars.as_slice()) || is_whitespace(line) {
                 s += line;
+                s += "\n";
             } else if line.trim().starts_with('[') {
                 section = Some(self.define_section(section_seq, s, line)?);
                 section_seq += 1;
