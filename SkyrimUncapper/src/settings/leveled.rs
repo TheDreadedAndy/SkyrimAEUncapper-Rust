@@ -8,7 +8,7 @@
 use std::vec::Vec;
 use std::str::FromStr;
 
-use configparser::ini::Ini;
+use plugin_ini::Ini;
 use skse64::log::skse_message;
 
 use crate::skyrim::ActorAttribute;
@@ -132,21 +132,21 @@ impl<T: Copy + FromStr> IniNamedReadable for LeveledIniSection<T>
         section: &str,
         default: Self::Value
     ) {
-        if let Some(sec) = ini.get_map_ref().get(section) {
-            for (level, item) in sec.iter() {
-                let level = if let Ok(l) = u32::from_str(level) {
+        if let Ok(sec) = ini.section(section) {
+            for field in sec.fields() {
+                let level = if let Ok(l) = u32::from_str(field.name()) {
                     l
                 } else {
-                    skse_message!("[WARNING] Unable to convert {} to a u32; skipped", level);
+                    skse_message!("[WARNING] Unable to convert {} to a u32; skipped", field.name());
                     continue;
                 };
 
-                let item = if let Some(i) = item.as_ref().and_then(|v| T::from_str(v).ok()) {
+                let item = if let Some(i) = field.value() {
                     i
                 } else {
                     skse_message!(
                         "[WARNING] Unabled to convert {} to value type; skipped",
-                        item.as_ref().map(|s| s.as_ref()).unwrap_or("None")
+                        field.value::<String>().as_ref().map(|s| s.as_ref()).unwrap_or("None")
                     );
                     continue;
                 };

@@ -6,7 +6,7 @@
 //!
 
 use std::ops::Deref;
-use configparser::ini::Ini;
+use plugin_ini::Ini;
 
 pub trait IniNamedReadable {
     /// @brief The type of the underlying values.

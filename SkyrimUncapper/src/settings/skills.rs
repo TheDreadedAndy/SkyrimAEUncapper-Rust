@@ -5,7 +5,7 @@
 //! @bug No known bugs.
 //!
 
-use configparser::ini::Ini;
+use plugin_ini::Ini;
 
 use super::config::IniNamedReadable;
 use crate::skyrim::{ActorAttribute, SkillIterator, SKILL_COUNT};
