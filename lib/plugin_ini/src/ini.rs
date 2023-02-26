@@ -12,6 +12,7 @@ use std::io::{Read, Write};
 use std::str::FromStr;
 
 /// The metadata associated with each field in the INI file.
+#[derive(Clone)]
 struct FieldMeta {
     seq: Option<usize>,
     prefix: Option<String>,
@@ -30,12 +31,13 @@ pub struct Field<'a> {
 ///
 /// Fields merged from another file will appear at the end of the iteration in an undefined order.
 ///
-struct FieldIter<'a> {
+pub struct FieldIter<'a> {
     index: usize,
     data: Vec<(&'a String, &'a FieldMeta)>
 }
 
 /// The metadata associated with each section in the INI file.
+#[derive(Clone)]
 struct SectionMeta {
     seq: Option<usize>,
     prefix: Option<String>,
@@ -112,7 +114,7 @@ impl<'a> Section<'a> {
         &self,
         name: &str
     ) -> Result<Field<'a>, ()> {
-        let (field, meta) = self.meta.fields.get_pair(name).ok_or(())?;
+        let (field, meta) = self.meta.fields.get_key_value(name).ok_or(())?;
         Ok(Field { field, meta })
     }
 
@@ -183,7 +185,7 @@ impl Ini {
         &'a self,
         section: &str
     ) -> Result<Section<'a>, ()> {
-        let (section, meta) = self.sections.get_pair(section).ok_or(())?;
+        let (section, meta) = self.sections.get_key_value(section).ok_or(())?;
         Ok(Section { section, meta })
     }
 
@@ -206,7 +208,15 @@ impl Ini {
         }
     }
 
-    // TODO: get
+    /// Gets a value in the INI from the given section/field pair.
+    pub fn get<T: FromStr>(
+        &self,
+        section: &str,
+        field: &str
+    ) -> Option<T> {
+        self.section(section).ok()?.field(field).ok()?.value()
+    }
+
     // TODO: update
 
     /// Writes the contents of the INI object to the given file.
