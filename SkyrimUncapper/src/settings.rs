@@ -25,6 +25,8 @@ use leveled::LeveledIniSection;
 use config::{DefaultIniSection, DefaultIniField, IniDefaultReadable};
 use crate::skyrim::ActorAttribute;
 
+const DEFAULT_INI_FILE: &str = include_str!("../SkyrimUncapper.ini");
+
 /// Manages the loading of a skill multiplier, which contains both a base and offset multiplier.
 #[derive(Default, Copy, Clone)]
 pub (in crate) struct SkillMult {
@@ -238,13 +240,24 @@ pub fn init(
 ) {
     skse_message!("Loading config file: {}", path.display());
 
-    let mut settings = Settings::new();
+    // Read the configuration from the file.
     let ini = Ini::from_path(path);
     if ini.is_err() {
         skse_warning!("Could not load INI file. Defaults will be used.");
     }
 
-    let ini = ini.unwrap();
+    // Update the file with missing fields, if necessary.
+    let mut ini = ini.unwrap();
+    if let Some(_) = ini.update(&Ini::from_str(DEFAULT_INI_FILE).unwrap()) {
+        // If missing fields were added, update the INI file.
+        assert!(
+            ini.write_file(path).is_ok(),
+            "[ERROR] Failed to write to INI file. Please ensure Skyrim has permission to use the \
+             plugin directory."
+        );
+    }
+
+    let mut settings = Settings::new();
     settings.read_ini(&ini);
     SETTINGS.init(settings);
 

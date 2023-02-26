@@ -221,13 +221,16 @@ impl Ini {
     pub fn update(
         &mut self,
         delta: &Self
-    ) {
+    ) -> Option<()> {
+        let mut changed = false;
+
         for delta_section in delta.sections() {
             if self.sections.get(delta_section.name()).is_none() {
                 let name = String::from_str(delta_section.name()).unwrap();
                 let mut meta = delta_section.meta.clone();
                 meta.seq = None;
                 assert!(self.sections.insert(name, meta).is_none());
+                changed = true;
                 continue;
             }
 
@@ -238,9 +241,12 @@ impl Ini {
                     let mut meta = delta_field.meta.clone();
                     meta.seq = None;
                     assert!(section.fields.insert(name, meta).is_none());
+                    changed = true;
                 }
             }
         }
+
+        if changed { Some(()) } else { None }
     }
 
     /// Writes the contents of the INI object to the given file.
