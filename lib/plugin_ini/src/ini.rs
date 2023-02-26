@@ -217,7 +217,31 @@ impl Ini {
         self.section(section).ok()?.field(field).ok()?.value()
     }
 
-    // TODO: update
+    /// Updates the sections/fields in the given map with values found only in the second map.
+    pub fn update(
+        &mut self,
+        delta: &Self
+    ) {
+        for delta_section in delta.sections() {
+            if self.sections.get(delta_section.name()).is_none() {
+                let name = String::from_str(delta_section.name()).unwrap();
+                let mut meta = delta_section.meta.clone();
+                meta.seq = None;
+                assert!(self.sections.insert(name, meta).is_none());
+                continue;
+            }
+
+            let section = self.sections.get_mut(delta_section.name()).unwrap();
+            for delta_field in delta_section.fields() {
+                if section.fields.get(delta_field.name()).is_none() {
+                    let name = String::from_str(delta_field.name()).unwrap();
+                    let mut meta = delta_field.meta.clone();
+                    meta.seq = None;
+                    assert!(section.fields.insert(name, meta).is_none());
+                }
+            }
+        }
+    }
 
     /// Writes the contents of the INI object to the given file.
     pub fn write_file(
