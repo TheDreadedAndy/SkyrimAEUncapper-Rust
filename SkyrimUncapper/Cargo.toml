@@ -12,6 +12,7 @@ alloc_trampoline = ["skyrim_patcher/alloc_trampoline"]
 
 [dependencies]
 racy_cell = { path = "../lib/racy_cell" }
+lz77 = { path = "../lib/lz77" }
 plugin_ini = { path = "../lib/plugin_ini" }
 later = { path = "../lib/later" }
 disarray = { path = "../lib/disarray" }
@@ -22,3 +23,4 @@ skyrim_patcher = { path = "../lib/skyrim_patcher" }
 winres = "0.1.12"
 embed-resource = "1.8.0"
 cc = "1.0.79"
+lz77 = { path = "../lib/lz77" }
