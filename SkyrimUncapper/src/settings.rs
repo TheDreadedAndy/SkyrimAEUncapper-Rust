@@ -248,7 +248,9 @@ pub fn init(
 
     // Update the file with missing fields, if necessary.
     let mut ini = ini.unwrap();
-    let default_ini = Ini::from_str(&String::from_utf8(lz77::decompress(DEFAULT_INI_LZ)).unwrap()).unwrap();
+    let default_ini = Ini::from_str(
+        &String::from_utf8(lz77::decompress(DEFAULT_INI_LZ)).unwrap()
+    ).unwrap();
     if let Some(_) = ini.update(&default_ini) {
         // If missing fields were added, update the INI file.
         assert!(
