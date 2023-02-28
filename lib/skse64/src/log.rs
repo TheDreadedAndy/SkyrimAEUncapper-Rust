@@ -216,8 +216,11 @@ pub (in crate) fn open() {
             File::create(&OsString::from_wide((*LOG_BUFFER.get()).as_bytes())).unwrap()
         ));
 
-        // Clear out file path.
+        // Clear our file path.
         (*LOG_BUFFER.get()).clear();
+
+        // Write the byte-order mark, so text editors know the file is UTF-16.
+        (*LOG_FILE.get()).write(&[0xFF, 0xFE]).unwrap();
     }
 }
 
