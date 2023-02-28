@@ -17,10 +17,10 @@ const MIN_MATCH_SIZE: usize = 4;
 const MIN_LIT_SIZE: usize = 1;
 
 /// The input string size considered by the input window.
-const WINDOW_INPUT: usize = 4096;
+const WINDOW_INPUT: usize = 16;
 
 /// The window size of the item being compressed to look backward in.
-const WINDOW_BUF: usize = 4096;
+const WINDOW_BUF: usize = 1 << 14;
 
 /// A non-compressed literal byte string stored immediately after this struct in memory.
 #[repr(C)]
@@ -39,6 +39,12 @@ struct Lookup {
 struct Window {
     input: CircQueue<WINDOW_INPUT>,
     buf: CircQueue<WINDOW_BUF>
+}
+
+/// Manages a group of matches found within the window.
+struct MatchGroup {
+    matches: Vec<usize>,
+    len: usize
 }
 
 impl Literal {
@@ -77,13 +83,6 @@ impl Window {
         }
     }
 
-    /// Gets the total number of bytes in the window and input buffers.
-    fn len(
-        &self
-    ) -> usize {
-        self.input.len() + self.buf.len()
-    }
-
     /// Checks if the input to the window has been fully processed yet.
     fn has_input(
         &self
@@ -111,15 +110,19 @@ impl Window {
 
     /// Finds the longest match between the input and window buffers.
     fn find_match(
-        &mut self
-    ) -> Option<(usize, Lookup)> {
+        &mut self,
+        stream_index: usize
+    ) -> Option<(usize, MatchGroup)> {
         // Can't possibly find a long enough match.
         if self.input.len() < MIN_MATCH_SIZE {
             return None;
         }
 
-        let mut loc = 0;
-        let mut len = 0;
+        // As an optimization, we don't emit matches unless they are
+        // actually long enough to save space.
+        let stream_index = stream_index - self.input.len();
+        let base = stream_index - self.buf.len();
+        let mut matches = MatchGroup::new(MIN_MATCH_SIZE);
         let mut i = 0;
 
         while i < self.buf.len() {
@@ -132,29 +135,19 @@ impl Window {
                 }
             }
 
-            if j > len {
-                len = j;
-                loc = i;
-                if len == WINDOW_INPUT {
-                    break;
-                }
+            if j == matches.len() {
+                matches.add(base + i);
+            } else if j > matches.len() {
+                matches = MatchGroup::new(j);
+                matches.add(base + i);
             }
 
             i += 1;
         }
 
-        // As an optimization, we don't emit matches unless they are
-        // actually long enough to save space.
-        if len >= MIN_MATCH_SIZE {
-            let offset = (self.buf.len() + self.input.len()) - loc;
-            let loc = Lookup {
-                offset: -TryInto::<isize>::try_into(self.buf.len() - loc).unwrap(),
-                len: len
-            };
-
-            for _ in 0..len { self.buf.enq(self.input.deq().unwrap()); }
-
-            Some((offset, loc))
+        if matches.matches() > 0 {
+            for _ in 0..matches.len() { self.buf.enq(self.input.deq().unwrap()); }
+            Some((stream_index, matches))
         } else {
             None
         }
@@ -180,11 +173,79 @@ impl Window {
     }
 }
 
+impl MatchGroup {
+    fn new(
+        len: usize
+    ) -> Self {
+        Self {
+            matches: Vec::new(),
+            len
+        }
+    }
+
+    /// Gets the length of the matches in the group.
+    fn len(
+        &self
+    ) -> usize {
+        self.len
+    }
+
+    /// Gets the number of matches currently being considered by this group.
+    fn matches(
+        &self
+    ) -> usize {
+        self.matches.len()
+    }
+
+    /// Gets the current (index, len) in the match group.
+    fn get(
+        &self
+    ) -> (usize, usize) {
+        (self.matches[0], self.len)
+    }
+
+    /// Adds a new index to the given match group.
+    fn add(
+        &mut self,
+        index: usize
+    ) {
+        self.matches.push(index);
+    }
+
+    ///
+    /// Updates the match of each index based on the given byte and data stream.
+    ///
+    /// If no matches are found, the index and len of one of the groups is returned.
+    ///
+    fn next(
+        &mut self,
+        b: u8,
+        data: &[u8]
+    ) -> Result<(), (usize, usize)> {
+        assert!(self.matches.len() > 0);
+        let mut matches = Vec::new();
+
+        for i in self.matches.iter() {
+            if b == data[i + self.len] {
+                matches.push(*i);
+            }
+        }
+
+        if matches.len() > 0 {
+            self.matches = matches;
+            self.len += 1;
+            Ok(())
+        } else {
+            Err((self.matches[0], self.len))
+        }
+    }
+}
+
 /// Compresses the given byte stream.
 pub fn compress(
     data: &[u8]
 ) -> Vec<u8> {
-    enum State { Literal(Vec<u8>), Match { index: usize, offset: isize, len: usize } }
+    enum State { Literal(Vec<u8>), Match { base: usize, group: MatchGroup } }
 
     let mut state = State::Literal(Vec::new());
     let mut win = Window::new();
@@ -206,28 +267,28 @@ pub fn compress(
                 }
 
                 if (v.len() >= MIN_LIT_SIZE) || (v.len() == 0) {
-                    if let Some((ioffset, m)) = win.find_match() {
+                    if let Some((base, group)) = win.find_match(i) {
                         Literal::emit(v.as_slice(), &mut out);
-                        state = State::Match { index: i - ioffset, offset: m.offset, len: m.len };
+                        state = State::Match { base, group };
                     }
                 }
             },
-            State::Match { index, offset, len } => {
+            State::Match { base, group } => {
                 assert!((!drain && deq.is_none()) || (drain && deq.is_some()));
                 let b = if drain { deq.unwrap() } else { win.peek_input() };
 
-                if b == data[*index + (*len as usize)] {
-                    *len += 1;
-                    if !drain {
-                        win.drain_one();
+                match group.next(b, data) {
+                    Ok(()) => {
+                        if !drain {
+                            win.drain_one();
+                        }
                     }
-                } else {
-                    Lookup::emit(*offset, *len, &mut out);
-                    state = State::Literal(if drain {
-                        vec![b]
-                    } else {
-                        Vec::new()
-                    });
+                    Err((index, len)) => {
+                        assert!(index < *base);
+                        let offset = -TryInto::<isize>::try_into(*base - index).unwrap();
+                        Lookup::emit(offset, len, &mut out);
+                        state = State::Literal(if drain { vec![b] } else { Vec::new() });
+                    }
                 }
             }
         }
@@ -236,7 +297,12 @@ pub fn compress(
     // Flush final state.
     match state {
         State::Literal(v) => Literal::emit(v.as_slice(), &mut out),
-        State::Match { offset, len, .. } => Lookup::emit(offset, len, &mut out)
+        State::Match { base, group } => {
+            let (index, len) = group.get();
+            assert!(index < base);
+            let offset = -TryInto::<isize>::try_into(base - index).unwrap();
+            Lookup::emit(offset, len, &mut out)
+        }
     }
 
     return out;
@@ -261,12 +327,14 @@ pub fn decompress(
             }
         } else {
             let (r, len) = serial::read(&data[i..]);
+            let offset = (-meta) as usize;
             let len = len as usize;
             i += r;
-            assert!((-meta as usize) <= out.len());
+
+            assert!(offset <= out.len());
             assert!(len >= MIN_MATCH_SIZE);
 
-            let base = out.len().wrapping_sub(-meta as usize);
+            let base = out.len().wrapping_sub(offset);
             let limit = base + len;
             for j in base..limit {
                 out.push(out[j]);
