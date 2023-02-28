@@ -17,9 +17,11 @@ members = [
 [profile.release]
 panic = "abort"
 debug = false
+strip = true
 incremental = false
 opt-level = 'z'
-lto = 'thin'
+codegen-units = 1
+lto = 'fat'
 
 [profile.dev]
 panic = "abort"
