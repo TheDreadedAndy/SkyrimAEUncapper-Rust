@@ -54,11 +54,7 @@ fn main() {
     // Create a compressed default INI file.
     let comp_ini = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("SkyrimUncapper.ini.lz");
     let mut f = File::create(&comp_ini).unwrap();
-    let compressed_file = lz77::compress(include_str!("SkyrimUncapper.ini").as_bytes());
+    let base_file = include_str!("SkyrimUncapper.ini").as_bytes();
+    let compressed_file = lz77::compress(base_file);
     f.write(compressed_file.as_slice()).unwrap();
-
-    // DEBUG: Get our og file back.
-    let decomp_ini = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("SkyrimUncapper.ini");
-    let mut f = File::create(&decomp_ini).unwrap();
-    f.write(lz77::decompress(compressed_file.as_slice()).as_slice()).unwrap();
 }
