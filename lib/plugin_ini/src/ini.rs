@@ -12,6 +12,9 @@ use std::str::FromStr;
 
 use crate::map::*;
 
+/// Characters which can be used to begin an inline comment.
+const COMMENT_CHARS: &[char] = &['#', ';'];
+
 /// The metadata associated with each field in the INI file.
 #[derive(Clone)]
 struct FieldMeta {
@@ -59,8 +62,7 @@ pub struct SectionIter<'a>(IniMapIter<'a, SectionMeta>);
 pub struct Ini {
     file_comment: Option<String>,
     sections: IniMap<SectionMeta>,
-    suffix: Option<String>,
-    comment_chars: Vec<char>
+    suffix: Option<String>
 }
 
 impl<'a> Field<'a> {
@@ -139,14 +141,6 @@ impl Ini {
         let mut ret = Self::new();
         ret.load_str(s)?;
         Ok(ret)
-    }
-
-    /// Sets the line comment start characters for the next INI file loaded into this structure.
-    pub fn comment_chars(
-        &mut self,
-        pat: Vec<char>
-    ) {
-        self.comment_chars = pat;
     }
 
     /// Gets a single section within the INI file.
@@ -244,8 +238,7 @@ impl Ini {
         Self {
             file_comment: None,
             sections: IniMap::new(),
-            suffix: None,
-            comment_chars: vec!['#', ';']
+            suffix: None
         }
     }
 
@@ -266,7 +259,7 @@ impl Ini {
         conf: &str
     ) -> Result<(), ()> {
         let is_whitespace = |l: &str| { l.trim().len() == 0 };
-        let is_comment = |l: &str, c: &[char]| { l.trim().starts_with(c)};
+        let is_comment = |l: &str| { l.trim().starts_with(COMMENT_CHARS) };
 
         let mut first_comment = true;
         let mut section = None;
@@ -275,7 +268,7 @@ impl Ini {
         for line in conf.lines() {
             // Check if we are still parsing the file comment.
             if first_comment {
-                if is_comment(line, self.comment_chars.as_slice()) {
+                if is_comment(line) {
                     s += line;
                     s += "\n";
                     continue;
@@ -287,7 +280,7 @@ impl Ini {
             }
 
             // Otherwise, determine what this line is a part of.
-            if is_comment(line, self.comment_chars.as_slice()) || is_whitespace(line) {
+            if is_comment(line) || is_whitespace(line) {
                 s += line;
                 s += "\n";
             } else if line.trim().starts_with('[') {
@@ -378,8 +371,8 @@ impl Ini {
         &self,
         line: &'a str
     ) -> (&'a str, Option<&'a str>) {
-        if let Some((l, c)) = line.split_once(self.comment_chars.as_slice()) {
-            (l.trim(), Some(c.trim()))
+        if let Some((l, c)) = line.split_once(COMMENT_CHARS) {
+            (l.trim(), Some(c))
         } else {
             (line.trim(), None)
         }

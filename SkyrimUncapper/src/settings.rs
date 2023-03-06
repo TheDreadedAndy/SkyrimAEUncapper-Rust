@@ -258,6 +258,8 @@ pub fn init(
             "[ERROR] Failed to write to INI file. Please ensure Skyrim has permission to use the \
              plugin directory."
         );
+
+        skse_warning!("The INI file has been updated.");
     }
 
     let mut settings = Settings::new();
