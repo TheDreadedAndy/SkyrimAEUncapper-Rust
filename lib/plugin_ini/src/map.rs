@@ -7,7 +7,6 @@
 
 use std::vec::Vec;
 use std::collections::HashMap;
-use std::borrow::Borrow;
 
 use crate::key::*;
 
@@ -41,65 +40,35 @@ impl<V> IniMap<V> {
     }
 
     /// Gets the element with the given key.
-    pub fn get<'a, Q>(
+    pub fn get<'a>(
         &'a self,
-        key: &Q
-    ) -> Option<&'a V>
-    where
-        Q: Borrow<str> + ?Sized
-    {
-        self.map.get(&KeyStr::new(key.borrow()))
+        key: &str
+    ) -> Option<&'a V> {
+        self.map.get(KeyStr::new(key))
     }
 
     /// Gets a mutable reference to the element with the given key.
-    pub fn get_mut<'a, Q>(
+    pub fn get_mut<'a>(
         &'a mut self,
-        key: &Q
-    ) -> Option<&'a mut V>
-    where
-        Q: Borrow<str> + ?Sized
-    {
-        self.map.get_mut(&KeyStr::new(key.borrow()))
+        key: &str
+    ) -> Option<&'a mut V> {
+        self.map.get_mut(KeyStr::new(key))
     }
 
     /// Gets the key at the ith position in the map.
-    pub fn get_key<'a>(
+    pub fn get_key(
         &self,
         i: usize
-    ) -> &KeyStr<'a> {
-        <KeyString as Borrow<KeyStr<'a>>>::borrow(&self.order[i])
+    ) -> &KeyStr {
+        self.order[i].as_key_str()
     }
 
     /// Gets the (key, value) associated with the given key.
-    pub fn get_key_value<Q>(
+    pub fn get_key_value(
         &self,
-        key: &Q
-    ) -> Option<(&KeyString, &V)>
-    where
-        Q: Borrow<str> + ?Sized
-    {
-        self.map.get_key_value(&KeyStr::new(key.borrow()))
-    }
-
-    ///
-    /// Finds the index of a key in the map.
-    ///
-    /// This operation is O(n).
-    ///
-    pub fn find_key<Q>(
-        &self,
-        needle: &Q
-    ) -> Result<usize, ()>
-    where
-        Q: Borrow<str> + ?Sized
-    {
-        for (i, key) in self.order.iter().enumerate() {
-            if key == needle.borrow() {
-                return Ok(i)
-            }
-        }
-
-        Err(())
+        key: &str
+    ) -> Option<(&KeyString, &V)> {
+        self.map.get_key_value(KeyStr::new(key))
     }
 
     /// Inserts a new (key, val) into the map. Values are ordered based on their insertion order.
@@ -125,13 +94,13 @@ impl<V> IniMap<V> {
 }
 
 impl<'a, V> Iterator for IniMapIter<'a, V> {
-    type Item = (&'a KeyStr<'a>, &'a V);
+    type Item = (&'a KeyStr, &'a V);
     fn next(
         &mut self
     ) -> Option<Self::Item> {
         if self.index < self.map.len() {
             let key = self.map.get_key(self.index);
-            let val = self.map.get(key).unwrap();
+            let val = self.map.get(key.get()).unwrap();
             self.index += 1;
             Some((key, val))
         } else {

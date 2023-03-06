@@ -17,46 +17,51 @@ use std::mem::size_of;
 use std::fmt;
 
 /// Borrowed version of a key string.
-#[derive(Copy, Clone)]
 #[repr(transparent)]
-pub struct KeyStr<'a>(&'a str);
+pub struct KeyStr(str);
 
 /// An INI key string. Comparison is case insensitive.
 #[derive(Clone)]
 #[repr(transparent)]
 pub struct KeyString(Rc<String>);
 
-impl<'a> KeyStr<'a> {
+impl KeyStr {
     /// Creates a KeyStr from a string.
     pub fn new(
-        s: &'a str
-    ) -> Self {
-        Self(s)
+        s: &str
+    ) -> &Self {
+        // Oh compiler! Please don't ruin my life!
+        assert!(size_of::<&Self>() == size_of::<&str>());
+
+        unsafe {
+            // SAFETY: KeyStr is declared as transparent.
+            std::mem::transmute::<&str, &Self>(s)
+        }
     }
 
     /// Gets the underlying str, preserving the original case.
     pub fn get(
         &self
     ) -> &str {
-        self.0
+        &self.0
     }
 }
 
-impl<'a> fmt::Display for KeyStr<'a> {
+impl fmt::Display for KeyStr {
     fn fmt(
         &self,
         f: &mut fmt::Formatter<'_>
     ) -> Result<(), fmt::Error> {
-        write!(f, "{}", self.0)
+        write!(f, "{}", &self.0)
     }
 }
 
-impl<'a, T: Borrow<str> + ?Sized> PartialEq<T> for KeyStr<'a> {
+impl<T: Borrow<str> + ?Sized> PartialEq<T> for KeyStr {
     fn eq(
         &self,
         rhs: &T
     ) -> bool {
-        let lhs = self.0;
+        let lhs = &self.0;
         let rhs = rhs.borrow();
 
         let (mut lhs_chars, mut rhs_chars) = (lhs.chars(), rhs.chars());
@@ -89,18 +94,18 @@ impl<'a, T: Borrow<str> + ?Sized> PartialEq<T> for KeyStr<'a> {
     }
 }
 
-impl<'a, 'b> PartialEq<KeyStr<'b>> for KeyStr<'a> {
+impl PartialEq<KeyStr> for KeyStr {
     fn eq(
         &self,
-        rhs: &KeyStr<'b>
+        rhs: &KeyStr
     ) -> bool {
-        self == rhs.0
+        self == &rhs.0
     }
 }
 
-impl<'a> Eq for KeyStr<'a> {}
+impl Eq for KeyStr {}
 
-impl<'a> Hash for KeyStr<'a> {
+impl Hash for KeyStr {
     fn hash<H: Hasher>(
         &self,
         state: &mut H
@@ -122,26 +127,19 @@ impl KeyString {
         Self(Rc::new(s))
     }
 
-    /// Gets the underlying string, preserving the original case.
-    pub fn get(
-        &self
-    ) -> String {
-        <Rc<String> as Borrow<String>>::borrow(&self.0).clone()
-    }
-
     /// Borrows the key string as a KeyStr.
-    pub fn as_key_str<'a>(
-        &'a self
-    ) -> KeyStr<'a> {
-        KeyStr(<Rc<String> as Borrow<String>>::borrow(&self.0).as_str())
+    pub fn as_key_str(
+        &self
+    ) -> &KeyStr {
+        KeyStr::new(<Rc<String> as Borrow<String>>::borrow(&self.0).as_str())
     }
 }
 
-impl<'a> Borrow<KeyStr<'a>> for KeyString {
+impl Borrow<KeyStr> for KeyString {
     fn borrow(
         &self
-    ) -> &KeyStr<'a> {
-        &self.as_key_str()
+    ) -> &KeyStr {
+        self.as_key_str()
     }
 }
 
@@ -154,12 +152,12 @@ impl fmt::Display for KeyString {
     }
 }
 
-impl<T: Borrow<KeyStr<'a>>> PartialEq<T> for KeyString {
+impl PartialEq for KeyString {
     fn eq(
         &self,
-        rhs: &KeyStr<'a>
+        rhs: &Self
     ) -> bool {
-        self.as_key_str() == rhs
+        self.as_key_str() == rhs.as_key_str()
     }
 }
 
