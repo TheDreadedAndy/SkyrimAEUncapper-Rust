@@ -18,7 +18,7 @@ use std::fmt;
 
 /// Borrowed version of a key string.
 #[repr(transparent)]
-pub struct KeyStr(str);
+pub struct KeyStr([u8]);
 
 /// An INI key string. Comparison is case insensitive.
 #[derive(Clone)]
@@ -27,23 +27,23 @@ pub struct KeyString(Rc<String>);
 
 impl KeyStr {
     /// Creates a KeyStr from a string.
-    pub fn new(
-        s: &str
-    ) -> &Self {
+    pub const fn new<'a>(
+        s: &'a str
+    ) -> &'a Self {
         // Oh compiler! Please don't ruin my life!
-        assert!(size_of::<&Self>() == size_of::<&str>());
+        assert!(size_of::<&Self>() == size_of::<&[u8]>());
 
         unsafe {
             // SAFETY: KeyStr is declared as transparent.
-            std::mem::transmute::<&str, &Self>(s)
+            std::mem::transmute::<&'a [u8], &'a Self>(s.as_bytes())
         }
     }
 
     /// Gets the underlying str, preserving the original case.
-    pub fn get(
+    pub const fn get(
         &self
     ) -> &str {
-        &self.0
+        unsafe { std::str::from_utf8_unchecked(&self.0) }
     }
 }
 
@@ -52,7 +52,7 @@ impl fmt::Display for KeyStr {
         &self,
         f: &mut fmt::Formatter<'_>
     ) -> Result<(), fmt::Error> {
-        write!(f, "{}", &self.0)
+        write!(f, "{}", self.get())
     }
 }
 
@@ -61,7 +61,7 @@ impl<T: Borrow<str> + ?Sized> PartialEq<T> for KeyStr {
         &self,
         rhs: &T
     ) -> bool {
-        let lhs = &self.0;
+        let lhs = self.get();
         let rhs = rhs.borrow();
 
         let (mut lhs_chars, mut rhs_chars) = (lhs.chars(), rhs.chars());
@@ -99,7 +99,7 @@ impl PartialEq<KeyStr> for KeyStr {
         &self,
         rhs: &KeyStr
     ) -> bool {
-        self == &rhs.0
+        self == rhs.get()
     }
 }
 
@@ -110,7 +110,7 @@ impl Hash for KeyStr {
         &self,
         state: &mut H
     ) {
-        for c in self.0.chars() {
+        for c in self.get().chars() {
             for l in c.to_lowercase() {
                 let mut utf8: [u8; size_of::<char>()] = [0; size_of::<char>()];
                 state.write(l.encode_utf8(&mut utf8).as_bytes());
