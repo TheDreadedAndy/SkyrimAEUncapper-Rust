@@ -18,7 +18,7 @@ use std::fmt;
 
 /// Borrowed version of a key string.
 #[repr(transparent)]
-pub struct KeyStr([u8]);
+pub struct KeyStr(str);
 
 /// An INI key string. Comparison is case insensitive.
 #[derive(Clone)]
@@ -30,12 +30,11 @@ impl KeyStr {
     pub const fn new<'a>(
         s: &'a str
     ) -> &'a Self {
-        // Oh compiler! Please don't ruin my life!
-        assert!(size_of::<&Self>() == size_of::<&[u8]>());
+        assert!(size_of::<&Self>() == size_of::<&str>());
 
         unsafe {
             // SAFETY: KeyStr is declared as transparent.
-            std::mem::transmute::<&'a [u8], &'a Self>(s.as_bytes())
+            &*(s as *const str as *const Self)
         }
     }
 
@@ -43,7 +42,7 @@ impl KeyStr {
     pub const fn get(
         &self
     ) -> &str {
-        unsafe { std::str::from_utf8_unchecked(&self.0) }
+        &self.0
     }
 }
 
