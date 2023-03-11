@@ -18,3 +18,7 @@ SkyrimUncapper/hook_wrappers.asm
 .cargo/
 *.o
 .DS_Store
+*.aux
+*.out
+*.log
+*.pdf
