@@ -60,7 +60,6 @@ pub struct SectionIter<'a>(IniMapIter<'a, SectionMeta>);
 
 /// Manages an INI file, allowing it to be updated, read, and written to a file.
 pub struct Ini {
-    file_comment: Option<String>,
     sections: IniMap<SectionMeta>,
     suffix: Option<String>
 }
@@ -205,10 +204,6 @@ impl Ini {
     ) -> Result<(), std::io::Error> {
         let mut f = File::create(path)?;
 
-        if let Some(ref file_comment) = self.file_comment {
-            write!(&mut f, "{}", file_comment)?;
-        }
-
         for section in self.sections() {
             if let Some(ref pre) = section.meta.prefix { write!(&mut f, "{}", pre)?; }
             write!(&mut f, "[{}]", section.name())?;
@@ -236,7 +231,6 @@ impl Ini {
     /// Creates a new, empty, INI object.
     fn new() -> Self {
         Self {
-            file_comment: None,
             sections: IniMap::new(),
             suffix: None
         }
@@ -261,24 +255,10 @@ impl Ini {
         let is_whitespace = |l: &str| { l.trim().len() == 0 };
         let is_comment = |l: &str| { l.trim().starts_with(COMMENT_CHARS) };
 
-        let mut first_comment = true;
         let mut section = None;
         let mut s = String::new();
 
         for line in conf.lines() {
-            // Check if we are still parsing the file comment.
-            if first_comment {
-                if is_comment(line) {
-                    s += line;
-                    s += "\n";
-                    continue;
-                } else {
-                    first_comment = false;
-                    self.file_comment = Some(s);
-                    s = String::new();
-                }
-            }
-
             // Otherwise, determine what this line is a part of.
             if is_comment(line) || is_whitespace(line) {
                 s += line;
