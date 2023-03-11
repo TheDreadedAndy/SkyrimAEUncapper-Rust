@@ -10,9 +10,9 @@
 //! of the INI file to allocate.
 //!
 
+use std::cmp::Ordering;
 use std::rc::Rc;
 use std::borrow::Borrow;
-use std::hash::{Hash, Hasher};
 use std::mem::size_of;
 use std::fmt;
 
@@ -44,6 +44,66 @@ impl KeyStr {
     ) -> &str {
         &self.0
     }
+
+    /// Compares two key strs.
+    #[cfg(not(feature = "unicode_keys"))]
+    fn compare(
+        &self,
+        rhs: &Self
+    ) -> Ordering {
+        let lhs = self.get().as_bytes();
+        let rhs = rhs.get().as_bytes();
+        for i in 0..std::cmp::min(lhs.len(), rhs.len()) {
+            let res = lhs[i].to_ascii_lowercase().cmp(&rhs[i].to_ascii_lowercase());
+            if let Ordering::Equal = res {
+                continue;
+            } else {
+                return res;
+            }
+        }
+
+        lhs.len().cmp(&rhs.len())
+    }
+    #[cfg(feature = "unicode_keys")]
+    fn compare(
+        &self,
+        rhs: &KeyStr
+    ) -> Ordering {
+        let lhs = self.get();
+        let rhs = rhs.get();
+
+        let (mut lhs_chars, mut rhs_chars) = (lhs.chars(), rhs.chars());
+        while let Some(l) = lhs_chars.next() {
+            let r = rhs_chars.next();
+            if r.is_none() {
+                return Ordering::Greater;
+            }
+            let r = r.unwrap();
+
+            let (mut llc, mut lrc) = (l.to_lowercase(), r.to_lowercase());
+            while let Some(ll) = llc.next() {
+                let lr = lrc.next();
+                if lr.is_none() {
+                    return Ordering::Greater;
+                }
+                let lr = lr.unwrap();
+
+                if ll != lr {
+                    return ll.cmp(lr);
+                }
+            }
+
+            if lrc.next().is_some() {
+                return Ordering::Less;
+            }
+        }
+
+        if rhs_chars.next().is_none() {
+            Ordering::Equal
+        } else {
+            Ordering::Less
+        }
+    }
 }
 
 impl fmt::Display for KeyStr {
@@ -55,99 +115,33 @@ impl fmt::Display for KeyStr {
     }
 }
 
-impl<T: Borrow<str> + ?Sized> PartialEq<T> for KeyStr {
-    #[cfg(not(feature = "unicode_keys"))]
-    fn eq(
-        &self,
-        rhs: &T
-    ) -> bool {
-        let lhs = self.get().as_bytes();
-        let rhs = rhs.borrow().as_bytes();
-
-        if lhs.len() != rhs.len() {
-            return false;
-        }
-
-        for i in 0..lhs.len() {
-            if lhs[i].to_ascii_lowercase() != rhs[i].to_ascii_lowercase() {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    #[cfg(feature = "unicode_keys")]
-    fn eq(
-        &self,
-        rhs: &T
-    ) -> bool {
-        let lhs = self.get();
-        let rhs = rhs.borrow();
-
-        let (mut lhs_chars, mut rhs_chars) = (lhs.chars(), rhs.chars());
-        while let Some(l) = lhs_chars.next() {
-            let r = rhs_chars.next();
-            if r.is_none() {
-                return false;
-            }
-            let r = r.unwrap();
-
-            let (mut llc, mut lrc) = (l.to_lowercase(), r.to_lowercase());
-            while let Some(ll) = llc.next() {
-                let lr = lrc.next();
-                if lr.is_none() {
-                    return false;
-                }
-                let lr = lr.unwrap();
-
-                if ll != lr {
-                    return false;
-                }
-            }
-
-            if lrc.next().is_some() {
-                return false;
-            }
-        }
-
-        return rhs_chars.next().is_none();
-    }
-}
-
 impl PartialEq<KeyStr> for KeyStr {
     fn eq(
         &self,
         rhs: &KeyStr
     ) -> bool {
-        self == rhs.get()
+        self.compare(rhs) == Ordering::Equal
     }
 }
 
+
 impl Eq for KeyStr {}
 
-impl Hash for KeyStr {
-    #[cfg(not(feature = "unicode_keys"))]
-    fn hash<H: Hasher>(
+impl PartialOrd<KeyStr> for KeyStr {
+    fn partial_cmp(
         &self,
-        state: &mut H
-    ) {
-        for c in self.get().as_bytes() {
-            state.write_u8(c.to_ascii_lowercase());
-        }
+        rhs: &KeyStr
+    ) -> Option<Ordering> {
+        Some(self.compare(rhs))
     }
+}
 
-    #[cfg(feature = "unicode_keys")]
-    fn hash<H: Hasher>(
+impl Ord for KeyStr {
+    fn cmp(
         &self,
-        state: &mut H
-    ) {
-        for c in self.get().chars() {
-            for l in c.to_lowercase() {
-                let mut utf8: [u8; size_of::<char>()] = [0; size_of::<char>()];
-                state.write(l.encode_utf8(&mut utf8).as_bytes());
-            }
-        }
+        rhs: &Self
+    ) -> Ordering {
+        self.compare(rhs)
     }
 }
 
@@ -184,31 +178,31 @@ impl fmt::Display for KeyString {
     }
 }
 
-impl PartialEq for KeyString {
-    fn eq(
-        &self,
-        rhs: &Self
-    ) -> bool {
-        self.as_key_str() == rhs.as_key_str()
-    }
-}
-
-impl<T: Borrow<str> + ?Sized> PartialEq<T> for KeyString {
+impl<T: Borrow<KeyStr> + ?Sized> PartialEq<T> for KeyString {
     fn eq(
         &self,
         rhs: &T
     ) -> bool {
-        self.as_key_str() == KeyStr::new(rhs.borrow())
+        self.as_key_str() == rhs.borrow()
     }
 }
 
 impl Eq for KeyString {}
 
-impl Hash for KeyString {
-    fn hash<H: Hasher>(
+impl<T: Borrow<KeyStr> + ?Sized> PartialOrd<T> for KeyString {
+    fn partial_cmp(
         &self,
-        state: &mut H
-    ) {
-        self.as_key_str().hash(state);
+        rhs: &T
+    ) -> Option<Ordering> {
+        Some(self.as_key_str().cmp(rhs.borrow()))
+    }
+}
+
+impl Ord for KeyString {
+    fn cmp(
+        &self,
+        rhs: &Self
+    ) -> Ordering {
+        self.partial_cmp(rhs).unwrap()
     }
 }

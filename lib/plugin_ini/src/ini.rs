@@ -179,7 +179,7 @@ impl Ini {
             if self.sections.get(delta_section.name()).is_none() {
                 let name = String::from_str(delta_section.name()).unwrap();
                 let meta = delta_section.meta.clone();
-                assert!(self.sections.insert(name, meta).is_none());
+                self.sections.insert(name, meta);
                 changed = true;
                 continue;
             }
@@ -189,7 +189,7 @@ impl Ini {
                 if section.fields.get(delta_field.name()).is_none() {
                     let name = String::from_str(delta_field.name()).unwrap();
                     let meta = delta_field.meta.clone();
-                    assert!(section.fields.insert(name, meta).is_none());
+                    section.fields.insert(name, meta);
                     changed = true;
                 }
             }
@@ -325,7 +325,7 @@ impl Ini {
                 inline_comment: comment.map(|s| String::from_str(s).unwrap()),
                 fields: IniMap::new()
             };
-            assert!(self.sections.insert(section, meta).is_none());
+            self.sections.insert(section, meta);
         }
 
         Ok(String::from_str(name).unwrap())
@@ -354,11 +354,11 @@ impl Ini {
         let section = self.sections.get_mut(section).ok_or(())?;
         if let None = section.fields.get(key) {
             let key = String::from_str(key).unwrap();
-            assert!(section.fields.insert(key, FieldMeta {
+            section.fields.insert(key, FieldMeta {
                 prefix,
                 inline_comment: comment.map(|s| String::from_str(s).unwrap()),
                 val: val.map(|s| String::from_str(s).unwrap())
-            }).is_none());
+            });
 
             Ok(())
         } else {
