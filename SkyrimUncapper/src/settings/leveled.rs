@@ -106,17 +106,16 @@ impl LeveledIniSection<f32> {
         assert!(self.0.len() > 0);
 
         let mut acc: f32 = 0.0;
+        let mut pacc: f32 = 0.0;
         let mut i = 0;
         while (i < self.0.len()) && (self.0[i].level <= level) {
             // Update the accumulation. Note the exclusize upper bound on level.
             let bound = if (i + 1) < self.0.len() { self.0[i + 1].level } else { level + 1 };
             let this_level = std::cmp::min(level + 1, bound);
             acc += ((this_level - self.0[i].level) as f32) * self.0[i].item;
+            pacc = acc - self.0[i].item;
             i += 1;
         }
-
-        // Get the previous accumulation.
-        let pacc = acc - self.0[i - 1].item;
 
         return (acc as u32) - (pacc as u32);
     }

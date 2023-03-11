@@ -5,16 +5,19 @@
 //! @bug No known bugs.
 //!
 
-use std::collections::HashMap;
 use std::path::Path;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::str::FromStr;
 
+use crate::map::*;
+
+/// Characters which can be used to begin an inline comment.
+const COMMENT_CHARS: &[char] = &['#', ';'];
+
 /// The metadata associated with each field in the INI file.
 #[derive(Clone)]
 struct FieldMeta {
-    seq: Option<usize>,
     prefix: Option<String>,
     inline_comment: Option<String>,
     val: Option<String>
@@ -31,18 +34,14 @@ pub struct Field<'a> {
 ///
 /// Fields merged from another file will appear at the end of the iteration in an undefined order.
 ///
-pub struct FieldIter<'a> {
-    index: usize,
-    data: Vec<(&'a String, &'a FieldMeta)>
-}
+pub struct FieldIter<'a>(IniMapIter<'a, FieldMeta>);
 
 /// The metadata associated with each section in the INI file.
 #[derive(Clone)]
 struct SectionMeta {
-    seq: Option<usize>,
     prefix: Option<String>,
     inline_comment: Option<String>,
-    fields: HashMap<String, FieldMeta>
+    fields: IniMap<FieldMeta>
 }
 
 /// A section in the INI file.
@@ -57,17 +56,13 @@ pub struct Section<'a> {
 /// Sections merged from another file will appear at the end of the iteration in an undefined
 /// order.
 ///
-pub struct SectionIter<'a> {
-    index: usize,
-    data: Vec<(&'a String, &'a SectionMeta)>
-}
+pub struct SectionIter<'a>(IniMapIter<'a, SectionMeta>);
 
 /// Manages an INI file, allowing it to be updated, read, and written to a file.
 pub struct Ini {
     file_comment: Option<String>,
-    sections: HashMap<String, SectionMeta>,
-    suffix: Option<String>,
-    comment_chars: Vec<char>
+    sections: IniMap<SectionMeta>,
+    suffix: Option<String>
 }
 
 impl<'a> Field<'a> {
@@ -91,13 +86,7 @@ impl<'a> Iterator for FieldIter<'a> {
     fn next(
         &mut self
     ) -> Option<Self::Item> {
-        if self.index < self.data.len() {
-            let ret = Field { field: self.data[self.index].0, meta: self.data[self.index].1 };
-            self.index += 1;
-            Some(ret)
-        } else {
-            None
-        }
+        self.0.next().map(|i| Field { field: i.0.get(), meta: i.1 })
     }
 }
 
@@ -115,26 +104,14 @@ impl<'a> Section<'a> {
         name: &str
     ) -> Result<Field<'a>, ()> {
         let (field, meta) = self.meta.fields.get_key_value(name).ok_or(())?;
-        Ok(Field { field, meta })
+        Ok(Field { field: field.as_key_str().get(), meta })
     }
 
     /// Gets an iterator over all the fields in a section.
     pub fn fields(
         &self
     ) -> FieldIter<'a> {
-        let data = {
-            let mut v = Vec::new();
-            for field in self.meta.fields.iter() { v.push(field); }
-            v.sort_by(|lhs, rhs| {
-                lhs.1.seq.unwrap_or(usize::MAX).cmp(&rhs.1.seq.unwrap_or(usize::MAX))
-            });
-            v
-        };
-
-        FieldIter {
-            index: 0,
-            data
-        }
+        FieldIter(self.meta.fields.iter())
     }
 }
 
@@ -143,13 +120,7 @@ impl<'a> Iterator for SectionIter<'a> {
     fn next(
         &mut self
     ) -> Option<Self::Item> {
-        if self.index < self.data.len() {
-            let ret = Section { section: self.data[self.index].0, meta: self.data[self.index].1 };
-            self.index += 1;
-            Some(ret)
-        } else {
-            None
-        }
+        self.0.next().map(|i| Section { section: i.0.get(), meta: i.1 })
     }
 }
 
@@ -172,40 +143,20 @@ impl Ini {
         Ok(ret)
     }
 
-    /// Sets the line comment start characters for the next INI file loaded into this structure.
-    pub fn comment_chars(
-        &mut self,
-        pat: Vec<char>
-    ) {
-        self.comment_chars = pat;
-    }
-
     /// Gets a single section within the INI file.
     pub fn section<'a>(
         &'a self,
         section: &str
     ) -> Result<Section<'a>, ()> {
         let (section, meta) = self.sections.get_key_value(section).ok_or(())?;
-        Ok(Section { section, meta })
+        Ok(Section { section: section.as_key_str().get(), meta })
     }
 
     /// Gets an iterator over all sections in the INI file.
     pub fn sections<'a>(
         &'a self
     ) -> SectionIter<'a> {
-        let data = {
-            let mut v = Vec::new();
-            for section in self.sections.iter() { v.push(section); }
-            v.sort_by(|lhs, rhs| {
-                lhs.1.seq.unwrap_or(usize::MAX).cmp(&rhs.1.seq.unwrap_or(usize::MAX))
-            });
-            v
-        };
-
-        SectionIter {
-            index: 0,
-            data
-        }
+        SectionIter(self.sections.iter())
     }
 
     /// Gets a value in the INI from the given section/field pair.
@@ -227,8 +178,7 @@ impl Ini {
         for delta_section in delta.sections() {
             if self.sections.get(delta_section.name()).is_none() {
                 let name = String::from_str(delta_section.name()).unwrap();
-                let mut meta = delta_section.meta.clone();
-                meta.seq = None;
+                let meta = delta_section.meta.clone();
                 assert!(self.sections.insert(name, meta).is_none());
                 changed = true;
                 continue;
@@ -238,8 +188,7 @@ impl Ini {
             for delta_field in delta_section.fields() {
                 if section.fields.get(delta_field.name()).is_none() {
                     let name = String::from_str(delta_field.name()).unwrap();
-                    let mut meta = delta_field.meta.clone();
-                    meta.seq = None;
+                    let meta = delta_field.meta.clone();
                     assert!(section.fields.insert(name, meta).is_none());
                     changed = true;
                 }
@@ -288,9 +237,8 @@ impl Ini {
     fn new() -> Self {
         Self {
             file_comment: None,
-            sections: HashMap::new(),
-            suffix: None,
-            comment_chars: vec!['#', ';']
+            sections: IniMap::new(),
+            suffix: None
         }
     }
 
@@ -311,18 +259,16 @@ impl Ini {
         conf: &str
     ) -> Result<(), ()> {
         let is_whitespace = |l: &str| { l.trim().len() == 0 };
-        let is_comment = |l: &str, c: &[char]| { l.trim().starts_with(c)};
+        let is_comment = |l: &str| { l.trim().starts_with(COMMENT_CHARS) };
 
         let mut first_comment = true;
         let mut section = None;
         let mut s = String::new();
-        let mut section_seq = 0;
-        let mut field_seq = 0;
 
         for line in conf.lines() {
             // Check if we are still parsing the file comment.
             if first_comment {
-                if is_comment(line, self.comment_chars.as_slice()) {
+                if is_comment(line) {
                     s += line;
                     s += "\n";
                     continue;
@@ -334,16 +280,14 @@ impl Ini {
             }
 
             // Otherwise, determine what this line is a part of.
-            if is_comment(line, self.comment_chars.as_slice()) || is_whitespace(line) {
+            if is_comment(line) || is_whitespace(line) {
                 s += line;
                 s += "\n";
             } else if line.trim().starts_with('[') {
-                section = Some(self.define_section(section_seq, s, line)?);
-                section_seq += 1;
+                section = Some(self.define_section(s, line)?);
                 s = String::new();
             } else {
-                self.define_field(section.as_ref().ok_or(())?, field_seq, s, line)?;
-                field_seq += 1;
+                self.define_field(section.as_ref().ok_or(())?, s, line)?;
                 s = String::new();
             }
         }
@@ -363,7 +307,6 @@ impl Ini {
     ///
     fn define_section(
         &mut self,
-        seq: usize,
         prefix: String,
         line: &str
     ) -> Result<String, ()> {
@@ -378,10 +321,9 @@ impl Ini {
         if self.sections.get(name).is_none() {
             let section = String::from_str(name).unwrap();
             let meta = SectionMeta {
-                seq: Some(seq),
                 prefix,
                 inline_comment: comment.map(|s| String::from_str(s).unwrap()),
-                fields: HashMap::new()
+                fields: IniMap::new()
             };
             assert!(self.sections.insert(section, meta).is_none());
         }
@@ -398,7 +340,6 @@ impl Ini {
     fn define_field(
         &mut self,
         section: &str,
-        seq: usize,
         prefix: String,
         line: &str
     ) -> Result<(), ()> {
@@ -414,7 +355,6 @@ impl Ini {
         if let None = section.fields.get(key) {
             let key = String::from_str(key).unwrap();
             assert!(section.fields.insert(key, FieldMeta {
-                seq: Some(seq),
                 prefix,
                 inline_comment: comment.map(|s| String::from_str(s).unwrap()),
                 val: val.map(|s| String::from_str(s).unwrap())
@@ -431,8 +371,8 @@ impl Ini {
         &self,
         line: &'a str
     ) -> (&'a str, Option<&'a str>) {
-        if let Some((l, c)) = line.split_once(self.comment_chars.as_slice()) {
-            (l.trim(), Some(c.trim()))
+        if let Some((l, c)) = line.split_once(COMMENT_CHARS) {
+            (l.trim(), Some(c))
         } else {
             (line.trim(), None)
         }

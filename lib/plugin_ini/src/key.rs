@@ -11,84 +11,156 @@
 //!
 
 use std::rc::Rc;
-use std::ops::{Borrow, Deref};
+use std::borrow::Borrow;
 use std::hash::{Hash, Hasher};
 use std::mem::size_of;
 use std::fmt;
 
 /// Borrowed version of a key string.
-#[derive(Copy, Clone)]
 #[repr(transparent)]
-pub struct KeyStr<'a>(&'a str);
+pub struct KeyStr(str);
 
 /// An INI key string. Comparison is case insensitive.
 #[derive(Clone)]
+#[repr(transparent)]
 pub struct KeyString(Rc<String>);
 
-impl<'a> KeyStr<'a> {
+impl KeyStr {
     /// Creates a KeyStr from a string.
-    pub fn new(
+    pub const fn new<'a>(
         s: &'a str
-    ) -> Self {
-        Self(s)
+    ) -> &'a Self {
+        assert!(size_of::<&Self>() == size_of::<&str>());
+
+        unsafe {
+            // SAFETY: KeyStr is declared as transparent.
+            &*(s as *const str as *const Self)
+        }
     }
 
     /// Gets the underlying str, preserving the original case.
-    pub fn get(
+    pub const fn get(
         &self
     ) -> &str {
-        self.0
+        &self.0
     }
 }
 
-impl<T: Borrow<&str>> PartialEq<T> for KeyStr {
+impl fmt::Display for KeyStr {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>
+    ) -> Result<(), fmt::Error> {
+        write!(f, "{}", self.get())
+    }
+}
+
+impl<T: Borrow<str> + ?Sized> PartialEq<T> for KeyStr {
     fn eq(
         &self,
         rhs: &T
     ) -> bool {
-        let lhs = self.0;
+        let lhs = self.get();
         let rhs = rhs.borrow();
 
-        let mut iter = lhs.chars().zip(rhs.chars());
-        for (l, r) in iter {
-            if l.to_lowercase() != r.to_lowercase() {
+        let (mut lhs_chars, mut rhs_chars) = (lhs.chars(), rhs.chars());
+        while let Some(l) = lhs_chars.next() {
+            let r = rhs_chars.next();
+            if r.is_none() {
+                return false;
+            }
+            let r = r.unwrap();
+
+            let (mut llc, mut lrc) = (l.to_lowercase(), r.to_lowercase());
+            while let Some(ll) = llc.next() {
+                let lr = lrc.next();
+                if lr.is_none() {
+                    return false;
+                }
+                let lr = lr.unwrap();
+
+                if ll != lr {
+                    return false;
+                }
+            }
+
+            if lrc.next().is_some() {
                 return false;
             }
         }
 
-        let (li, ri) = iter.unzip();
-        return li.next().is_none() && ri.next().is_none();
+        return rhs_chars.next().is_none();
     }
 }
 
-impl<T: Borrow<&str>> Eq<T> for KeyStr {}
+impl PartialEq<KeyStr> for KeyStr {
+    fn eq(
+        &self,
+        rhs: &KeyStr
+    ) -> bool {
+        self == rhs.get()
+    }
+}
+
+impl Eq for KeyStr {}
+
+impl Hash for KeyStr {
+    fn hash<H: Hasher>(
+        &self,
+        state: &mut H
+    ) {
+        for c in self.get().chars() {
+            for l in c.to_lowercase() {
+                let mut utf8: [u8; size_of::<char>()] = [0; size_of::<char>()];
+                state.write(l.encode_utf8(&mut utf8).as_bytes());
+            }
+        }
+    }
+}
 
 impl KeyString {
-    /// Borrows the key string as a KeyStr.
-    pub fn as_key_str(
-        &'a self
-    ) -> KeyStr<'a> {
-        KeyStr(self.0.borrow().as_str())
+    /// Creates a new key string.
+    pub fn new(
+        s: String
+    ) -> Self {
+        Self(Rc::new(s))
     }
 
-    /// Gets the underlying string, preserving the original case.
-    pub fn get(
+    /// Borrows the key string as a KeyStr.
+    pub fn as_key_str(
         &self
-    ) -> String {
-        self.0.borrow().clone()
+    ) -> &KeyStr {
+        KeyStr::new(<Rc<String> as Borrow<String>>::borrow(&self.0).as_str())
+    }
+}
+
+impl Borrow<KeyStr> for KeyString {
+    fn borrow(
+        &self
+    ) -> &KeyStr {
+        self.as_key_str()
     }
 }
 
 impl fmt::Display for KeyString {
     fn fmt(
         &self,
-        &mut fmt::Formatter<'_>
+        f: &mut fmt::Formatter<'_>
     ) -> Result<(), fmt::Error> {
-        write!("{}", self.0.borrow())?;
+        write!(f, "{}", self.as_key_str())
     }
 }
 
-impl<T: Borrow<&str>> PartialEq<T> for KeyString {
+impl PartialEq for KeyString {
+    fn eq(
+        &self,
+        rhs: &Self
+    ) -> bool {
+        self.as_key_str() == rhs.as_key_str()
+    }
+}
+
+impl<T: Borrow<str> + ?Sized> PartialEq<T> for KeyString {
     fn eq(
         &self,
         rhs: &T
@@ -97,18 +169,13 @@ impl<T: Borrow<&str>> PartialEq<T> for KeyString {
     }
 }
 
-impl<T: Borrow<&str>> Eq<T> for KeyString {}
+impl Eq for KeyString {}
 
 impl Hash for KeyString {
     fn hash<H: Hasher>(
         &self,
         state: &mut H
     ) {
-        for c in self.0.borrow().chars() {
-            let c = c.to_lowercase();
-            let mut utf8: [u8; size_of::<char>()] = [0; size_of::<char>()];
-            state.write(c.encode_utf8(&mut utf8).as_bytes());
-        }
+        self.as_key_str().hash(state);
     }
 }
-
