@@ -56,6 +56,28 @@ impl fmt::Display for KeyStr {
 }
 
 impl<T: Borrow<str> + ?Sized> PartialEq<T> for KeyStr {
+    #[cfg(not(feature = "unicode_keys"))]
+    fn eq(
+        &self,
+        rhs: &T
+    ) -> bool {
+        let lhs = self.get().as_bytes();
+        let rhs = rhs.borrow().as_bytes();
+
+        if lhs.len() != rhs.len() {
+            return false;
+        }
+
+        for i in 0..lhs.len() {
+            if lhs[i].to_ascii_lowercase() != rhs[i].to_ascii_lowercase() {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    #[cfg(feature = "unicode_keys")]
     fn eq(
         &self,
         rhs: &T
@@ -105,6 +127,17 @@ impl PartialEq<KeyStr> for KeyStr {
 impl Eq for KeyStr {}
 
 impl Hash for KeyStr {
+    #[cfg(not(feature = "unicode_keys"))]
+    fn hash<H: Hasher>(
+        &self,
+        state: &mut H
+    ) {
+        for c in self.get().as_bytes() {
+            state.write_u8(c.to_ascii_lowercase());
+        }
+    }
+
+    #[cfg(feature = "unicode_keys")]
     fn hash<H: Hasher>(
         &self,
         state: &mut H
