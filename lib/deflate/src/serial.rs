@@ -12,23 +12,18 @@ const BYTE_DATA_MASK: u8 = (1 << BYTE_DATA_BITS) - 1;
 /// Serializes an isize to as few bytes as possible, using the msb of each
 /// byte as a continuation bit.
 pub fn write(
-    mut n: isize,
+    n: isize,
     out: &mut Vec<u8>
 ) {
-    let is_neg = n < 0;
-    let can_stop = |n, next_n| {
-        (!is_neg && (next_n == 0) && ((n & (1 << (BYTE_DATA_BITS - 1))) == 0)) ||
-        (is_neg && (next_n == -1) && ((n & (1 << (BYTE_DATA_BITS - 1))) > 0))
-    };
+    // Always encode at least one sign extension bit.
+    let leading = (if n < 0 { !n } else { n }).leading_zeros();
+    let bits = std::cmp::min((isize::BITS - leading) + 1, isize::BITS);
 
-    loop {
-        let next_n = n >> BYTE_DATA_BITS;
-        let stop = can_stop(n, next_n);
-        let cont = if stop { 0 } else { BYTE_CONT_FLAG };
-        out.push(((n as u8) & BYTE_DATA_MASK) | cont);
-        n = next_n;
-
-        if stop { break; }
+    let mut shift = 0;
+    while shift < bits {
+        let cont = if shift + BYTE_DATA_BITS < bits { BYTE_CONT_FLAG } else { 0 };
+        out.push((((n >> shift) as u8) & BYTE_DATA_MASK) | cont);
+        shift += BYTE_DATA_BITS;
     }
 }
 
@@ -41,20 +36,18 @@ pub fn read(
     let mut i: usize = 0;
 
     loop {
+        assert!(shift < isize::BITS);
+
         let b = inb[i];
         i += 1;
 
         n |= ((b & BYTE_DATA_MASK) as isize) << shift;
+        shift += BYTE_DATA_BITS;
 
-        if b & BYTE_CONT_FLAG > 0 {
-            shift += BYTE_DATA_BITS;
-            assert!(shift < isize::BITS);
-        } else {
-            break;
-        }
+        if b & BYTE_CONT_FLAG == 0 { break; }
     }
 
-    let bits = std::cmp::min(shift + BYTE_DATA_BITS, isize::BITS);
+    let bits = std::cmp::min(shift, isize::BITS);
     let ext_shift = isize::BITS - bits;
 
     (i, (n << ext_shift) >> ext_shift)

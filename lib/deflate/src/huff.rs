@@ -41,17 +41,17 @@ impl HTreeData {
         bits: &mut BitStream<'_>
     ) -> Self {
         match bits.next().unwrap() {
+            Bit::One => {
+                let left = Self::from_stream(bits);
+                let right = Self::from_stream(bits);
+                Self::Link(Box::new(HTreeNode { weight: 0, left, right }))
+            },
             Bit::Zero => {
                 let mut phrase = 0;
                 for i in 0..u8::BITS {
                     phrase |= (bits.next().unwrap() as u8) << i;
                 }
                 Self::Leaf(HTreeLeaf { weight: 0, phrase })
-            },
-            Bit::One => {
-                let left = Self::from_stream(bits);
-                let right = Self::from_stream(bits);
-                Self::Link(Box::new(HTreeNode { weight: 0, left, right }))
             }
         }
     }
@@ -93,7 +93,7 @@ impl HTreeData {
                 vec.pop();
             },
             Self::Leaf(node) => {
-                enc[node.phrase as usize].replace(vec.clone()).unwrap();
+                assert!(enc[node.phrase as usize].replace(vec.clone()).is_none());
             }
         }
     }
@@ -117,7 +117,7 @@ impl HTree {
         // Gets a minimum weighted element from the two queues.
         let qmin = |l: &mut VecDeque<HTreeData>, r: &mut VecDeque<HTreeData>| -> HTreeData {
             if l.front().is_some() && r.front().is_some() {
-                if l.front().unwrap().weight() <= r.front().unwrap().weight() {
+                if l.front().unwrap().weight() < r.front().unwrap().weight() {
                     l.pop_front().unwrap()
                 } else {
                     r.pop_front().unwrap()
@@ -247,6 +247,7 @@ pub fn decompress(
     data: &[u8]
 ) -> Vec<u8> {
     let (n, size) = serial::read(data);
+    let size = size as usize;
     let mut stream = BitStream::from_slice(&data[n..]);
 
     let tree = HTree::from_stream(&mut stream);

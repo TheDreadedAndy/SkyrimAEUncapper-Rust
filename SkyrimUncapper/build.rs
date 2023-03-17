@@ -55,6 +55,7 @@ fn main() {
     let comp_ini = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("SkyrimUncapper.ini.lz");
     let mut f = File::create(&comp_ini).unwrap();
     let base_file = include_str!("SkyrimUncapper.ini").as_bytes();
-    let compressed_file = lz77::compress(base_file);
+    let compressed_file = deflate::compress(base_file);
     f.write(compressed_file.as_slice()).unwrap();
+    assert!(base_file == deflate::decompress(&compressed_file));
 }

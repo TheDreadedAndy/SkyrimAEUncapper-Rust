@@ -4,6 +4,8 @@
 //! @brief Structures for managing a stream of bits.
 //!
 
+const VEC_BITS: usize = u8::BITS as usize;
+
 /// Type-safe enum of a bit. Can be cast to u8 safely.
 #[repr(u8)]
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -28,20 +30,15 @@ pub struct BitStream<'a> {
 
 impl BitVec {
     pub fn new() -> Self {
-        Self {
-            bits: Vec::new(),
-            len: 0
-        }
+        Self { bits: Vec::new(), len: 0 }
     }
 
     /// Creates a bit stream from a vector, using all the bits in the vector.
     pub fn from_vec(
         bits: Vec<u8>
     ) -> Self {
-        Self {
-            bits,
-            len: bits.len() * u8::BITS
-        }
+        let len = bits.len() * VEC_BITS;
+        Self { bits, len }
     }
 
     /// Gets the underlying vector of the bit vector.
@@ -56,13 +53,15 @@ impl BitVec {
         &mut self,
         bit: Bit
     ) {
-        let r = self.len % u8::BITS;
+        let r = self.len % VEC_BITS;
         if r == 0 {
             self.bits.push(bit as u8);
         } else {
-            self.bits[self.bits.len() - 1] |= (bit as u8) << r;
+            let i = self.bits.len() - 1;
+            self.bits[i] |= (bit as u8) << r;
         }
         self.len += 1;
+        self.validate();
     }
 
     /// Pops a bit from the end of the vector.
@@ -70,9 +69,14 @@ impl BitVec {
         &mut self
     ) {
         self.len -= 1;
-        if self.len % u8::BITS == 0 {
-            self.bits.pop()
+        let r = self.len % VEC_BITS;
+        if r == 0 {
+            self.bits.pop();
+        } else {
+            let i = self.bits.len() - 1;
+            self.bits[i] &= ((1 << r) - 1) as u8;
         }
+        self.validate();
     }
 
     /// Appends one bit vector to the end of another.
@@ -80,31 +84,46 @@ impl BitVec {
         &mut self,
         b: &Self
     ) {
-        let r = self.len % u8::BITS;
+        let lshift = self.len % VEC_BITS;
+        if lshift == 0 {
+            // If lshift is zero, then we can just do a direct vector append. The bytes in the
+            // destination are full.
+            self.bits.extend_from_slice(&b.bits);
+            self.len += b.len;
+            return;
+        }
+
+        // Lshift is non-zero, so our other left/right shifts wont overflow.
+        let rshift = VEC_BITS - lshift;
 
         if b.len > 0 {
-            self.bits[self.bits.len() - 1] |= b.bits[0] << r;
+            let i = self.bits.len() - 1;
+            self.bits[i] |= b.bits[0] << lshift;
         }
 
         for i in 0..(b.bits.len()-1) {
-            self.bits.push((b.bits[i] >> (u8::BITS - r)) | (b.bits[i + 1] << r));
+            self.bits.push((b.bits[i] >> rshift) | (b.bits[i + 1] << lshift));
         }
 
-        if b.len - (u8::BITS - r) > 0 {
-            self.bits.push(b.bits[b.bits.len() - 1] >> (u8::BITS - r));
+        if b.len > rshift + ((b.bits.len() - 1) * VEC_BITS) {
+            self.bits.push(b.bits[b.bits.len() - 1] >> rshift);
         }
 
         self.len += b.len;
+        self.validate();
     }
 
-    /// Creates an iterator over this bit stream.
-    pub fn iter(
+    /// Ensures the state of the bit vector is valid.
+    #[track_caller]
+    fn validate(
         &self
-    ) -> BitStream<'_> {
-        BitStream {
-            bits: self.bits.slice(),
-            len: self.len,
-            index: 0
+    ) {
+        assert!(self.len <= self.bits.len() * VEC_BITS);
+        assert!((self.bits.len() * VEC_BITS) - self.len < VEC_BITS);
+        if self.len % VEC_BITS > 0 {
+            let last = self.bits[self.bits.len() - 1];
+            let mask = (1 << (self.len % VEC_BITS)) - 1;
+            assert!(last & mask == last);
         }
     }
 }
@@ -116,7 +135,7 @@ impl<'a> BitStream<'a> {
     ) -> Self {
         Self {
             bits,
-            len: bits.len() * u8::BITS,
+            len: bits.len() * VEC_BITS,
             index: 0
         }
     }
@@ -128,7 +147,7 @@ impl<'a> Iterator for BitStream<'a> {
         &mut self
     ) -> Option<Self::Item> {
         if self.index < self.len {
-            let ret = self.bits[self.index / u8::BITS] >> (self.index % u8::BITS);
+            let ret = (self.bits[self.index / VEC_BITS] >> (self.index % VEC_BITS)) & 1;
             self.index += 1;
             assert!(ret <= 1);
             Some(unsafe { std::mem::transmute::<u8, Bit>(ret) })
