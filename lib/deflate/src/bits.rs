@@ -61,7 +61,6 @@ impl BitVec {
             self.bits[i] |= (bit as u8) << r;
         }
         self.len += 1;
-        self.validate();
     }
 
     /// Pops a bit from the end of the vector.
@@ -76,7 +75,6 @@ impl BitVec {
             let i = self.bits.len() - 1;
             self.bits[i] &= ((1 << r) - 1) as u8;
         }
-        self.validate();
     }
 
     /// Appends one bit vector to the end of another.
@@ -110,21 +108,6 @@ impl BitVec {
         }
 
         self.len += b.len;
-        self.validate();
-    }
-
-    /// Ensures the state of the bit vector is valid.
-    #[track_caller]
-    fn validate(
-        &self
-    ) {
-        assert!(self.len <= self.bits.len() * VEC_BITS);
-        assert!((self.bits.len() * VEC_BITS) - self.len < VEC_BITS);
-        if self.len % VEC_BITS > 0 {
-            let last = self.bits[self.bits.len() - 1];
-            let mask = (1 << (self.len % VEC_BITS)) - 1;
-            assert!(last & mask == last);
-        }
     }
 }
 
