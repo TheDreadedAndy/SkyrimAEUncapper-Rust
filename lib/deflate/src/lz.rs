@@ -5,17 +5,13 @@
 //! @bug No known bugs.
 //!
 
-use crate::circ::*;
-use crate::serial;
+use core::ops::Index;
 
 /// The minimum length for a match to be compressed.
 const MIN_MATCH_SIZE: usize = 4;
 
-/// The input string size considered by the input window.
-const WINDOW_INPUT: usize = 16;
-
 /// The window size of the item being compressed to look backward in.
-const WINDOW_BUF: usize = 1 << 14;
+const WINDOW_SIZE: usize = 1 << 15;
 
 /// A token in lz77 compressed output.
 pub enum Token {
@@ -24,194 +20,93 @@ pub enum Token {
     Stop
 }
 
-/// A non-compressed literal byte string stored immediately after this struct in memory.
-#[repr(C)]
-struct Literal {
-    len: isize
-}
-
-/// A compressed byte string found by looking backward in the input buffer.
-#[repr(C)]
-struct Lookup {
-    offset: isize,
-    len: usize
-}
-
 /// The input window used as a scratch space during compression.
 struct Window {
-    input: CircQueue<WINDOW_INPUT>,
-    buf: CircQueue<WINDOW_BUF>
+    front: usize,
+    back: usize,
+    size: usize,
+    buf: [u8; WINDOW_SIZE]
 }
 
 /// Manages a group of matches found within the window.
 struct MatchGroup {
-    matches: Vec<usize>,
-    len: usize
+    offsets: Vec<u16>,
+    stream: Vec<u8>
 }
 
 impl Window {
     const fn new() -> Self {
-        Self {
-            input: CircQueue::new(),
-            buf: CircQueue::new()
-        }
+        Self { front: 0, back: 0, size: 0, buf: [0; WINDOW_SIZE] }
     }
 
-    /// Checks if the input to the window has been fully processed yet.
-    fn has_input(
-        &self
-    ) -> bool {
-        !self.input.is_empty()
-    }
-
-    ///
-    /// Enqueues a byte to the input buffer, pushing a byte to the window buffer if
-    /// the input buffer is full.
-    ///
-    /// If a byte was moved out of the input buffer, returns that byte.
-    ///
+    /// Adds a byte to the window buffer so that it may be matched by the next byte.
     fn enq(
         &mut self,
         input: u8
-    ) -> Option<u8> {
-        if let Some(deq) = self.input.enq(input) {
-            self.buf.enq(deq);
-            Some(deq)
-        } else {
-            None
+    ) {
+        self.buf[self.back] = input;
+        self.back = (self.back + 1) % WINDOW_SIZE;
+        self.size += 1;
+
+        if self.size > WINDOW_SIZE {
+            assert!(self.size == WINDOW_SIZE + 1);
+            self.size = WINDOW_SIZE;
+            self.front = (self.front + 1) % WINDOW_SIZE;
+            assert!(self.front == self.back);
         }
     }
 
-    /// Finds the longest match between the input and window buffers.
-    fn find_match(
-        &mut self,
-        stream_index: usize
-    ) -> Option<(usize, MatchGroup)> {
-        // Can't possibly find a long enough match.
-        if self.input.len() < MIN_MATCH_SIZE {
-            return None;
-        }
-
-        // As an optimization, we don't emit matches unless they are
-        // actually long enough to save space.
-        let stream_index = stream_index - self.input.len();
-        let base = stream_index - self.buf.len();
-        let mut matches = MatchGroup::new(MIN_MATCH_SIZE);
-        let mut i = 0;
-
-        while i < self.buf.len() {
-            let mut j = 0;
-            while (j < self.input.len()) && ((i + j) < self.buf.len()) {
-                if self.buf[i + j] == self.input[j] {
-                    j += 1;
-                } else {
-                    break;
-                }
+    /// Matches the current set of offsets to the next byte in the sequence, or returns one
+    /// of the sequences if there is no match.
+    fn match_next(
+        &self,
+        next: u8,
+        group: MatchGroup
+    ) -> Result<MatchGroup, (u16, Vec<u8>)> {
+        let mut new_matches = Vec::new();
+        for offset in group.offsets.iter() {
+            if self[self.size - (*offset as usize)] == next {
+                new_matches.push(*offset);
             }
+        }
 
-            if j == matches.len() {
-                matches.add(base + i);
-            } else if j > matches.len() {
-                matches = MatchGroup::new(j);
-                matches.add(base + i);
+        if new_matches.len() > 0 {
+            group.stream.push(next);
+            Ok(MatchGroup { offsets: new_matches, stream: group.stream })
+        } else {
+            Err((group.offsets[0], group.stream))
+        }
+    }
+
+    /// Searches the window buffer for a copy of next, returning a match group containing
+    /// the offsets which index into any copies.
+    fn match_first(
+        &self,
+        next: u8
+    ) -> Result<MatchGroup, ()> {
+        let mut offsets: Vec<u16> = Vec::new();
+        for i in 0..self.size {
+            if self[i] == next {
+                offsets.push((self.size - i).try_into().unwrap());
             }
-
-            i += 1;
         }
 
-        if matches.matches() > 0 {
-            for _ in 0..matches.len() { self.buf.enq(self.input.deq().unwrap()); }
-            Some((stream_index, matches))
+        if offsets.len() > 0 {
+            Ok(MatchGroup { offsets, stream: vec![next] })
         } else {
-            None
-        }
-    }
-
-    /// Peeks the next byte to be removed from the input buffer.
-    fn peek_input(
-        &self
-    ) -> u8 {
-        self.input[0]
-    }
-
-    /// Moves a byte from the input buffer to the window buffer.
-    fn drain_one(
-        &mut self
-    ) -> Option<u8> {
-        if let Some(drain) = self.input.deq() {
-            self.buf.enq(drain);
-            Some(drain)
-        } else {
-            None
+            Err(())
         }
     }
 }
 
-impl MatchGroup {
-    fn new(
-        len: usize
-    ) -> Self {
-        Self {
-            matches: Vec::new(),
-            len
-        }
-    }
-
-    /// Gets the length of the matches in the group.
-    fn len(
-        &self
-    ) -> usize {
-        self.len
-    }
-
-    /// Gets the number of matches currently being considered by this group.
-    fn matches(
-        &self
-    ) -> usize {
-        self.matches.len()
-    }
-
-    /// Gets the current (index, len) in the match group.
-    fn get(
-        &self
-    ) -> (usize, usize) {
-        (self.matches[0], self.len)
-    }
-
-    /// Adds a new index to the given match group.
-    fn add(
-        &mut self,
+impl Index<usize> for Window {
+    type Output = u8;
+    fn index(
+        &self,
         index: usize
-    ) {
-        self.matches.push(index);
-    }
-
-    ///
-    /// Updates the match of each index based on the given byte and data stream.
-    ///
-    /// If no matches are found, the index and len of one of the groups is returned.
-    ///
-    fn next(
-        &mut self,
-        b: u8,
-        data: &[u8]
-    ) -> Result<(), (usize, usize)> {
-        assert!(self.matches.len() > 0);
-        let mut matches = Vec::new();
-
-        for i in self.matches.iter() {
-            if b == data[i + self.len] {
-                matches.push(*i);
-            }
-        }
-
-        if matches.len() > 0 {
-            self.matches = matches;
-            self.len += 1;
-            Ok(())
-        } else {
-            Err((self.matches[0], self.len))
-        }
+    ) -> &Self::Output {
+        assert!(index < self.size);
+        &self.buf[(self.front + index) % WINDOW_SIZE]
     }
 }
 
@@ -219,106 +114,74 @@ impl MatchGroup {
 pub fn compress(
     data: &[u8]
 ) -> Vec<Token> {
-    enum State { Literal, Match { base: usize, group: MatchGroup } }
-
-    let mut state = State::Literal;
     let mut win = Window::new();
-    let mut out = Vec::new();
-    let mut i = 0;
+    let mut current_match: Option<MatchGroup> = None;
+    let mut ret = Vec::new();
 
-    while (i < data.len()) || win.has_input() {
-        let (drain, deq) = if i < data.len() {
-            i += 1;
-            (false, win.enq(data[i - 1]))
-        } else {
-            (true, Some(win.drain_one().unwrap()))
-        };
-
-        match &mut state {
-            State::Literal => {
-                if let Some(b) = deq {
-                    out.push(Token::Phrase(b));
+    for b in data.iter() {
+        if let Some(group) = current_match {
+            match win.match_next(*b, group) {
+                Ok(group) => {
+                    current_match = Some(group);
+                    win.enq(*b);
+                    continue;
                 }
-
-                if let Some((base, group)) = win.find_match(i) {
-                    state = State::Match { base, group };
-                }
-            },
-            State::Match { base, group } => {
-                assert!((!drain && deq.is_none()) || (drain && deq.is_some()));
-                let b = if drain { deq.unwrap() } else { win.peek_input() };
-
-                match group.next(b, data) {
-                    Ok(()) => {
-                        if !drain {
-                            win.drain_one();
+                Err((offset, stream)) => {
+                    if stream.len() < MIN_MATCH_SIZE {
+                        for phrase in stream.iter() {
+                            ret.push(Token::Phrase(*phrase));
                         }
-                    }
-                    Err((index, len)) => {
-                        assert!(index < *base);
-                        let offset = TryInto::<u16>::try_into(*base - index).unwrap();
-                        out.push(Token::Offset(offset));
-                        out.push(Token::Offset(len.try_into().unwrap()));
-                        if drain {
-                            out.push(Token::Phrase(b));
-                        }
-                        state = State::Literal;
+                    } else {
+                        ret.push(Token::Offset(offset));
+                        ret.push(Token::Offset(stream.len().try_into().unwrap()));
                     }
                 }
             }
         }
-    }
 
-    // Flush final state.
-    match state {
-        State::Literal => (),
-        State::Match { base, group } => {
-            let (index, len) = group.get();
-            assert!(index < base);
-            let offset = TryInto::<u16>::try_into(base - index).unwrap();
-            out.push(Token::Offset(offset));
-            out.push(Token::Offset(len.try_into().unwrap()));
+        match win.match_first(*b) {
+            Ok(group) => current_match = Some(group),
+            Err(_) => ret.push(Token::Phrase(*b))
         }
+
+        win.enq(*b);
     }
 
-    out.push(Token::Stop);
-    return out;
+    if let Some(group) = current_match {
+        ret.push(Token::Offset(group.offsets[0]));
+        ret.push(Token::Offset(group.stream.len().try_into().unwrap()));
+    }
+
+    ret.push(Token::Stop);
+    return ret;
 }
 
 /// Decompresses the given byte stream.
 pub fn decompress(
-    data: &[u8]
+    data: &[Token]
 ) -> Vec<u8> {
-    let mut out = Vec::new();
-    let mut i = 0;
+    let mut ret = Vec::new();
+    let mut iter = data.iter();
 
-    while i < data.len() {
-        let (r, meta) = serial::read(&data[i..]);
-        i += r;
+    while let Some(token) = iter.next() {
+        match token {
+            Token::Phrase(b) => ret.push(*b),
+            Token::Offset(offset) => {
+                let len = match iter.next() {
+                    Some(Token::Offset(len)) => len,
+                    _ => panic!("Malformed decompression data!")
+                };
 
-        if meta >= 0 {
-            assert!(meta != 0);
-            for _ in 0..meta {
-                out.push(data[i]);
-                i += 1;
-            }
-        } else {
-            let (r, len) = serial::read(&data[i..]);
-            let offset = (-meta) as usize;
-            let len = len as usize;
-            i += r;
-
-            assert!(offset <= out.len());
-            assert!(len >= MIN_MATCH_SIZE);
-
-            let base = out.len().wrapping_sub(offset);
-            let limit = base + len;
-            for j in base..limit {
-                out.push(out[j]);
+                for _ in 0..*len {
+                    ret.push(ret[ret.len() - (*offset as usize)]);
+                }
+            },
+            Token::Stop => {
+                assert!(iter.next().is_none());
+                break;
             }
         }
     }
 
-    assert!(i == data.len());
-    return out;
+    return ret;
 }
