@@ -11,14 +11,18 @@ use crate::serial;
 /// The minimum length for a match to be compressed.
 const MIN_MATCH_SIZE: usize = 4;
 
-/// The minimum length for a literal before trying to match again.
-const MIN_LIT_SIZE: usize = 1;
-
 /// The input string size considered by the input window.
 const WINDOW_INPUT: usize = 16;
 
 /// The window size of the item being compressed to look backward in.
 const WINDOW_BUF: usize = 1 << 14;
+
+/// A token in lz77 compressed output.
+pub enum Token {
+    Phrase(u8),
+    Offset(u16),
+    Stop
+}
 
 /// A non-compressed literal byte string stored immediately after this struct in memory.
 #[repr(C)]
@@ -43,34 +47,6 @@ struct Window {
 struct MatchGroup {
     matches: Vec<usize>,
     len: usize
-}
-
-impl Literal {
-    /// Emits the literal data to the byte stream as lz77 metadata.
-    fn emit(
-        lit: &[u8],
-        out: &mut Vec<u8>
-    ) {
-        if lit.len() == 0 {
-            return;
-        }
-
-        serial::write(lit.len().try_into().unwrap(), out);
-        out.extend_from_slice(lit);
-    }
-}
-
-impl Lookup {
-    /// Emits the match to the byte stream as lz77 metadata.
-    fn emit(
-        offset: isize,
-        len: usize,
-        out: &mut Vec<u8>
-    ) {
-        assert!(offset < 0);
-        serial::write(offset, out);
-        serial::write(len as isize, out);
-    }
 }
 
 impl Window {
@@ -242,10 +218,10 @@ impl MatchGroup {
 /// Compresses the given byte stream.
 pub fn compress(
     data: &[u8]
-) -> Vec<u8> {
-    enum State { Literal(Vec<u8>), Match { base: usize, group: MatchGroup } }
+) -> Vec<Token> {
+    enum State { Literal, Match { base: usize, group: MatchGroup } }
 
-    let mut state = State::Literal(Vec::new());
+    let mut state = State::Literal;
     let mut win = Window::new();
     let mut out = Vec::new();
     let mut i = 0;
@@ -259,16 +235,13 @@ pub fn compress(
         };
 
         match &mut state {
-            State::Literal(v) => {
+            State::Literal => {
                 if let Some(b) = deq {
-                    v.push(b);
+                    out.push(Token::Phrase(b));
                 }
 
-                if (v.len() >= MIN_LIT_SIZE) || (v.len() == 0) {
-                    if let Some((base, group)) = win.find_match(i) {
-                        Literal::emit(v.as_slice(), &mut out);
-                        state = State::Match { base, group };
-                    }
+                if let Some((base, group)) = win.find_match(i) {
+                    state = State::Match { base, group };
                 }
             },
             State::Match { base, group } => {
@@ -283,9 +256,13 @@ pub fn compress(
                     }
                     Err((index, len)) => {
                         assert!(index < *base);
-                        let offset = -TryInto::<isize>::try_into(*base - index).unwrap();
-                        Lookup::emit(offset, len, &mut out);
-                        state = State::Literal(if drain { vec![b] } else { Vec::new() });
+                        let offset = TryInto::<u16>::try_into(*base - index).unwrap();
+                        out.push(Token::Offset(offset));
+                        out.push(Token::Offset(len.try_into().unwrap()));
+                        if drain {
+                            out.push(Token::Phrase(b));
+                        }
+                        state = State::Literal;
                     }
                 }
             }
@@ -294,15 +271,17 @@ pub fn compress(
 
     // Flush final state.
     match state {
-        State::Literal(v) => Literal::emit(v.as_slice(), &mut out),
+        State::Literal => (),
         State::Match { base, group } => {
             let (index, len) = group.get();
             assert!(index < base);
-            let offset = -TryInto::<isize>::try_into(base - index).unwrap();
-            Lookup::emit(offset, len, &mut out)
+            let offset = TryInto::<u16>::try_into(base - index).unwrap();
+            out.push(Token::Offset(offset));
+            out.push(Token::Offset(len.try_into().unwrap()));
         }
     }
 
+    out.push(Token::Stop);
     return out;
 }
 

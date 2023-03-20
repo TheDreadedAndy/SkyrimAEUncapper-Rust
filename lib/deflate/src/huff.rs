@@ -212,14 +212,10 @@ impl HTree {
         }
         assert!(max_len as u32 <= u8::BITS);
 
-        for i in 0..Self::LEN_PREFIX_BITS {
-            vec.push(if (max_len & (1 << i)) == 0 { Bit::Zero } else { Bit::One });
-        }
+        vec.putb(max_len, Self::LEN_PREFIX_BITS);
 
         for b in table.iter() {
-            for i in 0..max_len {
-                vec.push(if (b & (1 << i)) == 0 { Bit::Zero } else { Bit::One });
-            }
+            vec.putb(*b, max_len as usize);
         }
     }
 
@@ -228,20 +224,11 @@ impl HTree {
         stream: &mut BitStream<'_>
     ) -> [u8; NUM_PHRASES] {
         // Get bit width of each length.
-        let mut max_len: u8 = 0;
-        for i in 0..Self::LEN_PREFIX_BITS {
-            if stream.next().unwrap() == Bit::One {
-                max_len |= 1 << i;
-            }
-        }
+        let max_len: usize = stream.getb(Self::LEN_PREFIX_BITS) as usize;
 
         let mut ret = [0; NUM_PHRASES];
         for i in 0..NUM_PHRASES {
-            for j in 0..max_len {
-                if stream.next().unwrap() == Bit::One {
-                    ret[i] |= 1 << j;
-                }
-            }
+            ret[i] = stream.getb(max_len);
         }
         return ret;
     }

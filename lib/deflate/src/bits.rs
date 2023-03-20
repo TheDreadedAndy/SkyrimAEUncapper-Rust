@@ -82,32 +82,51 @@ impl BitVec {
         &mut self,
         b: &Self
     ) {
+        self.extend_from_slice(&b.bits, b.len);
+    }
+
+    /// Places up to a full byte into the stream.
+    pub fn putb(
+        &mut self,
+        b: u8,
+        len: usize
+    ) {
+        assert!(len <= VEC_BITS);
+        self.extend_from_slice(&[b], len);
+    }
+
+    // Places the given slice with len many bits into the stream.
+    fn extend_from_slice(
+        &mut self,
+        bits: &[u8],
+        len: usize
+    ) {
         let lshift = self.len % VEC_BITS;
         if lshift == 0 {
             // If lshift is zero, then we can just do a direct vector append. The bytes in the
             // destination are full.
-            self.bits.extend_from_slice(&b.bits);
-            self.len += b.len;
+            self.bits.extend_from_slice(bits);
+            self.len += len;
             return;
         }
 
         // Lshift is non-zero, so our other left/right shifts wont overflow.
         let rshift = VEC_BITS - lshift;
 
-        if b.len > 0 {
+        if len > 0 {
             let i = self.bits.len() - 1;
-            self.bits[i] |= b.bits[0] << lshift;
+            self.bits[i] |= bits[0] << lshift;
         }
 
-        for i in 0..(b.bits.len()-1) {
-            self.bits.push((b.bits[i] >> rshift) | (b.bits[i + 1] << lshift));
+        for i in 0..(bits.len()-1) {
+            self.bits.push((bits[i] >> rshift) | (bits[i + 1] << lshift));
         }
 
-        if b.len > rshift + ((b.bits.len() - 1) * VEC_BITS) {
-            self.bits.push(b.bits[b.bits.len() - 1] >> rshift);
+        if len > rshift + ((bits.len() - 1) * VEC_BITS) {
+            self.bits.push(bits[bits.len() - 1] >> rshift);
         }
 
-        self.len += b.len;
+        self.len += len;
     }
 }
 
@@ -121,6 +140,30 @@ impl<'a> BitStream<'a> {
             len: bits.len() * VEC_BITS,
             index: 0
         }
+    }
+
+    /// Reads up to u8::BITS from the bit stream.
+    pub fn getb(
+        &mut self,
+        len: usize
+    ) -> u8 {
+        assert!(self.len - self.index > len);
+        assert!(len <= VEC_BITS);
+
+        let ret = if self.index % VEC_BITS == 0 {
+            self.bits[self.index / VEC_BITS]
+        } else {
+            let i = self.index / VEC_BITS;
+            let shift = self.index % VEC_BITS;
+            (self.bits[i] >> shift) | if VEC_BITS - shift < len {
+                self.bits[i + 1] << shift
+            } else {
+                0
+            }
+        };
+
+        self.index += len;
+        return ret & ((1 << len) - 1);
     }
 }
 
