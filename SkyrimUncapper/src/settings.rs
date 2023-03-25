@@ -16,7 +16,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::str::FromStr;
 
 use later::Later;
-use configparser::ini::Ini;
+use plugin_ini::Ini;
 use skse64::log::{skse_message, skse_warning};
 
 use field::IniField;
@@ -24,6 +24,8 @@ use skills::IniSkillManager;
 use leveled::LeveledIniSection;
 use config::{DefaultIniSection, DefaultIniField, IniDefaultReadable};
 use crate::skyrim::ActorAttribute;
+
+const DEFAULT_INI_LZ: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/SkyrimUncapper.ini.lz"));
 
 /// Manages the loading of a skill multiplier, which contains both a base and offset multiplier.
 #[derive(Default, Copy, Clone)]
@@ -238,11 +240,30 @@ pub fn init(
 ) {
     skse_message!("Loading config file: {}", path.display());
 
-    let mut settings = Settings::new();
-    let mut ini = Ini::new_cs();
-    if let Err(_) = ini.load(path) {
+    // Read the configuration from the file.
+    let ini = Ini::from_path(path);
+    if ini.is_err() {
         skse_warning!("Could not load INI file. Defaults will be used.");
     }
+
+    // Update the file with missing fields, if necessary.
+    let mut ini = ini.unwrap();
+    let default_ini = Ini::from_str(unsafe {
+        // SAFETY: We know this file was given as UTF8 text when it was compressed.
+        &String::from_utf8_unchecked(deflate::decompress(DEFAULT_INI_LZ))
+    }).unwrap();
+    if let Some(_) = ini.update(&default_ini) {
+        // If missing fields were added, update the INI file.
+        assert!(
+            ini.write_file(path).is_ok(),
+            "[ERROR] Failed to write to INI file. Please ensure Skyrim has permission to use the \
+             plugin directory."
+        );
+
+        skse_warning!("The INI file has been updated.");
+    }
+
+    let mut settings = Settings::new();
     settings.read_ini(&ini);
     SETTINGS.init(settings);
 

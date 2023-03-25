@@ -1,0 +1,183 @@
+% Setup
+\documentclass[12pt]{amsart}
+\usepackage{array,amssymb,amsmath,amsthm,amsfonts,latexsym,euscript}
+\usepackage[margin=0.7in]{geometry}
+\usepackage{hyperref}
+\raggedbottom
+% Contents
+\title{Skyrim Uncapper (SE/AE) User Guide}
+\author{Andrew Spaulding (Kasplat)}
+\begin{document}
+\maketitle
+\pagebreak
+
+% Helper functions
+\newcommand{\startblock}{\begin{minipage}{\textwidth}}
+\newcommand{\stopblock}{\end{minipage}}
+
+\section{Introduction}
+
+In this file, I hope to clear up some of the confusion surrounding how to
+configure this plugin. My hope is that this file will obviate the need
+to ask me questions on the Nexus forum, but I will, of course, be willing
+to answer any questions regardless.
+
+\pagebreak
+\section{Change Log}
+
+TODO
+
+\pagebreak
+\section{Bug Reports}
+
+If you encounter an issue with the plugin, which may include strange game
+behavior, plugin incompatibility, or a CTD (which would hopefully include
+a panic message box from the plugin), please report it to me on the BUGS
+section of the nexus page. Please do not report it in the posts section, as
+this section has less visiblity to me and other users (e.g., I do not get
+notified on Nexus when someone makes a post in that section).
+
+When reporting a bug, please include a copy of the log file found in
+<Documents>/My Games/Skyrim Special Edition/SKSE/SkyrimUncapper.log,
+as well as a brief description of the issue/what you were doing when you
+encountered it. This information will allow me to resolve the problem promptly.
+
+\pagebreak
+\section{INI file generation and updating}
+
+\startblock
+\subsection{INI file location}
+
+The location of the INI file will depend on a few factors. Those being the
+current version of the plugin you are running, and whether or not you have,
+at any point, run the game with a previous version installed. It will also
+depond on if you are using a mod manager, though I will assume that everyone
+is because if you aren't you need to rethink the choices in your life that
+brought you to this point.
+
+The path to the INI file is always /data/SKSE/plugins/SkyrimUncapper.ini.
+Where the file actually gets place will depend on your plugin version and
+mod manager.
+\stopblock
+
+\startblock
+\subsubsection{Kassent/Vadfromnu's uncapper, or versions 1.1.0 and below, or for those updating from any of these}
+
+Those who are using/used these versions of the plugin will have had their
+INI file generated. MO2 will place this generated INI file in the overwrite
+directory. Vortex should place the file in Skyrim's game directory. You will
+need to run the game with the plugin at least once before configuring it.
+Note that the default configuration uses all vanilla settings.
+\stopblock
+
+\startblock
+\subsubsection{Versions 2.0.0+}
+
+These versions package the INI file with the zip file. If using MO2, this file
+will be ignored if there is also an INI file in the overwrite directory.
+Assuming there is no INI file in the overwrite directory, the file will appear
+in the same directory as the plugin itself.
+\stopblock
+
+\startblock
+\subsection{Updating the INI file}
+
+When new fields are added to the INI file, some versions of the plugin will
+automatically add those fields. How each version goes about this process
+varies, however.
+\stopblock
+
+\startblock
+\subsubsection{Kassent/Vadfromnu's uncapper, or versions 1.1.0 and below}
+
+These versions of the uncapper track the file version using the \textit{Version}
+field in the \textit{[General]} section of the INI. If this field is outdated
+(according to the value that said version of the plugin expects) the INI file
+is regenerated with the currently stored configuration values as loaded from
+the INI.
+
+Note that this regeneration has a few issues. Any field which was not loaded
+correctly will be lost, and all user-added comments/formatting are stripped
+from the INI file in this process. It is as if the INI file was generated again
+from scratch, except the previously known values are used instead of the
+default values.
+\stopblock
+
+\startblock
+\subsubsection{Versions 2.0.0 to 2.1.5}
+
+These versions of the uncapper make no attempts to automatically update the INI
+file. These versions will issue warnings in the log file when they detect
+that a field/section is missing from the INI file, however any actual updates
+to the file must be manually applied by the user.
+\stopblock
+
+\startblock
+\subsubsection{Versions 2.2.0 and above}
+
+These versions will automatically append missing fields to the end of the
+section they should appear in, and missing sections to the end of the file.
+The formatting and comments within the INI files should not be altered by this
+process (or should only be minimally altered). A message will be displayed to
+the user when the game is launched if their INI file was updated.
+
+Note that this process happens independent of the values of any field. This
+means that the \textit{Version} field used in previous versions of the uncapper
+is ignored by these versions.
+\stopblock
+
+\pagebreak
+\section{INI Configuration}
+
+The INI configuration is split into sections, with most sections having some
+way to disable them entirely from the general section. This ability was
+introduced in version 1.1.0 of the plugin.
+
+\startblock
+\subsection{[General]}
+
+This section includes options to disable individual patches, as well as some
+now depreciated options related to updating the INI file.
+\stopblock
+
+\startblock
+\subsubsection{Author = <String>}
+
+This field is ignored by all versions of the plugin.
+\stopblock
+
+\startblock
+\subsubsection{Version = <unsigned int>}
+
+This field is used by versions 1.1.0 and below to determine if the INI file
+should be updated. Versions 2.0.0 and above ignore this field.
+\stopblock
+
+\subsubsection{bUseSkillCaps = <true/false>}
+
+\subsubsection{bUseSkillFormulaCaps = <true/false>}
+
+\subsubsection{bUseSkillFormulaCapsUIFix = <true/false>}
+
+\subsubsection{bUseEnchanterCaps = <true/false>}
+
+\subsubsection{bUseSkillExpGainMults = <true/false>}
+
+\subsubsection{bUsePCLevelSkillExpMults = <true/false>}
+
+\subsubsection{bUsePerksAtLevelUp = <true/false>}
+
+\subsubsection{bUseAttributesAtLevelUp = <true/false>}
+
+\subsubsection{bUseLegendarySettings = <true/false>}
+
+\subsection{[SkillCaps]}
+
+\pagebreak
+\section{External Links}
+
+\href{https://github.com/TheDreadedAndy/SkyrimAEUncapper-Rust}{GitHub}
+
+\href{https://www.nexusmods.com/skyrimspecialedition/mods/82558}{Nexus}
+
+\end{document}

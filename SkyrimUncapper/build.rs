@@ -5,6 +5,10 @@
 //! @bug No known bugs.
 //!
 
+use std::path::PathBuf;
+use std::fs::File;
+use std::io::Write;
+
 const NATIVE_WRAPPERS: &str = "src/skyrim/native_wrappers.cpp";
 
 const RC_AUTHOR: &str = "Kasplat";
@@ -22,6 +26,7 @@ fn main() {
 
     // Embed resource information.
     let mut res = winres::WindowsResource::new();
+    let resource_file = format!("{}/uncapper.rc", std::env::var("OUT_DIR").unwrap());
     res.set("CompanyName", RC_AUTHOR);
     res.set("FileDescription", RC_NAME);
     res.set("FileVersion", RC_VERSION);
@@ -30,7 +35,11 @@ fn main() {
     res.set("OriginalFilename", RC_FILE);
     res.set("ProductName", RC_NAME);
     res.set("ProductVersion", RC_VERSION);
-    res.compile().unwrap();
+    res.write_resource_file(&resource_file).unwrap();
+
+    // Win-res can't cross compile, but embed-resource can. Thus, we use winres to generate
+    // the rc file nad embed-resource to embed it. It do be like that sometimes.
+    embed_resource::compile(&resource_file);
 
     // Generate git version information.
     let std::process::Output { stdout, .. } = std::process::Command::new("git").args(&[
@@ -41,4 +50,12 @@ fn main() {
     ]).output().unwrap();
     let version = String::from_utf8(stdout).unwrap();
     println!("cargo:rustc-env=UNCAPPER_GIT_VERSION={}", version.trim());
+
+    // Create a compressed default INI file.
+    let comp_ini = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("SkyrimUncapper.ini.lz");
+    let mut f = File::create(&comp_ini).unwrap();
+    let base_file = include_str!("SkyrimUncapper.ini").as_bytes();
+    let compressed_file = deflate::compress(base_file);
+    f.write(compressed_file.as_slice()).unwrap();
+    assert!(base_file == deflate::decompress(&compressed_file));
 }

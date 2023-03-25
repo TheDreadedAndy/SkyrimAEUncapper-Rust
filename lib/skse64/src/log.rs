@@ -10,11 +10,13 @@ use std::fmt;
 use std::fmt::Arguments;
 use std::fs::File;
 use std::io::Write;
+use std::ffi::{CStr, OsString};
+use std::os::windows::ffi::{OsStrExt, OsStringExt};
 
 use later::Later;
 use racy_cell::RacyCell;
-use windows_sys::Win32::UI::WindowsAndMessaging::MessageBoxA;
-use windows_sys::Win32::UI::Shell::{SHGetFolderPathA, CSIDL_MYDOCUMENTS, SHGFP_TYPE_CURRENT};
+use windows_sys::Win32::UI::WindowsAndMessaging::MessageBoxW;
+use windows_sys::Win32::UI::Shell::{SHGetFolderPathW, CSIDL_MYDOCUMENTS, SHGFP_TYPE_CURRENT};
 use windows_sys::Win32::Foundation::MAX_PATH;
 
 #[doc(hidden)]
@@ -24,13 +26,14 @@ use crate::loader::SKSEPlugin_Version;
 
 ///
 /// The structure used to format information before writing it to the log file.
-///
 /// We use this to avoid an allocation for each message.
 ///
-/// The buffer is always ended with a null terminator.
+/// The buffer is always ended with a null terminator. Note that the buffer is
+/// encoded in UTF-16, as this is the format that windows actually uses for its
+/// OS strings.
 ///
 struct LogBuf {
-    buf: [u8; Self::BUF_SIZE],
+    buf: [u16; Self::BUF_SIZE],
     len: usize
 }
 
@@ -48,6 +51,9 @@ static LOG_FILE: Later<RacyCell<File>> = Later::new();
 /// The global log buffer used to print our output.
 static LOG_BUFFER: RacyCell<LogBuf> = RacyCell::new(LogBuf::new());
 
+/// The OS-encoded name of our plugin.
+static OS_PLUGIN_NAME: Later<Vec<u16>> = Later::new();
+
 impl LogBuf {
     /// Large enough to contain any reasonably size line in a log file.
     const BUF_SIZE: usize = 8192;
@@ -60,17 +66,17 @@ impl LogBuf {
         }
     }
 
-    /// Gets the underlying &[u8] in the buffer, excluding the null.
+    /// Gets the underlying &[u16] in the buffer, excluding the null.
     fn as_bytes(
         &self
-    ) -> &[u8] {
+    ) -> &[u16] {
         self.buf.split_at(self.len).0
     }
 
-    /// Gets the underlying &[u8] in the buffer, with the null.
+    /// Gets the underlying &[u16] in the buffer, with the null.
     fn as_bytes_nul(
         &self
-    ) -> &[u8] {
+    ) -> &[u16] {
         self.buf.split_at(self.len + 1).0
     }
 
@@ -92,7 +98,7 @@ impl LogBuf {
     ///
     unsafe fn write_ffi(
         &mut self,
-        func: impl FnOnce(&mut [u8])
+        func: impl FnOnce(&mut [u16])
     ) {
         func(self.buf.split_at_mut(self.len).1);
 
@@ -119,8 +125,8 @@ impl fmt::Write for LogBuf {
         &mut self,
         s: &str
     ) -> Result<(), fmt::Error> {
-        for c in s.as_bytes().iter() {
-            self.buf[self.len] = *c;
+        for c in s.encode_utf16() {
+            self.buf[self.len] = c;
             if self.len < Self::BUF_SIZE - 1 {
                 self.len += 1;
             }
@@ -140,7 +146,7 @@ impl LogType {
     //
     unsafe fn log(
         &self,
-        msg: &[u8]
+        msg: &[u16]
     ) -> Result<(), ()> {
         if msg[msg.len() - 1] != 0 {
             return Err(());
@@ -148,10 +154,10 @@ impl LogType {
 
         let win_res = match self {
             Self::Window(ico) | Self::Both(ico) => {
-                let res = MessageBoxA(
+                let res = MessageBoxW(
                     0,
                     msg.as_ptr(),
-                    SKSEPlugin_Version.name.as_ptr().cast(),
+                    OS_PLUGIN_NAME.as_ptr().cast(),
                     *ico
                 );
 
@@ -162,8 +168,13 @@ impl LogType {
 
         let log_res = match self {
             Self::File | Self::Both(_) => {
+                let msg = msg.split_at(msg.len() - 1).0;
+                let msg: &[u8] = std::slice::from_raw_parts(
+                    msg.as_ptr().cast(),
+                    msg.len() * std::mem::size_of::<u16>()
+                );
                 if LOG_FILE.is_init() &&
-                        (*LOG_FILE.get()).write(msg.split_at(msg.len() - 1).0).is_ok() {
+                        (*LOG_FILE.get()).write(msg).is_ok() {
                     Ok(())
                 } else {
                     Err(())
@@ -184,7 +195,7 @@ pub (in crate) fn open() {
         (*LOG_BUFFER.get()).clear();
         (*LOG_BUFFER.get()).write_ffi(|buf| {
             assert!(buf.len() > MAX_PATH as usize);
-            SHGetFolderPathA(
+            SHGetFolderPathW(
                 0,
                 CSIDL_MYDOCUMENTS as i32,
                 0,
@@ -193,17 +204,23 @@ pub (in crate) fn open() {
             );
         });
 
+        let plugin_name = CStr::from_ptr(SKSEPlugin_Version.name.as_ptr()).to_str().unwrap();
+        OS_PLUGIN_NAME.init(OsString::from(plugin_name.to_string()).encode_wide().collect());
+
         <dyn fmt::Write>::write_fmt(&mut *LOG_BUFFER.get(), format_args!(
             "\\My Games\\Skyrim Special Edition\\SKSE\\{}.log",
-            std::ffi::CStr::from_ptr(SKSEPlugin_Version.name.as_ptr()).to_str().unwrap()
+            plugin_name
         )).unwrap();
 
         LOG_FILE.init(RacyCell::new(
-            File::create(std::str::from_utf8((*LOG_BUFFER.get()).as_bytes()).unwrap()).unwrap()
+            File::create(&OsString::from_wide((*LOG_BUFFER.get()).as_bytes())).unwrap()
         ));
 
-        // Clear out file path.
+        // Clear our file path.
         (*LOG_BUFFER.get()).clear();
+
+        // Write the byte-order mark, so text editors know the file is UTF-16.
+        (*LOG_FILE.get()).write(&[0xFF, 0xFE]).unwrap();
     }
 }
 
@@ -233,13 +250,15 @@ pub fn fatal(
 ) {
     unsafe {
         // SAFETY: This library is single threaded.
-        let msg = if let Ok(_) = (*LOG_BUFFER.get()).formatln(args) {
-            (*LOG_BUFFER.get()).as_bytes_nul()
-        } else {
-            "The plugin encountered an unknown fatal error.\n\0".as_bytes()
-        };
+        if let Err(_) = (*LOG_BUFFER.get()).formatln(args) {
+            (*LOG_BUFFER.get()).clear();
+            <dyn fmt::Write>::write_str(
+                &mut *LOG_BUFFER.get(),
+                "The plugin encountered an unknown fatal error.\n"
+            ).unwrap_unchecked();
+        }
 
-        let _ = log_type.log(msg);
+        let _ = log_type.log((*LOG_BUFFER.get()).as_bytes_nul());
         (*LOG_BUFFER.get()).clear();
     }
 }

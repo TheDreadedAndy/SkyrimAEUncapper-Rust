@@ -148,9 +148,10 @@ unsafe extern "system" fn handle_ffi_exception(
     s: *const u8,
     len: usize
 ) -> ! {
+    // Note that this function is only given ASCII text, so we can do an unchecked conversion.
     panic!(
         "An exception occured while executing a native game function: {}",
-        std::str::from_utf8(std::slice::from_raw_parts(s, len)).unwrap()
+        std::str::from_utf8_unchecked(std::slice::from_raw_parts(s, len))
     );
 }
 

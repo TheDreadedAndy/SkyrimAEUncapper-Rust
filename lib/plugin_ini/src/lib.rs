@@ -1,11 +1,12 @@
 //!
 //! @file lib.rs
 //! @author Andrew Spaulding (Kasplat)
-//! @brief INI loader which preserves comments and can fill in missing items.
+//! @brief Top level library file.
 //! @bug No known bugs.
 //!
 
-mod order;
+mod key;
+mod map;
 mod ini;
 
 pub use ini::*;

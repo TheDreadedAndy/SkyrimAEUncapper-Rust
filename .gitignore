@@ -15,3 +15,10 @@ skse64_src/
 SkyrimUncapper/hook_wrappers.asm
 *.zip
 *.exe
+.cargo/
+*.o
+.DS_Store
+*.aux
+*.out
+*.log
+*.pdf

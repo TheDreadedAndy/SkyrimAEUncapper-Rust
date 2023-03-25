@@ -8,7 +8,7 @@
 use std::fmt::Debug;
 use std::str::FromStr;
 
-use configparser::ini::Ini;
+use plugin_ini::Ini;
 use skse64::log::skse_message;
 
 use crate::skyrim::{ActorAttribute, HungarianAttribute};
@@ -39,7 +39,7 @@ impl<T: Copy + FromStr + Default> IniUnnamedReadable for IniField<T>
         name: &str,
         default: Self::Value
     ) {
-        let val = ini.get(section, name).and_then(|s| T::from_str(&s).ok()).unwrap_or_else(|| {
+        let val = ini.get(section, name).unwrap_or_else(|| {
             skse_message!("[WARNING] Failed to load INI value {}: {}", section, name);
             default
         });

@@ -4,6 +4,7 @@ members = [
     "lib/disarray",
     "lib/later",
     "lib/racy_cell",
+    "lib/deflate",
     "lib/plugin_ini",
     "lib/skse64_common",
     "lib/skse64",
@@ -16,8 +17,11 @@ members = [
 [profile.release]
 panic = "abort"
 debug = false
+strip = true
 incremental = false
 opt-level = 'z'
+codegen-units = 1
+lto = 'fat'
 
 [profile.dev]
 panic = "abort"
@@ -25,3 +29,4 @@ debug = true
 incremental = false
 # O0 is just impossible to read.
 opt-level = 1
+lto = 'thin'
