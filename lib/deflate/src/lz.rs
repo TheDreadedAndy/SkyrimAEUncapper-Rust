@@ -14,6 +14,7 @@ const MIN_MATCH_SIZE: usize = 4;
 const WINDOW_SIZE: usize = 1 << 15;
 
 /// A token in lz77 compressed output.
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub enum Token {
     Phrase(u8),
     Offset(u16),
@@ -61,7 +62,7 @@ impl Window {
     fn match_next(
         &self,
         next: u8,
-        group: MatchGroup
+        mut group: MatchGroup
     ) -> Result<MatchGroup, (u16, Vec<u8>)> {
         let mut new_matches = Vec::new();
         for offset in group.offsets.iter() {
@@ -119,7 +120,7 @@ pub fn compress(
     let mut ret = Vec::new();
 
     for b in data.iter() {
-        if let Some(group) = current_match {
+        if let Some(group) = current_match.take() {
             match win.match_next(*b, group) {
                 Ok(group) => {
                     current_match = Some(group);

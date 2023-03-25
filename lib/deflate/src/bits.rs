@@ -33,14 +33,6 @@ impl BitVec {
         Self { bits: Vec::new(), len: 0 }
     }
 
-    /// Creates a bit stream from a vector, using all the bits in the vector.
-    pub fn from_vec(
-        bits: Vec<u8>
-    ) -> Self {
-        let len = bits.len() * VEC_BITS;
-        Self { bits, len }
-    }
-
     /// Gets the underlying vector of the bit vector.
     pub fn into_vec(
         self
@@ -89,10 +81,23 @@ impl BitVec {
     pub fn putb(
         &mut self,
         b: u8,
-        len: usize
+        len: u32
     ) {
-        assert!(len <= VEC_BITS);
-        self.extend_from_slice(&[b], len);
+        assert!(len as usize <= VEC_BITS);
+        self.extend_from_slice(&[b], len as usize);
+    }
+
+    /// Places up to a full x86 word into the stream.
+    pub fn putw(
+        &mut self,
+        w: u16,
+        len: u32
+    ) {
+        assert!(len <= u16::BITS);
+        self.putb(w as u8, std::cmp::min(len, u8::BITS));
+        if len > u8::BITS {
+            self.putb((w >> u8::BITS) as u8, len - u8::BITS);
+        }
     }
 
     // Places the given slice with len many bits into the stream.
@@ -101,6 +106,9 @@ impl BitVec {
         bits: &[u8],
         len: usize
     ) {
+        assert!(len <= bits.len() * VEC_BITS);
+        assert!(len >= (bits.len() - 1) * VEC_BITS);
+
         let lshift = self.len % VEC_BITS;
         if lshift == 0 {
             // If lshift is zero, then we can just do a direct vector append. The bytes in the
@@ -142,28 +150,41 @@ impl<'a> BitStream<'a> {
         }
     }
 
-    /// Reads up to u8::BITS from the bit stream.
-    pub fn getb(
+    /// Reads up to u16::BITS from the bit stream.
+    pub fn getw(
         &mut self,
-        len: usize
-    ) -> u8 {
-        assert!(self.len - self.index > len);
+        len: u32
+    ) -> u16 {
+        let mut len = len as usize;
+
+        assert!(self.len - self.index >= len);
         assert!(len <= VEC_BITS);
 
-        let ret = if self.index % VEC_BITS == 0 {
-            self.bits[self.index / VEC_BITS]
-        } else {
-            let i = self.index / VEC_BITS;
-            let shift = self.index % VEC_BITS;
-            (self.bits[i] >> shift) | if VEC_BITS - shift < len {
-                self.bits[i + 1] << shift
-            } else {
-                0
-            }
-        };
+        let mut ret = [0; std::mem::size_of::<u16>()];
+        let mut b = 0;
+        let limit = self.index + len;
+        while self.index < limit {
+            let byte_len = std::cmp::min(VEC_BITS, len);
 
-        self.index += len;
-        return ret & ((1 << len) - 1);
+            ret[b] = if self.index % VEC_BITS == 0 {
+                self.bits[self.index / VEC_BITS]
+            } else {
+                let i = self.index / VEC_BITS;
+                let shift = self.index % VEC_BITS;
+                (self.bits[i] >> shift) | if VEC_BITS - shift < byte_len {
+                    self.bits[i + 1] << shift
+                } else {
+                    0
+                }
+            };
+
+            self.index += byte_len;
+            len -= byte_len;
+            b += 1;
+        }
+
+        assert!(self.index == limit);
+        return ret[0] as u16 | ((ret[1] as u16) << u8::BITS);
     }
 }
 
@@ -176,7 +197,7 @@ impl<'a> Iterator for BitStream<'a> {
             let ret = (self.bits[self.index / VEC_BITS] >> (self.index % VEC_BITS)) & 1;
             self.index += 1;
             assert!(ret <= 1);
-            Some(unsafe { std::mem::transmute::<u8, Bit>(ret) })
+            Some(if ret == 1 { Bit::One } else { Bit::Zero })
         } else {
             None
         }

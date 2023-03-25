@@ -7,8 +7,6 @@
 //! both huffman and lz77 compression on top of each other.
 //!
 
-mod serial;
-mod circ;
 mod lz;
 mod bits;
 mod huff;
