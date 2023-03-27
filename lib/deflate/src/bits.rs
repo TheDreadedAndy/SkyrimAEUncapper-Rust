@@ -45,14 +45,7 @@ impl BitVec {
         &mut self,
         bit: Bit
     ) {
-        let r = self.len % VEC_BITS;
-        if r == 0 {
-            self.bits.push(bit as u8);
-        } else {
-            let i = self.bits.len() - 1;
-            self.bits[i] |= (bit as u8) << r;
-        }
-        self.len += 1;
+        self.putb(bit as u8, 1);
     }
 
     /// Pops a bit from the end of the vector.
@@ -83,7 +76,7 @@ impl BitVec {
         b: u8,
         len: u32
     ) {
-        assert!(len as usize <= VEC_BITS);
+        assert!(len <= u8::BITS);
         self.extend_from_slice(&[b], len as usize);
     }
 
@@ -94,47 +87,52 @@ impl BitVec {
         len: u32
     ) {
         assert!(len <= u16::BITS);
-        self.putb(w as u8, std::cmp::min(len, u8::BITS));
-        if len > u8::BITS {
-            self.putb((w >> u8::BITS) as u8, len - u8::BITS);
-        }
+        self.extend_from_slice(&w.to_le_bytes(), len as usize);
     }
 
     // Places the given slice with len many bits into the stream.
+    //
+    // The given bit length may be less than the size of the slice, or less than the msb in the
+    // slice.
     fn extend_from_slice(
         &mut self,
         bits: &[u8],
         len: usize
     ) {
         assert!(len <= bits.len() * VEC_BITS);
-        assert!(len >= (bits.len() - 1) * VEC_BITS);
+
+        let byte_len = (len + (VEC_BITS - 1)) / VEC_BITS;
+        assert!(byte_len <= bits.len());
 
         let lshift = self.len % VEC_BITS;
         if lshift == 0 {
             // If lshift is zero, then we can just do a direct vector append. The bytes in the
             // destination are full.
-            self.bits.extend_from_slice(bits);
-            self.len += len;
-            return;
-        }
+            self.bits.extend_from_slice(&bits[..byte_len]);
+        } else {
+            // Lshift is non-zero, so our other left/right shifts wont overflow.
+            let rshift = VEC_BITS - lshift;
 
-        // Lshift is non-zero, so our other left/right shifts wont overflow.
-        let rshift = VEC_BITS - lshift;
+            if len > 0 {
+                let i = self.bits.len() - 1;
+                self.bits[i] |= bits[0] << lshift;
+            }
 
-        if len > 0 {
-            let i = self.bits.len() - 1;
-            self.bits[i] |= bits[0] << lshift;
-        }
+            for i in 0..(byte_len - 1) {
+                self.bits.push((bits[i] >> rshift) | (bits[i + 1] << lshift));
+            }
 
-        for i in 0..(bits.len()-1) {
-            self.bits.push((bits[i] >> rshift) | (bits[i + 1] << lshift));
-        }
-
-        if len > rshift + ((bits.len() - 1) * VEC_BITS) {
-            self.bits.push(bits[bits.len() - 1] >> rshift);
+            if len > rshift + ((byte_len - 1) * VEC_BITS) {
+                self.bits.push(bits[byte_len - 1] >> rshift);
+            }
         }
 
         self.len += len;
+
+        if self.len % VEC_BITS > 0 {
+            let last = self.bits.len() - 1;
+            self.bits[last] &= (1 << (self.len % VEC_BITS)) - 1;
+        }
     }
 }
 
@@ -155,36 +153,29 @@ impl<'a> BitStream<'a> {
         &mut self,
         len: u32
     ) -> u16 {
-        let mut len = len as usize;
-
-        assert!(self.len - self.index >= len);
-        assert!(len <= VEC_BITS);
+        assert!(self.len - self.index >= len as usize);
+        assert!(len <= u16::BITS);
 
         let mut ret = [0; std::mem::size_of::<u16>()];
         let mut b = 0;
-        let limit = self.index + len;
+        let shift = self.index % VEC_BITS;
+        let limit = self.index + len as usize;
         while self.index < limit {
-            let byte_len = std::cmp::min(VEC_BITS, len);
+            let byte_len = std::cmp::min(VEC_BITS, limit - self.index);
+            let i = self.index / VEC_BITS;
 
-            ret[b] = if self.index % VEC_BITS == 0 {
-                self.bits[self.index / VEC_BITS]
+            ret[b] = if shift == 0 {
+                self.bits[i]
             } else {
-                let i = self.index / VEC_BITS;
-                let shift = self.index % VEC_BITS;
-                (self.bits[i] >> shift) | if VEC_BITS - shift < byte_len {
-                    self.bits[i + 1] << shift
-                } else {
-                    0
-                }
+                (self.bits[i] >> shift) | (self.bits[i + 1] << (VEC_BITS - shift))
             };
 
             self.index += byte_len;
-            len -= byte_len;
             b += 1;
         }
 
         assert!(self.index == limit);
-        return ret[0] as u16 | ((ret[1] as u16) << u8::BITS);
+        return u16::from_le_bytes(ret) & ((1 << len) - 1);
     }
 }
 

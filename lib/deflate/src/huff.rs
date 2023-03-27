@@ -6,18 +6,17 @@
 //!
 
 use std::cmp::{Ordering, max};
-use std::collections::VecDeque;
 
 use crate::bits::*;
 use crate::lz::Token;
 
-/// The number of phrases which can be placed in a frequency table. One for each byte value plus
-/// 15 different bit lengths for offsets/run-lengths + 1 stop code.
-const NUM_CODES: usize = (u8::MAX as usize + 1) + 15 + 1;
-
 /// The maximum number of bits an offset can encode. This is a constant within the deflate
 /// algorithm.
 const OFFSET_MAX_BITS: u32 = u16::BITS - 1;
+
+/// The number of phrases which can be placed in a frequency table. One for each byte value plus
+/// 15 different bit lengths for offsets/run-lengths + 1 stop code.
+const NUM_CODES: usize = (u8::MAX as usize + 1) + OFFSET_MAX_BITS as usize + 1;
 
 /// A leaf in the huffman tree.
 ///
@@ -25,11 +24,14 @@ const OFFSET_MAX_BITS: u32 = u16::BITS - 1;
 /// the number of bits within the offset, where any number greater than 1 has an implicit one,
 /// and all numbers are followed by their remaining explicit bits in the stream.
 ///
+/// Since the range of valid offsets is 1..u16::MAX-1, we store offsets from tokens as offset-1
+/// so that they can be stored in 15 bits instead of 16.
+///
 /// Bytes are values [0, 256).
 /// Offsets are values [256, 271).
 /// The stop code is 271.
 #[derive(Copy, Clone)]
-struct HTreeLeaf(u16);
+struct Codeword(u16);
 
 /// A node in a huffman encoding tree.
 struct HTreeNode {
@@ -40,14 +42,20 @@ struct HTreeNode {
 /// The data in a node in the huffman tree.
 enum HTreeData {
     Link(Box<HTreeNode>),
-    Leaf(HTreeLeaf),
-    Stub
+    Leaf(Codeword)
+}
+
+/// A queue used to build the initial huffman tree from the frequency data.
+struct HQueue {
+    buf: [Option<(usize, HTreeData)>; NUM_CODES],
+    front: usize,
+    back: usize
 }
 
 /// The root node of a huffman tree.
 struct HTree(HTreeData);
 
-impl HTreeLeaf {
+impl Codeword {
     /// The inclusive value range for byte codewords.
     const BYTE_CODE_BASE: u16 = 0;
     const BYTE_CODE_LIMIT: u16 = u8::MAX as u16;
@@ -59,19 +67,35 @@ impl HTreeLeaf {
     /// The phrase used to mark that a bit stream has ended.
     const STOP_CODE: u16 = Self::OFFSET_CODE_LIMIT + 1;
 
+    /// Converts a codeword to an Codeword.
+    fn from_raw(
+        code: u16
+    ) -> Self {
+        assert!(Self::BYTE_CODE_BASE <= code && code <= Self::STOP_CODE);
+        Self(code)
+    }
+
+    /// Converts a leaf into a huffman codeword.
+    fn as_raw(
+        self
+    ) -> u16 {
+        self.0
+    }
+
     /// Emits any excess bits associated with the leaf.
     fn emit_bits(
         token: &Token,
         vec: &mut BitVec
     ) {
-        if let Token::Offset(offset) = token {
-            let bits = max(bit_width(*offset) - 1, 1);
-            assert!(*offset <= 1 || *offset & (1 << bits) > 0);
-            vec.putw(*offset, bits);
+        if let Token::Offset(raw_offset) = token {
+            let offset = *raw_offset - 1;
+            let bits = max(bit_width(offset) - 1, 1);
+            assert!(offset <= 1 || offset == (offset & ((1 << bits) - 1)) | (1 << bits));
+            vec.putw(offset, bits);
         }
     }
 
-    /// Creates a new HTreeLeaf from an LZ77 token.
+    /// Creates a new Codeword from an LZ77 token.
     fn from_token(
         token: &Token
     ) -> Self {
@@ -79,17 +103,10 @@ impl HTreeLeaf {
             Token::Phrase(b) => Self(*b as u16),
             Token::Stop => Self(Self::STOP_CODE),
             Token::Offset(offset) => {
-                Self(Self::BYTE_CODE_LIMIT + bit_width(*offset) as u16)
+                assert!(*offset < (1 << OFFSET_MAX_BITS));
+                Self(Self::BYTE_CODE_LIMIT + bit_width(*offset - 1) as u16)
             }
         }
-    }
-
-    /// Converts a codeword to an HTreeLeaf.
-    fn from_codeword(
-        code: u16
-    ) -> Self {
-        assert!(Self::BYTE_CODE_BASE <= code && code <= Self::STOP_CODE);
-        Self(code)
     }
 
     /// Converts a leaf into a token, consuming from the data stream as necessary.
@@ -104,22 +121,12 @@ impl HTreeLeaf {
             Self::STOP_CODE => Token::Stop,
             Self::OFFSET_CODE_BASE..=Self::OFFSET_CODE_LIMIT => {
                 let bits: u32 = (self.0 - Self::BYTE_CODE_LIMIT) as u32;
-                assert!((0 < bits) && (bits <= OFFSET_MAX_BITS));
-                Token::Offset(if bits > 1 {
-                    stream.getw(bits - 1) | (1 << (bits - 1))
-                } else {
-                    stream.getw(1)
-                })
+                let extra_bits: u32 = max(bits - 1, 1) as u32;
+                assert!((0 < extra_bits) && (extra_bits <= OFFSET_MAX_BITS - 1));
+                Token::Offset((stream.getw(extra_bits) | (((bits > 1) as u16) << extra_bits)) + 1)
             },
             _ => unreachable!()
         }
-    }
-
-    /// Converts a leaf into a huffman codeword.
-    fn to_codeword(
-        self
-    ) -> u16 {
-        self.0
     }
 }
 
@@ -141,9 +148,8 @@ impl HTreeData {
                 vec.pop();
             },
             Self::Leaf(node) => {
-                assert!(enc[node.to_codeword() as usize].replace(vec.clone()).is_none());
-            },
-            Self::Stub => ()
+                assert!(enc[node.as_raw() as usize].replace(vec.clone()).is_none());
+            }
         }
     }
 
@@ -160,9 +166,9 @@ impl HTreeData {
             },
             Self::Leaf(node) => {
                 assert!(depth > 0);
-                table[node.to_codeword() as usize] = depth.try_into().unwrap();
-            },
-            Self::Stub => ()
+                assert!(table[node.as_raw() as usize] == 0);
+                table[node.as_raw() as usize] = depth.try_into().unwrap();
+            }
         }
     }
 
@@ -172,16 +178,54 @@ impl HTreeData {
         index: &mut usize,
         table: &[(u16, u16)]
     ) -> Self {
-        if *index >= table.len() {
-            Self::Stub
-        } else if table[*index].1 == depth.try_into().unwrap() {
-            let ret = Self::Leaf(HTreeLeaf::from_codeword(table[*index].0));
+        if table[*index].1 == depth.try_into().unwrap() {
+            let ret = Self::Leaf(Codeword::from_raw(table[*index].0));
             *index += 1;
             ret
         } else {
             let left = Self::from_pair_table(depth + 1, index, table);
             let right = Self::from_pair_table(depth + 1, index, table);
             Self::Link(Box::new(HTreeNode { left, right }))
+        }
+    }
+}
+
+impl HQueue {
+    fn new() -> Self {
+        const INIT_ELEM: Option<(usize, HTreeData)> = None;
+        Self { buf: [INIT_ELEM; NUM_CODES], front: 0, back: 0 }
+    }
+
+    fn len(
+        &self
+    ) -> usize {
+        self.back - self.front
+    }
+
+    fn peek(
+        &self
+    ) -> Option<&(usize, HTreeData)> {
+        self.buf[self.front].as_ref()
+    }
+
+    fn enq(
+        &mut self,
+        data: (usize, HTreeData)
+    ) {
+        assert!(self.back < NUM_CODES);
+        assert!(self.buf[self.back].replace(data).is_none());
+        self.back += 1;
+    }
+
+    fn deq(
+        &mut self
+    ) -> Option<(usize, HTreeData)> {
+        if self.len() == 0 {
+            None
+        } else {
+            let ret = self.buf[self.front].take();
+            self.front += 1;
+            return ret;
         }
     }
 }
@@ -195,29 +239,26 @@ impl HTree {
         data: &[Token]
     ) -> Self {
         // Gets a minimum weighted element from the two queues.
-        let qmin = |
-            l: &mut VecDeque<(usize, HTreeData)>,
-            r: &mut VecDeque<(usize, HTreeData)>
-        | -> (usize, HTreeData) {
-            if l.front().is_some() && r.front().is_some() {
-                if l.front().unwrap().0 <= r.front().unwrap().0 {
-                    l.pop_front().unwrap()
+        let qmin = |lhs: &mut HQueue, rhs: &mut HQueue| -> (usize, HTreeData) {
+            if lhs.peek().is_some() && rhs.peek().is_some() {
+                if lhs.peek().unwrap().0 <= rhs.peek().unwrap().0 {
+                    lhs.deq().unwrap()
                 } else {
-                    r.pop_front().unwrap()
+                    rhs.deq().unwrap()
                 }
-            } else if l.front().is_some() {
-                l.pop_front().unwrap()
+            } else if lhs.peek().is_some() {
+                lhs.deq().unwrap()
             } else {
-                r.pop_front().unwrap()
+                rhs.deq().unwrap()
             }
         };
 
         let mut base_q = Self::create_base_queue(data);
-        let mut work_q = VecDeque::new();
+        let mut work_q = HQueue::new();
         while base_q.len() + work_q.len() > 1 {
             let left = qmin(&mut base_q, &mut work_q);
             let right = qmin(&mut base_q, &mut work_q);
-            work_q.push_back((left.0 + right.0, HTreeData::Link(Box::new(HTreeNode {
+            work_q.enq((left.0 + right.0, HTreeData::Link(Box::new(HTreeNode {
                 left: left.1,
                 right: right.1
             }))));
@@ -246,7 +287,6 @@ impl HTree {
                 HTreeData::Leaf(leaf) => {
                     return leaf.to_token(bits);
                 }
-                HTreeData::Stub => panic!("Cannot decode from stub!")
             }
         }
     }
@@ -293,21 +333,65 @@ impl HTree {
     }
 
     /// Serializes a length table into a bit vector.
+    ///
+    /// The length table is formatted as:
+    /// - LEN: 4-bit bit-length width encoding.
+    /// - RUN: 4-bit run-length width encoding.
+    /// - An item group which is either:
+    ///     * 0 + LEN bits encoding a single item.
+    ///     * 1 + LEN bits encoding an item + RUN bits encoding how many times to repeat it.
     fn serialize_length_table(
         table: [u16; NUM_CODES],
         vec: &mut BitVec
     ) {
-        // Determine how many bits are needed to represent each length.
+        // Determine how many bits are needed to represent each length and the maximum match
+        // width. Additionally, build up an in-order table of matches.
         let mut max_len: u32 = 0;
+        let mut max_run: u32 = 0;
+        let mut cur_run: u16 = 0;
+        let mut cur_match: u16 = 0;
+        let mut num_matches: usize = 0;
+        let mut matches = [(0, 0); NUM_CODES];
         for b in table.iter() {
             max_len = std::cmp::max(max_len, bit_width(*b));
+
+            if cur_run == 0 {
+                // First iteration.
+                cur_match = *b;
+                cur_run = 1;
+            } else if *b == cur_match {
+                cur_run += 1;
+            } else {
+                max_run = std::cmp::max(max_run, bit_width(cur_run));
+                matches[num_matches] = (cur_match, cur_run);
+                num_matches += 1;
+
+                cur_run = 1;
+                cur_match = *b;
+            }
         }
+
+        max_run = std::cmp::max(max_run, bit_width(cur_run));
+        matches[num_matches] = (cur_match, cur_run);
+
         assert!(max_len as usize <= NUM_CODES);
+        assert!(bit_width(max_len as u16) <= Self::LEN_PREFIX_BITS);
+        assert!(bit_width(max_run as u16) <= Self::LEN_PREFIX_BITS);
 
         vec.putb(max_len as u8, Self::LEN_PREFIX_BITS);
+        vec.putb(max_run as u8, Self::LEN_PREFIX_BITS);
 
-        for b in table.iter() {
-            vec.putw(*b, max_len);
+        for (b, run) in matches.iter() {
+            if *run == 0 { break; }
+
+            if *run == 1 {
+                vec.push(Bit::Zero);
+                vec.putw(*b, max_len);
+            } else {
+                vec.push(Bit::One);
+                vec.putw(*b, max_len);
+                vec.putw(*run, max_run);
+            }
         }
     }
 
@@ -315,36 +399,51 @@ impl HTree {
     fn deserialize_length_table(
         stream: &mut BitStream<'_>
     ) -> [u16; NUM_CODES] {
-        // Get bit width of each length.
+        // Get bit/run width of each item.
         let max_len: u32 = stream.getw(Self::LEN_PREFIX_BITS) as u32;
+        let max_run: u32 = stream.getw(Self::LEN_PREFIX_BITS) as u32;
 
         let mut ret = [0; NUM_CODES];
-        for i in 0..NUM_CODES {
-            ret[i] = stream.getw(max_len);
+        let mut i = 0;
+        while i < NUM_CODES {
+            if stream.next().unwrap() == Bit::Zero {
+                ret[i] = stream.getw(max_len);
+                i += 1;
+            } else {
+                let b = stream.getw(max_len);
+                let run = stream.getw(max_run);
+                for _ in 0..run {
+                    ret[i] = b;
+                    i += 1;
+                }
+            }
         }
+
         return ret;
     }
 
     /// Creates a queue of huffman nodes from a base data stream.
     fn create_base_queue(
         data: &[Token]
-    ) -> VecDeque<(usize, HTreeData)> {
+    ) -> HQueue {
         assert!(data.len() > 0);
         let mut freq = [0; NUM_CODES];
         for token in data.iter() {
-            freq[HTreeLeaf::from_token(token).to_codeword() as usize] += 1;
+            freq[Codeword::from_token(token).as_raw() as usize] += 1;
         }
 
-        let mut base_q = Vec::new();
-        for (b, f) in freq.iter().enumerate() {
+        let mut index_freq = [(0, 0); NUM_CODES];
+        for (i, f) in freq.iter().enumerate() { index_freq[i] = (i, *f); }
+        index_freq.sort_by(|lhs, rhs| lhs.1.cmp(&rhs.1));
+
+        let mut q = HQueue::new();
+        for (b, f) in index_freq.iter() {
             if *f > 0 {
-                base_q.push((*f, HTreeData::Leaf(HTreeLeaf::from_codeword(b as u16))));
+                q.enq((*f, HTreeData::Leaf(Codeword::from_raw(*b as u16))));
             }
         }
 
-        assert!(base_q.len() > 0);
-        base_q.sort_by(|lhs, rhs| lhs.0.cmp(&rhs.0));
-        return VecDeque::from(base_q);
+        return q;
     }
 }
 
@@ -359,8 +458,8 @@ pub fn compress(
 
     let table = tree.into_encode_table();
     for b in data.iter() {
-        ret.append(table[HTreeLeaf::from_token(b).to_codeword() as usize].as_ref().unwrap());
-        HTreeLeaf::emit_bits(b, &mut ret);
+        ret.append(table[Codeword::from_token(b).as_raw() as usize].as_ref().unwrap());
+        Codeword::emit_bits(b, &mut ret);
     }
 
     ret.into_vec()

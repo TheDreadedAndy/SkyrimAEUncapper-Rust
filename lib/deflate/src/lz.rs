@@ -5,10 +5,12 @@
 //! @bug No known bugs.
 //!
 
-use core::ops::Index;
-
 /// The minimum length for a match to be compressed.
 const MIN_MATCH_SIZE: usize = 4;
+
+/// The maximum length of a match before it must be terminated. The huffman implementation expects
+/// this to be the maximum.
+const MAX_MATCH_SIZE: usize = 1 << 15;
 
 /// The window size of the item being compressed to look backward in.
 const WINDOW_SIZE: usize = 1 << 15;
@@ -66,12 +68,12 @@ impl Window {
     ) -> Result<MatchGroup, (u16, Vec<u8>)> {
         let mut new_matches = Vec::new();
         for offset in group.offsets.iter() {
-            if self[self.size - (*offset as usize)] == next {
+            if self.buf[(self.front + (self.size - (*offset as usize))) % WINDOW_SIZE] == next {
                 new_matches.push(*offset);
             }
         }
 
-        if new_matches.len() > 0 {
+        if new_matches.len() > 0 && group.stream.len() < MAX_MATCH_SIZE {
             group.stream.push(next);
             Ok(MatchGroup { offsets: new_matches, stream: group.stream })
         } else {
@@ -87,7 +89,7 @@ impl Window {
     ) -> Result<MatchGroup, ()> {
         let mut offsets: Vec<u16> = Vec::new();
         for i in 0..self.size {
-            if self[i] == next {
+            if self.buf[(self.front + i) % WINDOW_SIZE] == next {
                 offsets.push((self.size - i).try_into().unwrap());
             }
         }
@@ -97,17 +99,6 @@ impl Window {
         } else {
             Err(())
         }
-    }
-}
-
-impl Index<usize> for Window {
-    type Output = u8;
-    fn index(
-        &self,
-        index: usize
-    ) -> &Self::Output {
-        assert!(index < self.size);
-        &self.buf[(self.front + index) % WINDOW_SIZE]
     }
 }
 
