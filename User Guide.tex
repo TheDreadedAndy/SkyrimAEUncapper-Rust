@@ -25,7 +25,146 @@ to answer any questions regardless.
 \pagebreak
 \section{Change Log}
 
-TODO
+Note: In this section, versions considered stable (i.e. no major bugs) are in
+bold, and versions considered unstable (i.e. major issues which render the mod
+unusable for some players) are in italics.
+
+\emph{1.0.0}
+\begin{itemize}
+    \item Initial release.
+\end{itemize}
+
+\emph{1.0.1}
+\begin{itemize}
+    \item Fixed INI files not saving correctly.
+    \item Fixed game setting loading not being address independent.
+    \item Added compatibility with 1.6.317 to 1.6.353.
+\end{itemize}
+
+\emph{1.0.2}
+\begin{itemize}
+    \item Fixed an issue where the perk calculation was just completely wrong.
+    \item Fixed an issue where unused perk points would be deleted at level up.
+\end{itemize}
+
+\textbf{1.0.3}
+\begin{itemize}
+    \item Fixed an issue where having multiple perk level brackets made the perk
+          points additive across all levels.
+    \item Rewrote the config loading system to be easier to extend with new
+          fields later.
+\end{itemize}
+
+\textbf{1.1.0}
+\begin{itemize}
+    \item Added an option to disable each individual group of patches. Disabled
+          patch groups will not be installed to the game engine, increasing mod
+          compatibility.
+    \item Added individual caps for enchanting charge and magnitude. These caps
+          are still capped by the formula cap for enchanting.
+    \item Added an option to increase off-attributes (e.g. health and magicka
+          when stamina was selected) at level-up.
+    \item Fixed the displayed colors of skills, whose formula cap was lower than
+          their actual cap, in the skills menu.
+\end{itemize}
+
+\textbf{2.0.0}
+\begin{itemize}
+    \item Greatly improved the information provided by the log file.
+    \item Added signature checking to code injection. The mod will now refuse to
+          install a patch if the code at the patch location does not exactly
+          match what the code was when the patch was written.
+    \item Fixed the enchanting max\_charge formula using the wrong enchanting
+          cap.
+    \item Fixed an issue which prevented skills from being legendary'd in most
+          cases.
+    \item Fixed an issue where the legendary skill settings were not applied if
+          the key for legendarying skills had been rebound (note: for some
+          reason, rebound keys for this take a completely different code path).
+\end{itemize}
+
+\emph{2.0.1}
+\begin{itemize}
+    \item Fixed possible undefined behavior if/when a native game function threw
+          an exception which then tried to unwind through this plugins code.
+    \item Removed branch trampoline allocation. This mod no longer counts toward
+          the practical limit on the number of SKSE plugins which can be
+          installed.
+    \item Fixed an engine bug which sometimes caused the legendary skill hint to
+          be displayed incorrectly, and applied that bugs fix to this mods
+          changes.
+\end{itemize}
+
+\emph{2.0.2}
+\begin{itemize}
+    \item Fixed a plugin panic when opening the vampire lord perk tree.
+\end{itemize}
+
+\emph{2.0.3}
+\begin{itemize}
+    \item Fixed an issue which prevented the address library from loading on
+          the GOG version of Skyrim unless its database file was renamed.
+\end{itemize}
+
+\textbf{2.0.4}
+\begin{itemize}
+    \item Fixed an issue which made bLegendaryKeepSkillLevel reset the level
+          to a garbage value.
+\end{itemize}
+
+\emph{2.1.0}
+\begin{itemize}
+    \item Added compatibility with game versions 1.5.97 and below.
+    \item Cleaned up the legendary skill and enchantment charge hook
+          implementations.
+    \item Added the ability to apply skill XP multipliers to the XP offsets
+          as well as the base values.
+\end{itemize}
+
+\emph{2.1.1}
+\begin{itemize}
+    \item Fixed an issue which prevented patches from being disabled.
+\end{itemize}
+
+\emph{2.1.2}
+\begin{itemize}
+    \item Moved a patch to enable compatibility with meh321's .NET framework.
+    \item Added an option to disable only the formula cap UI fixes, without
+          disabling the formula cap patch itself.
+    \item Fixed up assembly code to avoid possible register clobbering, mostly
+          out of paranoia.
+\end{itemize}
+
+\emph{2.1.3}
+\begin{itemize}
+    \item Fixed a regression which made this mod incompatible with the
+          eXPerience mod.
+\end{itemize}
+
+\textbf{2.1.4}
+\begin{itemize}
+    \item Fixed a regression in the previous version which made skills cap based
+          on a garbage value in the AE implementation.
+\end{itemize}
+
+\textbf{2.1.5}
+\begin{itemize}
+    \item Added a system for detecting plugin conflicts which corrupt this mods
+          patches after they have already been installed to the games code. Note
+          that if this situation is encountered the game will \emph{always} be
+          closed since it cannot be safely run in such a state.
+\end{itemize}
+
+\textbf{2.2.0}
+\begin{itemize}
+    \item Added a system for automatically adding missing fields to the INI file
+          without overwriting the users current settings/formatting/comments.
+    \item Fixed a crash when getting/spending perks at a level below the lowest
+          defined level in the INI file.
+    \item Fixed a crash encountered when the path to a file used by this plugin
+          contained non-unicode text (in practice, this meant pretty much any
+          non-english text).
+\end{itemize}
 
 \pagebreak
 \section{Bug Reports}
