@@ -22,7 +22,7 @@ configure this plugin. My hope is that this file will obviate the need
 to ask me questions on the Nexus forum, but I will, of course, be willing
 to answer any questions regardless.
 
-\pagebreak
+\startblock
 \section{Change Log}
 
 Note: In this section, versions considered stable (i.e. no major bugs) are in
@@ -33,20 +33,26 @@ unusable for some players) are in italics.
 \begin{itemize}
     \item Initial release.
 \end{itemize}
+\stopblock
 
+\startblock
 \emph{1.0.1}
 \begin{itemize}
     \item Fixed INI files not saving correctly.
     \item Fixed game setting loading not being address independent.
     \item Added compatibility with 1.6.317 to 1.6.353.
 \end{itemize}
+\stopblock
 
+\startblock
 \emph{1.0.2}
 \begin{itemize}
     \item Fixed an issue where the perk calculation was just completely wrong.
     \item Fixed an issue where unused perk points would be deleted at level up.
 \end{itemize}
+\stopblock
 
+\startblock
 \textbf{1.0.3}
 \begin{itemize}
     \item Fixed an issue where having multiple perk level brackets made the perk
@@ -54,7 +60,9 @@ unusable for some players) are in italics.
     \item Rewrote the config loading system to be easier to extend with new
           fields later.
 \end{itemize}
+\stopblock
 
+\startblock
 \textbf{1.1.0}
 \begin{itemize}
     \item Added an option to disable each individual group of patches. Disabled
@@ -67,7 +75,9 @@ unusable for some players) are in italics.
     \item Fixed the displayed colors of skills, whose formula cap was lower than
           their actual cap, in the skills menu.
 \end{itemize}
+\stopblock
 
+\startblock
 \textbf{2.0.0}
 \begin{itemize}
     \item Greatly improved the information provided by the log file.
@@ -82,7 +92,9 @@ unusable for some players) are in italics.
           the key for legendarying skills had been rebound (note: for some
           reason, rebound keys for this take a completely different code path).
 \end{itemize}
+\stopblock
 
+\startblock
 \emph{2.0.1}
 \begin{itemize}
     \item Fixed possible undefined behavior if/when a native game function threw
@@ -94,24 +106,32 @@ unusable for some players) are in italics.
           be displayed incorrectly, and applied that bugs fix to this mods
           changes.
 \end{itemize}
+\stopblock
 
+\startblock
 \emph{2.0.2}
 \begin{itemize}
     \item Fixed a plugin panic when opening the vampire lord perk tree.
 \end{itemize}
+\stopblock
 
+\startblock
 \emph{2.0.3}
 \begin{itemize}
     \item Fixed an issue which prevented the address library from loading on
           the GOG version of Skyrim unless its database file was renamed.
 \end{itemize}
+\stopblock
 
+\startblock
 \textbf{2.0.4}
 \begin{itemize}
     \item Fixed an issue which made bLegendaryKeepSkillLevel reset the level
           to a garbage value.
 \end{itemize}
+\stopblock
 
+\startblock
 \emph{2.1.0}
 \begin{itemize}
     \item Added compatibility with game versions 1.5.97 and below.
@@ -120,12 +140,16 @@ unusable for some players) are in italics.
     \item Added the ability to apply skill XP multipliers to the XP offsets
           as well as the base values.
 \end{itemize}
+\stopblock
 
+\startblock
 \emph{2.1.1}
 \begin{itemize}
     \item Fixed an issue which prevented patches from being disabled.
 \end{itemize}
+\stopblock
 
+\startblock
 \emph{2.1.2}
 \begin{itemize}
     \item Moved a patch to enable compatibility with meh321's .NET framework.
@@ -134,19 +158,25 @@ unusable for some players) are in italics.
     \item Fixed up assembly code to avoid possible register clobbering, mostly
           out of paranoia.
 \end{itemize}
+\stopblock
 
+\startblock
 \emph{2.1.3}
 \begin{itemize}
     \item Fixed a regression which made this mod incompatible with the
           eXPerience mod.
 \end{itemize}
+\stopblock
 
+\startblock
 \textbf{2.1.4}
 \begin{itemize}
     \item Fixed a regression in the previous version which made skills cap based
           on a garbage value in the AE implementation.
 \end{itemize}
+\stopblock
 
+\startblock
 \textbf{2.1.5}
 \begin{itemize}
     \item Added a system for detecting plugin conflicts which corrupt this mods
@@ -154,7 +184,9 @@ unusable for some players) are in italics.
           that if this situation is encountered the game will \emph{always} be
           closed since it cannot be safely run in such a state.
 \end{itemize}
+\stopblock
 
+\startblock
 \textbf{2.2.0}
 \begin{itemize}
     \item Added a system for automatically adding missing fields to the INI file
@@ -165,8 +197,9 @@ unusable for some players) are in italics.
           contained non-unicode text (in practice, this meant pretty much any
           non-english text).
 \end{itemize}
+\stopblock
 
-\pagebreak
+\startblock
 \section{Bug Reports}
 
 If you encounter an issue with the plugin, which may include strange game
@@ -180,11 +213,11 @@ When reporting a bug, please include a copy of the log file found in
 <Documents>/My Games/Skyrim Special Edition/SKSE/SkyrimUncapper.log,
 as well as a brief description of the issue/what you were doing when you
 encountered it. This information will allow me to resolve the problem promptly.
-
-\pagebreak
-\section{INI file generation and updating}
+\stopblock
 
 \startblock
+\section{INI file generation and updating}
+
 \subsection{INI file location}
 
 The location of the INI file will depend on a few factors. Those being the
@@ -200,7 +233,8 @@ mod manager.
 \stopblock
 
 \startblock
-\subsubsection{Kassent/Vadfromnu's uncapper, or versions 1.1.0 and below, or for those updating from any of these}
+\subsubsection{Kassent/Vadfromnu's uncapper, or versions 1.1.0 and below,
+or for those updating from any of these}
 
 Those who are using/used these versions of the plugin will have had their
 INI file generated. MO2 will place this generated INI file in the overwrite
@@ -265,12 +299,13 @@ means that the \textit{Version} field used in previous versions of the uncapper
 is ignored by these versions.
 \stopblock
 
-\pagebreak
+\startblock
 \section{INI Configuration}
 
 The INI configuration is split into sections, with most sections having some
 way to disable them entirely from the general section. This ability was
 introduced in version 1.1.0 of the plugin.
+\stopblock
 
 \startblock
 \subsection{[General]}
@@ -312,11 +347,12 @@ should be updated. Versions 2.0.0 and above ignore this field.
 
 \subsection{[SkillCaps]}
 
-\pagebreak
+\startblock
 \section{External Links}
 
 \href{https://github.com/TheDreadedAndy/SkyrimAEUncapper-Rust}{GitHub}
 
 \href{https://www.nexusmods.com/skyrimspecialedition/mods/82558}{Nexus}
+\stopblock
 
 \end{document}
