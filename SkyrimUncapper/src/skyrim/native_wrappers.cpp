@@ -13,14 +13,14 @@ typedef uint32_t u32;
 typedef uint16_t u16;
 typedef float f32;
 
-#define CATCH_UNWIND(body)\
-do {\
-    try {\
-        body\
-    } catch(...) {\
-        handle_ffi_exception(__func__, sizeof(__func__) - 1);\
-    }\
-} while(0)\
+#define CATCH_UNWIND(body)                                    \
+do {                                                          \
+    try {                                                     \
+        body                                                  \
+    } catch(...) {                                            \
+        handle_ffi_exception(__func__, sizeof(__func__) - 1); \
+    }                                                         \
+} while(0)                                                    \
 
 extern "C" {
     /* Native entry points */
@@ -39,28 +39,22 @@ extern "C" {
 
     /* Wrappers */
 
-    u16
-    get_level_net(
-        void *player
-    ) {
+    u16 get_level_net(void *player)
+    {
         CATCH_UNWIND(return get_level_entry(player););
     }
 
-    f32
-    player_avo_get_base_net(
-        void *av,
-        int attr
-    ) {
+    f32 player_avo_get_base_net(void *av,
+                                int  attr)
+    {
         CATCH_UNWIND(return player_avo_get_base_entry(av, attr););
     }
 
-    f32
-    player_avo_get_current_net(
-        void *av,
-        int attr,
-        bool is_se,
-        bool patch_en
-    ) {
+    f32 player_avo_get_current_net(void *av,
+                                   int  attr,
+                                   bool is_se,
+                                   bool patch_en)
+    {
         CATCH_UNWIND(
             if (!patch_en) {
                 // No patch, so we can just call the og function
@@ -76,22 +70,18 @@ extern "C" {
         );
     }
 
-    void
-    player_avo_mod_base_net(
-        void *av,
-        int attr,
-        f32 delta
-    ) {
+    void player_avo_mod_base_net(void *av,
+                                 int  attr,
+                                 f32  delta)
+    {
         CATCH_UNWIND(player_avo_mod_base_entry(av, attr, delta););
     }
 
-    void
-    player_avo_mod_current_net(
-        void *av,
-        u32 unk1,
-        int attr,
-        f32 delta
-    ) {
+    void player_avo_mod_current_net(void *av,
+                                    u32  unk1,
+                                    int  attr,
+                                    f32  delta)
+    {
         CATCH_UNWIND(player_avo_mod_current_entry(av, unk1, attr, delta););
     }
 }

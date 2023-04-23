@@ -33,7 +33,9 @@ impl PlayerCharacter {
         &self
     ) -> &Cell<u8> {
         unsafe {
-            // SAFETY: These offsets have been verified to be correct.
+            // SAFETY: These offsets have been verified to be correct. Cell is transparent, so we
+            //         can use it here as a safe wrapper around a variable that we don't have
+            //         exclusive access to.
             Cell::from_mut(self.version_offset::<u8>(0xb09, 0xb01).as_mut().unwrap())
         }
     }

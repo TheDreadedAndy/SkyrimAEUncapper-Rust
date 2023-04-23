@@ -3,10 +3,13 @@ name = "skyrim_patcher"
 version = "1.1.0"
 edition = "2021"
 
-[features]
-alloc_trampoline = ["skse64/trampoline"]
-
 [dependencies]
 skse64 = { path = "../skse64" }
 versionlib = { path = "../versionlib" }
 racy_cell = { path = "../racy_cell" }
+
+[dependencies.windows-sys]
+version = "0.45.0"
+features = [
+    "Win32_System_Memory"
+]

@@ -15,11 +15,66 @@ use std::ffi::c_int;
 use skyrim_patcher::{Descriptor, Hook, Register, GameLocation, GameRef, signature};
 
 use crate::settings;
-use crate::hook_wrappers::*;
 use crate::skyrim::*;
 
-/// The base game threshold for legendarying a skill.
-const BASE_LEGENDARY_THRESHOLD: f32 = 100.0;
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Patch wrappers
+////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+// These are the assembly entry points that ensure that the jump between skyrims game code and our
+// patches is safe and well-defined. Documentation on how the individual patches accomplish this
+// can be found in hook_wrappers.S.
+
+extern "system" {
+    fn skill_cap_patch_wrapper_ae();
+    fn skill_cap_patch_wrapper_se();
+    fn max_charge_begin_wrapper_ae();
+    fn max_charge_begin_wrapper_se();
+    fn max_charge_end_wrapper_ae();
+    fn max_charge_end_wrapper_se();
+    fn calculate_charge_points_per_use_wrapper_ae();
+    fn calculate_charge_points_per_use_wrapper_se();
+    fn player_avo_get_current_wrapper();
+    fn display_true_skill_level_hook_ae();
+    fn display_true_skill_level_hook_se();
+    fn display_true_skill_color_hook();
+    fn improve_player_skill_points_wrapper_ae();
+    fn improve_player_skill_points_wrapper_se();
+    fn improve_level_exp_by_skill_level_wrapper_ae();
+    fn improve_level_exp_by_skill_level_wrapper_se();
+    fn improve_attribute_when_level_up_wrapper();
+    fn modify_perk_pool_wrapper_ae();
+    fn modify_perk_pool_wrapper_se();
+    fn legendary_reset_skill_level_wrapper();
+    fn check_condition_for_legendary_skill_wrapper();
+    fn hide_legendary_button_wrapper_ae();
+    fn hide_legendary_button_wrapper_se();
+    fn clear_legendary_button_wrapper_ae();
+    fn clear_legendary_button_wrapper_se();
+}
+
+core::arch::global_asm! {
+    include_str!("hook_wrappers.S"),
+    options(att_syntax)
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Patch definitions
+////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+// These structures inform the skyrim patcher of where each patch is located for the various game
+// versions, and how the patch should be installed.
+//
+// Note that, for increased compatibility, we do not use calls/jumps that would require an indirect
+// or relative jump. Instead, each call/jump clobbers a register that is not currently being used.
+// This means that the plugin does not contribute to the practical limit on the number of SKSE
+// plugins that can be loaded at a time (due to there being a limited address space before the
+// skyrim binary), but it complicates the injection of hooks as some skyrim versions are compiled
+// with settings that allow the compiler to disobey calling conventions and assume that registers
+// that would conventionally be considered clobbered still hold their values.
+//
+// We additionally define strings to inform users of known conflicts, when the patches associated
+// with those conflicts are loaded by the game.
 
 // Mods we conflict with.
 const MEH_CUSTOM_SKILL: &str = "Meh321's Custom Skills Framework";
@@ -37,6 +92,8 @@ const LEVEL_MULT_CONFLICTS: &str = ZAX_EXPERIENCE;
 //
 #[no_mangle]
 static player_avo_get_current_return_trampoline: GameRef<usize> = GameRef::new();
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 
 disarray::disarray! {
     /// The hooks which must be installed by the game patcher.
@@ -608,6 +665,21 @@ disarray::disarray! {
     ];
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Patch implementations
+////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+// Note that these implementations are marked "no_mangle" so that they can easily be called from
+// the assembly wrappers. This, however, also marks the symbols as external, which means the loader
+// of this library file can also call these functions directly. There doesn't seem to be much that
+// can be done about this side effect, as even using "export_name" instead also causes the symbol
+// to be global.
+
+/// The base game threshold for legendarying a skill.
+const BASE_LEGENDARY_THRESHOLD: f32 = 100.0;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 /// Determines the real skill cap of the given skill.
 #[no_mangle]
 extern "system" fn get_skill_cap_hook(
@@ -616,6 +688,8 @@ extern "system" fn get_skill_cap_hook(
     assert!(settings::is_skill_cap_enabled());
     settings::get_skill_cap(ActorAttribute::from_raw_skill(skill).unwrap())
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Begins a calculation for weapon charge by setting the enchant cap to use the charge value.
 #[no_mangle]
@@ -669,6 +743,8 @@ extern "system" fn calculate_charge_points_per_use_hook(
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 /// Caps the formula results for each skill.
 #[no_mangle]
 extern "system" fn player_avo_get_current_hook(
@@ -688,6 +764,8 @@ extern "system" fn player_avo_get_current_hook(
 
     return val;
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Applies a multiplier to the exp gain for the given skill.
 #[no_mangle]
@@ -711,19 +789,6 @@ extern "system" fn improve_player_skill_points_hook(
     exp_base + exp_offset
 }
 
-/// Adjusts the number of perks the player recieves at level-up.
-#[no_mangle]
-extern "system" fn modify_perk_pool_hook(
-    count: i8
-) {
-    assert!(settings::is_perk_points_enabled());
-
-    let pool = get_player_perk_pool();
-    let delta = std::cmp::min(0xFF, settings::get_perk_delta(get_player_level()));
-    let res = (pool.get() as i16) + (if count > 0 { delta as i16 } else { count as i16 });
-    pool.set(std::cmp::max(0, std::cmp::min(0xff, res)) as u8);
-}
-
 /// Multiplies the exp gain of a level-up by the configured multiplier.
 #[no_mangle]
 extern "system" fn improve_level_exp_by_skill_level_hook(
@@ -743,6 +808,21 @@ extern "system" fn improve_level_exp_by_skill_level_hook(
     exp * *XP_PER_SKILL_RANK.get()
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Adjusts the number of perks the player recieves at level-up.
+#[no_mangle]
+extern "system" fn modify_perk_pool_hook(
+    count: i8
+) {
+    assert!(settings::is_perk_points_enabled());
+
+    let pool = get_player_perk_pool();
+    let delta = std::cmp::min(0xFF, settings::get_perk_delta(get_player_level()));
+    let res = (pool.get() as i16) + (if count > 0 { delta as i16 } else { count as i16 });
+    pool.set(std::cmp::max(0, std::cmp::min(0xff, res)) as u8);
+}
+
 ///
 /// Adjusts the attribute gain at each level-up based on the configured settings.
 ///
@@ -759,6 +839,8 @@ extern "system" fn improve_attribute_when_level_up_hook(
     player_avo_mod_base(ActorAttribute::Stamina, sp);
     player_avo_mod_current(ActorAttribute::CarryWeight, cw);
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Determines what level a skill should take on after being legendary'd.
 #[no_mangle]

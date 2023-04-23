@@ -7,9 +7,6 @@ edition = "2021"
 name = "SkyrimUncapper"
 crate-type = ["cdylib"]
 
-[features]
-alloc_trampoline = ["skyrim_patcher/alloc_trampoline"]
-
 [dependencies]
 racy_cell = { path = "../lib/racy_cell" }
 deflate = { path = "../lib/deflate" }

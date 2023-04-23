@@ -13,8 +13,14 @@ use super::PlayerCharacter;
 use super::{ActorValueOwner, ActorAttribute};
 use crate::settings;
 
-// Game objects.
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Game object hooks
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// A pointer to the global player variable in the skyrim binary.
 static PLAYER_OBJECT: GameRef<*mut *mut PlayerCharacter> = GameRef::new();
+
+// Game constants, which are also available through the settings map.
 pub static ENCHANTING_SKILL_COST_BASE: GameRef<&'static f32> = GameRef::new();
 pub static ENCHANTING_SKILL_COST_SCALE: GameRef<&'static f32> = GameRef::new();
 pub static ENCHANTING_COST_EXPONENT: GameRef<&'static f32> = GameRef::new();
@@ -123,6 +129,10 @@ disarray::disarray! {
     ];
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Unwind nets for native game functions
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 // C++ wrappers, which catch any exceptions and redirect to us in a defined way.
 extern "system" {
     fn get_level_net(player: *mut PlayerCharacter) -> u16;
@@ -154,6 +164,17 @@ unsafe extern "system" fn handle_ffi_exception(
         std::str::from_utf8_unchecked(std::slice::from_raw_parts(s, len))
     );
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Native game functions
+////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+// Note that some of these functions are also called by the assembly wrappers around the patch
+// hooks, and so have been marked as "no_mangle".
+//
+// Functions which are not always safe to be called, due to possible U.B. within Rust code, have
+// a safe and unchecked version, where the unchecked version makes no promisses that the underlying
+// data has a Rust equivalent defined.
 
 /// Helper for assembly code to get the player pointer.
 fn get_player() -> *mut PlayerCharacter {

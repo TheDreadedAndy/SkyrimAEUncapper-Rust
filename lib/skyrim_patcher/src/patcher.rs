@@ -16,20 +16,129 @@
 use std::cell::UnsafeCell;
 use std::ptr::NonNull;
 use std::vec::Vec;
+use std::slice;
+use std::ffi::c_void;
+use std::mem::size_of;
 
-#[cfg(feature = "alloc_trampoline")]
-use skse64::trampoline::Trampoline;
+use windows_sys::Win32::System::Memory::{VirtualProtect, PAGE_EXECUTE_READWRITE};
 
 use skse64::log::{skse_message, skse_fatal};
 use skse64::reloc::RelocAddr;
-use skse64::safe::{verify_flow, write_flow, Flow};
 use skse64::plugin_api::Message;
 use versionlib::VersionDb;
 use racy_cell::RacyCell;
 
-use crate::sig::{Signature, BinarySig};
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Code injection definitions
+////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+// These definitions are used to inject our patch hooks into the skyrim game code.
+//
+// Note that the injection implementations themselves were originally wrappers around the skse
+// code, but were eventually completely rewritten into the current implementation, which takes
+// a much different approach to assembling the required the instructions.
 
-pub use skse64::safe::Register;
+/// Encodes a x86-64 +rq register index.
+#[repr(u8)]
+#[derive(Copy, Clone)]
+pub enum Register {
+    Rax = 0,
+    Rcx = 1,
+    Rdx = 2,
+    Rbx = 3,
+    Rsp = 4,
+    Rbp = 5,
+    Rsi = 6,
+    Rdi = 7
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// The maximum patch size. Chosen as our largest patch size is 16 (call absolute).
+const MAX_ASM_HOOK_SIZE: usize = 16;
+
+/// Represents an assembled x86-64 patch to be written.
+struct AssemblyHook {
+    addr: usize,
+    buf: [u8; MAX_ASM_HOOK_SIZE],
+    len: usize
+}
+
+/// Encodes the addressing mode of an instruction, or its opcode.
+enum Encoding {
+    JumpNear,
+    CallRelative,
+    JumpRelative,
+    CallIndirect,
+    JumpIndirect,
+    CallReg(Register),
+    JumpReg(Register),
+    MoveImmQReg(Register),
+    RelativeD(usize),
+    AbsoluteSH(i8),
+    AbsoluteD(u32),
+    AbsoluteQ(u64)
+}
+
+///
+/// An enumeration of the different types of control flow which can be written.
+///
+/// Indirect calling methods require an address to write the trampoline to.
+///
+enum Flow {
+    CallRelative,
+    JumpRelative,
+    CallAbsolute,
+    JumpAbsolute,
+    CallRegAbsolute(Register),
+    JumpRegAbsolute(Register),
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Signature definitions
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+///
+/// @brief Used to match code to pre-defined signatures.
+///
+/// This enumeration is used in the system that ensures that, regardless of game version, the
+/// intended code is being overwritten.
+///
+#[derive(Copy, Clone, Debug)]
+#[repr(u8)]
+pub enum Opcode {
+    Code(u8),
+    Any
+}
+
+/// Identifies a distinct string of binary code within the skyrim binary.
+#[derive(Copy, Clone, Debug)]
+pub struct Signature(&'static [Opcode]);
+
+/// @brief Generates a new signature out of hex digits and question marks.
+#[macro_export]
+macro_rules! signature {
+    ( $($sig:tt),+; $size:literal ) => {{
+        let psize = [ $($crate::signature!(@munch $sig)),* ].len();
+        if $size != psize {
+            ::std::panic!("Patch size is incorrect.");
+        }
+        $crate::Signature::new(&[ $($crate::signature!(@munch $sig)),* ])
+    }};
+
+    ( @munch $op:literal ) => { $crate::Opcode::Code($op) };
+    ( @munch ? )           => { $crate::Opcode::Any       };
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Helper to print a signature in the games code.
+#[derive(Debug)]
+struct BinarySig(RelocAddr, usize);
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Patcher definitions
+////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Contains a version independent address ID for the specified skyrim versions.
 pub enum GameLocation {
@@ -43,24 +152,6 @@ pub enum GameLocation {
 #[derive(Clone)]
 pub enum Hook {
     None,
-
-    #[cfg(feature = "alloc_trampoline")]
-    Jump5 {
-        entry: *const u8,
-        trampoline: NonNull<UnsafeCell<usize>>
-    },
-
-    #[cfg(feature = "alloc_trampoline")]
-    Call5(*const u8),
-
-    #[cfg(feature = "alloc_trampoline")]
-    Jump6 {
-        entry: *const u8,
-        trampoline: NonNull<UnsafeCell<usize>>
-    },
-
-    #[cfg(feature = "alloc_trampoline")]
-    Call6(*const u8),
 
     DirectJump {
         entry: *const u8,
@@ -112,6 +203,16 @@ pub enum Descriptor {
     }
 }
 
+///
+/// Contains an address retrieved by the patcher.
+///
+/// This structure is a transparent usize, as some results may be visible to ASM code.
+///
+#[repr(transparent)]
+pub struct GameRef<T>(UnsafeCell<usize>, std::marker::PhantomData<T>);
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 /// Describes error reasons for why a descriptor result could not be located.
 #[derive(Debug)]
 enum DescriptorError {
@@ -124,14 +225,6 @@ enum DescriptorError {
 /// The result of an attempt to locate a descriptor.
 type FindResult = Result<RelocAddr, DescriptorError>;
 
-///
-/// Contains an address retrieved by the patcher.
-///
-/// This structure is a transparent usize, as some results may be visible to ASM code.
-///
-#[repr(transparent)]
-pub struct GameRef<T>(UnsafeCell<usize>, std::marker::PhantomData<T>);
-
 /// Contains information about a patch necessary to verify its integrity.
 struct PatchResult {
     name: &'static str,
@@ -142,6 +235,30 @@ struct PatchResult {
 
 /// Contains the set of patches installed by a call to apply().
 struct PatchSet(Vec<PatchResult>);
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Patcher implementation
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Flattens multiple arrays of patches into a single array.
+pub fn flatten_patch_groups<const N: usize>(
+    groups: &[&'static [Descriptor]]
+) -> [&'static Descriptor; N] {
+    let mut res = std::mem::MaybeUninit::<[&Descriptor; N]>::uninit();
+
+    let mut i = 0;
+    for g in groups.iter() {
+        for d in g.iter() {
+            unsafe { (*res.as_mut_ptr())[i] = d; }
+            i += 1;
+        }
+    }
+
+    assert!(i == N);
+    unsafe {
+        res.assume_init()
+    }
+}
 
 impl GameLocation {
     /// Finds the game address specified by this location.
@@ -198,29 +315,11 @@ impl std::fmt::Display for GameLocation {
 }
 
 impl Hook {
-    /// Gets the trampoline allocation size of the hook.
-    #[cfg(feature = "alloc_trampoline")]
-    fn alloc_size(
-        &self
-    ) -> usize {
-        match self {
-            #[cfg(feature = "alloc_trampoline")]
-            Hook::Jump5 { .. } | Hook::Call5(_) => 14,
-            #[cfg(feature = "alloc_trampoline")]
-            Hook::Jump6 { .. } | Hook::Call6(_) => 8,
-            _ => 0
-        }
-    }
-
     /// Gets the "on-site" patch size of the hook.
     fn patch_size(
         &self
     ) -> usize {
         match self {
-            #[cfg(feature = "alloc_trampoline")]
-            Hook::Jump5 { .. } | Hook::Call5(_) => 5,
-            #[cfg(feature = "alloc_trampoline")]
-            Hook::Jump6 { .. } | Hook::Call6(_) => 6,
             Hook::None => 0,
             Hook::DirectJump { .. } | Hook::DirectCall(_) => 5,
             Hook::Jump12 { .. } | Hook::Call12 { .. } => 12,
@@ -234,10 +333,6 @@ impl Hook {
         &self
     ) -> Option<NonNull<UnsafeCell<usize>>> {
         match self {
-            #[cfg(feature = "alloc_trampoline")]
-            Hook::Jump5  { trampoline, .. } | Hook::Jump6 { trampoline, .. } => {
-                Some(*trampoline)
-            },
             Hook::Jump12 { trampoline, .. } |
             Hook::Jump14 { trampoline, .. } |
             Hook::DirectJump { trampoline, .. } => {
@@ -258,22 +353,6 @@ impl Hook {
         addr: usize
     ) {
         match self {
-            #[cfg(feature = "alloc_trampoline")]
-            Self::Jump5 { entry, .. } => {
-                skse64::trampoline::write_jump5(Trampoline::Global, addr, *entry as usize);
-            },
-            #[cfg(feature = "alloc_trampoline")]
-            Self::Call5(entry) => {
-                skse64::trampoline::write_call5(Trampoline::Global, addr, *entry as usize);
-            },
-            #[cfg(feature = "alloc_trampoline")]
-            Self::Jump6 { entry, .. } => {
-                skse64::trampoline::write_jump6(Trampoline::Global, addr, *entry as usize);
-            },
-            #[cfg(feature = "alloc_trampoline")]
-            Self::Call6(entry) => {
-                skse64::trampoline::write_call6(Trampoline::Global, addr, *entry as usize);
-            },
             Self::Jump12 { entry, clobber, .. } => {
                 write_flow(addr, *entry as usize, Flow::JumpRegAbsolute(*clobber)).unwrap();
             },
@@ -306,10 +385,6 @@ impl Hook {
         addr: usize
     ) -> Result<(), ()> {
         match self {
-            #[cfg(feature = "alloc_trampoline")]
-            Self::Jump5 { .. } | Self::Call5(_) | Self::Jump6 { .. } | Self::Call5(_) => {
-                todo!();
-            },
             Self::Jump12 { entry, clobber, .. } => {
                 verify_flow(addr, *entry as usize, Flow::JumpRegAbsolute(*clobber))
             },
@@ -339,7 +414,7 @@ impl Descriptor {
         &self,
         db: &VersionDb
     ) -> FindResult {
-        match self {
+        let res = (|| { match self {
             Self::Object { loc, .. } => loc.find(db),
             Self::Function { loc, .. } => loc.find(db),
             Self::Patch { enabled, loc, sig, .. } => {
@@ -354,21 +429,13 @@ impl Descriptor {
                 }
 
                 let addr = loc.find(db)?;
-                unsafe {
-                    // SAFETY: We know addr is in the skyrim binary, since it came from the db.
-                    sig.check(addr.addr()).map_err(|e| DescriptorError::Mismatch(*sig, e))?;
-                }
+                // SAFETY: We know addr is in the skyrim binary, since it came from the db.
+                unsafe { sig.check(addr.addr())?; }
                 Ok(addr)
             }
-        }
-    }
+        }})();
 
-    /// Reports the results of an attempt to find a descriptor.
-    fn report(
-        &self,
-        res: &FindResult
-    ) {
-        match res {
+        match &res {
             Ok(addr) => {
                 skse_message!(
                     "[SUCCESS] {} is at offset {:#x}",
@@ -393,6 +460,8 @@ impl Descriptor {
             },
             Err(DescriptorError::IncompatibleGameVersion) => (), // Invalid, so we ignore it.
         }
+
+        return res;
     }
 
     /// Creates a patch result for the descriptor, if the descriptor is a patch.
@@ -542,99 +611,91 @@ unsafe impl Sync for Hook {}
 unsafe impl Sync for Descriptor {}
 unsafe impl<T> Sync for GameRef<T> {}
 
-/// Uses the version database to locate the patches that the user requested be installed.
-fn locate_patches<const NUM_PATCHES: usize>(
-    patches: &[&Descriptor]
-) -> Result<([usize; NUM_PATCHES], Vec<PatchResult>, usize), ()> {
+/// Locates any game functions/objects, and applies any code patches.
+pub fn apply<const NUM_PATCHES: usize>(
+    patches: [&Descriptor; NUM_PATCHES]
+) -> Result<(), ()> {
+    skse_message!(
+        "--------------------- Skyrim Patcher {} ---------------------",
+        env!("CARGO_PKG_VERSION")
+    );
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    // Find patches
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+
     let db = VersionDb::new(skse64::version::current_runtime());
     let mut res_addrs: [usize; NUM_PATCHES] = [0; NUM_PATCHES];
-    let mut installed_patches: Vec<PatchResult> = Vec::new();
-
-    let mut _alloc_size: usize = 0;
+    let mut installed_patches: PatchSet = PatchSet(Vec::new());
 
     // Attempt to locate all of the patch signatures.
     let mut fails = 0;
     for (i, sig) in patches.iter().enumerate() {
-        let res = sig.find(&db);
-        sig.report(&res);
-
-        match res {
+        match sig.find(&db) {
             Ok(addr) => {
                 assert!(sig.hook().map(|h| h.patch_size() <= sig.size()).unwrap_or(true));
                 res_addrs[i] = addr.addr();
 
-                #[cfg(feature = "alloc_trampoline")]
-                if let Some(h) = sig.hook() {
-                    _alloc_size += h.alloc_size();
-                }
-
                 if let Some(patch_result) = sig.patch_result(addr) {
-                    installed_patches.push(patch_result);
+                    installed_patches.0.push(patch_result);
                 }
             },
             Err(DescriptorError::Disabled) | Err(DescriptorError::IncompatibleGameVersion) => (),
-            _ => {
-                fails += 1;
-            }
+            _ => fails += 1
         }
     }
 
-    if fails == 0 {
-        Ok((res_addrs, installed_patches, _alloc_size))
-    } else {
-        Err(())
+    if fails > 0 {
+        skse_message!("[FAILURE] Could not locate every game signature!");
+        skse_message!("----------------------------------------------------------------");
+        return Err(());
     }
-}
 
-/// Installs the set of previously located patches.
-fn install_patches(
-    patches: &[&Descriptor],
-    res_addrs: &[usize],
-    set: PatchSet
-) {
-    // Install our patches.
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    // Install patches
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+
     for (i, sig) in patches.iter().enumerate() {
         if sig.disabled() { continue; }
 
         let hook_size = sig.hook().map(|h| h.patch_size()).unwrap_or(0);
         let ret_addr = res_addrs[i] + hook_size;
-        match sig {
-            Descriptor::Patch { hook, .. } => {
-                unsafe {
+        unsafe {
+            match sig {
+                Descriptor::Patch { hook, .. } => {
                     // SAFETY: We will ensure our return address is valid by writing NOPS to any
                     //         bytes that are part of the patch and after the return address.
                     if let Some(t) = hook.trampoline() {
                         *(t.as_ref().get()) = ret_addr;
                     }
                     hook.install(res_addrs[i]);
-                }
-            },
-            Descriptor::Function { result, .. } | Descriptor::Object { result, .. } => {
-                unsafe {
+                },
+                Descriptor::Function { result, .. } | Descriptor::Object { result, .. } => {
                     // SAFETY: The version DB ensures that we have the write object for
                     //         the requested ID.
                     *(result.as_ref().get()) = res_addrs[i];
                 }
             }
-        }
 
-        unsafe {
             // SAFETY: We have matched signatures to ensure our patch is valid.
             let remain = sig.size() - hook_size;
             if remain > 0 {
-                skse64::safe::use_region(ret_addr, remain, || {
+                use_region(ret_addr, remain, || {
                     ::std::ptr::write_bytes::<u8>(ret_addr as *mut u8, 0x90, remain);
                 });
             }
         }
     }
 
-    // Register the patches to be verified later.
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    // Integrity check patches
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+
     static INSTALLED_PATCHES: RacyCell<Vec<PatchSet>> = RacyCell::new(Vec::new());
     static DO_ONCE: RacyCell<bool> = RacyCell::new(true);
     unsafe {
         // SAFETY: SKSE plugin loading is single threaded, so its safe to mutate here.
-        (*INSTALLED_PATCHES.get()).push(set);
+        (*INSTALLED_PATCHES.get()).push(installed_patches);
         if *DO_ONCE.get() {
             *DO_ONCE.get() = false;
 
@@ -651,38 +712,287 @@ fn install_patches(
             });
         }
     }
-}
-
-/// Locates any game functions/objects, and applies any code patches.
-pub fn apply<const NUM_PATCHES: usize>(
-    patches: [&Descriptor; NUM_PATCHES]
-) -> Result<(), ()> {
-    skse_message!(
-        "--------------------- Skyrim Patcher {} ---------------------",
-        env!("CARGO_PKG_VERSION")
-    );
-
-    let (res_addrs, to_install, _alloc_size) = locate_patches::<NUM_PATCHES>(&patches).map_err(|_| {
-        skse_message!("[FAILURE] Could not locate every game signature!");
-        skse_message!("----------------------------------------------------------------");
-    })?;
-
-    // Allocate our branch trampoline.
-    #[cfg(feature = "alloc_trampoline")]
-    if _alloc_size > 0 {
-        // SAFETY: We're not giving an image base, so this is actually safe.
-        unsafe { skse64::trampoline::create(Trampoline::Global, _alloc_size, None) };
-        skse_message!(
-            "[SUCCESS] Created branch trampoline buffer with a size of {} bytes",
-            _alloc_size
-        );
-    } else {
-        skse_message!("[SKIPPED] No patches require a branch trampoline allocation");
-    }
-
-    install_patches(&patches, &res_addrs, PatchSet(to_install));
 
     skse_message!("[SUCCESS] Applied game patches.");
     skse_message!("----------------------------------------------------------------");
     Ok(())
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Signature checking implementation
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+impl Signature {
+    /// Creates a new signature structure.
+    pub const fn new(
+        sig: &'static [Opcode]
+    ) -> Self {
+        Self(sig)
+    }
+
+    ///
+    /// Checks the given signature against the given memory location.
+    ///
+    /// In order to use this function safely, the address range specified must be
+    /// a valid part of the Skyrim binary.
+    ///
+    unsafe fn check(
+        &self,
+        a: usize
+    ) -> Result<(), DescriptorError> {
+        assert!(a != 0);
+        if self.0.len() == 0 { return Ok(()); }
+
+        let mut diff = 0;
+        use_region(a, self.0.len(), || {
+            for (i, op) in self.0.iter().enumerate() {
+                if let Opcode::Code(b) = *op {
+                    diff += if b == *(a as *mut u8).add(i) { 0 } else { 1 };
+                }
+            }
+        });
+
+        if diff > 0 {
+            Err(DescriptorError::Mismatch(*self, BinarySig(RelocAddr::from_addr(a), self.len())))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Checks how long the signature is.
+    fn len(
+        &self
+    ) -> usize {
+        self.0.len()
+    }
+}
+
+impl BinarySig {
+    fn reloc(
+        &self
+    ) -> RelocAddr {
+        self.0
+    }
+}
+
+impl std::fmt::Display for Signature {
+    fn fmt(
+        &self,
+        f: &mut std::fmt::Formatter<'_>
+    ) -> Result<(), std::fmt::Error> {
+        write!(f, "{{ ")?;
+        for op in self.0.iter() {
+            if let Opcode::Code(b) = op {
+                write!(f, "{:02x} ", b)?;
+            } else {
+                write!(f, "?? ")?;
+            }
+        }
+        write!(f, "}}")
+    }
+}
+
+impl std::fmt::Display for BinarySig {
+    fn fmt(
+        &self,
+        f: &mut std::fmt::Formatter<'_>
+    ) -> Result<(), std::fmt::Error> {
+        let mut res = Ok(());
+
+        unsafe {
+            // SAFETY: The caller of the diff function ensures this is a valid sig.
+            use_region(self.0.addr(), self.1, || {
+                let sig = std::slice::from_raw_parts(self.0.addr() as *const u8, self.1);
+
+                if let Err(e) = write!(f, "{{ ") {
+                    res = Err(e);
+                    return;
+                }
+
+                for b in sig.iter() {
+                    if let Err(e) = write!(f, "{:02x} ", b) {
+                        res = Err(e);
+                        return;
+                    }
+                }
+
+                res = write!(f, "}}");
+            });
+        }
+
+        return res;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Code injection implementation
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+impl AssemblyHook {
+    /// Generates a patch to be applied to the given address from the given encoding.
+    fn new(
+        addr: usize,
+        chunks: &[Encoding]
+    ) -> Result<Self, ()> {
+        let mut this = Self {
+            addr,
+            buf: [0; MAX_ASM_HOOK_SIZE],
+            len: 0
+        };
+
+        for chunk in chunks.iter() {
+            match chunk {
+                Encoding::JumpNear => this.append(&[0xeb]),
+                Encoding::CallRelative => this.append(&[0xe8]),
+                Encoding::JumpRelative => this.append(&[0xe9]),
+                Encoding::CallIndirect => this.append(&[0xff, 0x15]),
+                Encoding::JumpIndirect => this.append(&[0xff, 0x25]),
+                Encoding::CallReg(reg) => this.append(&[0xff, 0xd0 + (*reg as u8)]),
+                Encoding::JumpReg(reg) => this.append(&[0xff, 0xe0 + (*reg as u8)]),
+                Encoding::MoveImmQReg(reg) => this.append(&[0x48, 0xb8 + (*reg as u8)]),
+                Encoding::RelativeD(target) => {
+                    let rel: i32 = (
+                        target.wrapping_sub(addr + this.len + size_of::<i32>())
+                    ).try_into().map_err(|_| ())?;
+
+                    unsafe {
+                        this.append(slice::from_raw_parts(
+                            &rel as *const i32 as *const u8,
+                            size_of::<i32>()
+                        ));
+                    }
+                },
+                Encoding::AbsoluteSH(h) => this.append(&[*h as u8]),
+                Encoding::AbsoluteD(d) => unsafe {
+                    this.append(
+                        slice::from_raw_parts(d as *const u32 as *const u8, size_of::<u32>())
+                    );
+                },
+                Encoding::AbsoluteQ(q) => unsafe {
+                    this.append(
+                        slice::from_raw_parts(q as *const u64 as *const u8, size_of::<u64>())
+                    );
+                }
+            }
+        }
+
+        Ok(this)
+    }
+
+    /// Appends the given bytes to the patch buffer.
+    fn append(
+        &mut self,
+        s: &[u8]
+    ) {
+        self.buf.split_at_mut(self.len).1.split_at_mut(s.len()).0.copy_from_slice(s);
+        self.len += s.len();
+    }
+
+    /// Applies the given patch, protecting the region.
+    unsafe fn apply(
+        self
+    ) {
+        use_region(self.addr, self.len, || {
+            std::ptr::copy(self.buf.as_ptr(), self.addr as *mut u8, self.len);
+        });
+    }
+
+    /// Verifies that the given region of code contains the patch, protecting the region.
+    unsafe fn verify(
+        self
+    ) -> Result<(), ()> {
+        let mut ret = Err(());
+        use_region(self.addr, self.len, || {
+            let patch = self.buf.split_at(self.len).0;
+            let code = std::slice::from_raw_parts(self.addr as *mut u8, self.len);
+            ret = if code == patch { Ok(()) } else { Err(()) };
+        });
+        return ret;
+    }
+}
+
+impl Flow {
+    ///
+    /// Creates a new patch from the invoking flow, address, and target.
+    ///
+    /// If the flow is an indirect, the target is written to the trampoline on success.
+    ///
+    fn as_patch(
+        &self,
+        addr: usize,
+        target: usize
+    ) -> Result<AssemblyHook, ()> {
+        let patch = match self {
+            Flow::CallRelative => AssemblyHook::new(addr,  &[
+                Encoding::CallRelative, Encoding::RelativeD(target)
+            ]),
+
+            Flow::JumpRelative => AssemblyHook::new(addr, &[
+                Encoding::JumpRelative, Encoding::RelativeD(target)
+            ]),
+
+            Flow::CallAbsolute => AssemblyHook::new(addr, &[
+                Encoding::CallIndirect, Encoding::AbsoluteD(0x02),
+                Encoding::JumpNear, Encoding::AbsoluteSH(0x08),
+                Encoding::AbsoluteQ(target as u64)
+            ]),
+            Flow::JumpAbsolute => AssemblyHook::new(addr, &[
+                Encoding::JumpIndirect, Encoding::AbsoluteD(0),
+                Encoding::AbsoluteQ(target as u64)
+            ]),
+            Flow::CallRegAbsolute(reg) => AssemblyHook::new(addr, &[
+                Encoding::MoveImmQReg(*reg), Encoding::AbsoluteQ(target as u64),
+                Encoding::CallReg(*reg)
+            ]),
+            Flow::JumpRegAbsolute(reg) => AssemblyHook::new(addr, &[
+                Encoding::MoveImmQReg(*reg), Encoding::AbsoluteQ(target as u64),
+                Encoding::JumpReg(*reg)
+            ]),
+        }?;
+
+        Ok(patch)
+    }
+}
+
+/// Temporarily marks the given memory region for read/write, then calls the given fn.
+unsafe fn use_region(
+    addr: usize,
+    size: usize,
+    func: impl FnOnce()
+) {
+    let mut old_prot: u32 = 0;
+    VirtualProtect(addr as *const c_void, size, PAGE_EXECUTE_READWRITE, &mut old_prot);
+    func();
+    VirtualProtect(addr as *const c_void, size, old_prot, &mut old_prot);
+}
+
+///
+/// Writes the given instruction type to the given address, changing RIP to the given target.
+///
+/// This function may be called on code which is not currently marked read/write.
+///
+/// In order to use this function safely, the given address must be in the skyrim binary.
+///
+unsafe fn write_flow(
+    addr: usize,
+    target: usize,
+    flow: Flow
+) -> Result<(), ()> {
+    flow.as_patch(addr, target)?.apply();
+    Ok(())
+}
+
+///
+/// Verifies that the given control flow operation was installed correctly to the given address.
+///
+/// This function may be called on code which is not currently marked read/write.
+///
+/// In order to use this function safely, the given address must be in the skyrim binary.
+///
+unsafe fn verify_flow(
+    addr: usize,
+    target: usize,
+    flow: Flow
+) -> Result<(), ()> {
+    flow.as_patch(addr, target)?.verify()
 }

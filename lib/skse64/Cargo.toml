@@ -3,9 +3,6 @@ name = "skse64"
 version = "2.2.3"
 edition = "2021"
 
-[features]
-trampoline = []
-
 [dependencies]
 later = { path = "../later" }
 racy_cell = { path = "../racy_cell" }
@@ -15,7 +12,6 @@ skse64_common = { path = "../skse64_common" }
 version = "0.45.0"
 features = [
     "Win32_Foundation",
-    "Win32_System_Memory",
     "Win32_System_LibraryLoader",
     "Win32_System_ProcessStatus",
     "Win32_System_Threading",

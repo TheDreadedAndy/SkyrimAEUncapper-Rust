@@ -24,33 +24,11 @@
  * unfortunately.
  */
 
-.global skill_cap_patch_wrapper_ae
-.global skill_cap_patch_wrapper_se
-.global max_charge_begin_wrapper_ae
-.global max_charge_begin_wrapper_se
-.global max_charge_end_wrapper_ae
-.global max_charge_end_wrapper_se
-.global calculate_charge_points_per_use_wrapper_ae
-.global calculate_charge_points_per_use_wrapper_se
-.global player_avo_get_current_wrapper
+// These are exposed to the native_wrappers C file, so we must mark them as
+// globals. The other wrappers don't need to be global, since this file is
+// directly included in source file that references them.
 .global player_avo_get_current_original_wrapper_ae
 .global player_avo_get_current_original_wrapper_se
-.global display_true_skill_level_hook_ae
-.global display_true_skill_level_hook_se
-.global display_true_skill_color_hook
-.global improve_player_skill_points_wrapper_ae
-.global improve_player_skill_points_wrapper_se
-.global modify_perk_pool_wrapper_ae
-.global modify_perk_pool_wrapper_se
-.global improve_level_exp_by_skill_level_wrapper_ae
-.global improve_level_exp_by_skill_level_wrapper_se
-.global improve_attribute_when_level_up_wrapper
-.global legendary_reset_skill_level_wrapper
-.global check_condition_for_legendary_skill_wrapper
-.global hide_legendary_button_wrapper_ae
-.global hide_legendary_button_wrapper_se
-.global clear_legendary_button_wrapper_ae
-.global clear_legendary_button_wrapper_se
 
 // Saves all caller saved registers.
 .macro SAVEALL is_jump
