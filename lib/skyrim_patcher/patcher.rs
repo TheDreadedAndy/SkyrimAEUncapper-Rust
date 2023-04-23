@@ -134,7 +134,10 @@ macro_rules! signature {
 
 /// Helper to print a signature in the games code.
 #[derive(Debug)]
-struct BinarySig(RelocAddr, usize);
+struct BinarySig {
+    addr: RelocAddr,
+    len: usize
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Patcher definitions
@@ -239,6 +242,113 @@ struct PatchSet(Vec<PatchResult>);
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Patcher implementation
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Locates any game functions/objects, and applies any code patches.
+pub fn apply<const NUM_PATCHES: usize>(
+    patches: [&Descriptor; NUM_PATCHES]
+) -> Result<(), ()> {
+    skse_message!(
+        "--------------------- Skyrim Patcher {} ---------------------",
+        env!("CARGO_PKG_VERSION")
+    );
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    // Find patches
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+
+    let db = VersionDb::new(skse64::version::current_runtime());
+    let mut res_addrs: [usize; NUM_PATCHES] = [0; NUM_PATCHES];
+    let mut installed_patches: PatchSet = PatchSet(Vec::new());
+
+    // Attempt to locate all of the patch signatures.
+    let mut fails = 0;
+    for (i, sig) in patches.iter().enumerate() {
+        match sig.find(&db) {
+            Ok(addr) => {
+                assert!(sig.hook().map(|h| h.patch_size() <= sig.size()).unwrap_or(true));
+                res_addrs[i] = addr.addr();
+
+                if let Some(patch_result) = sig.patch_result(addr) {
+                    installed_patches.0.push(patch_result);
+                }
+            },
+            Err(DescriptorError::Disabled) | Err(DescriptorError::IncompatibleGameVersion) => (),
+            _ => fails += 1
+        }
+    }
+
+    if fails > 0 {
+        skse_message!("[FAILURE] Could not locate every game signature!");
+        skse_message!("----------------------------------------------------------------");
+        return Err(());
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    // Install patches
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+
+    for (i, sig) in patches.iter().enumerate() {
+        if sig.disabled() { continue; }
+
+        let hook_size = sig.hook().map(|h| h.patch_size()).unwrap_or(0);
+        let ret_addr = res_addrs[i] + hook_size;
+        unsafe {
+            match sig {
+                Descriptor::Patch { hook, .. } => {
+                    // SAFETY: We will ensure our return address is valid by writing NOPS to any
+                    //         bytes that are part of the patch and after the return address.
+                    if let Some(t) = hook.trampoline() {
+                        *(t.as_ref().get()) = ret_addr;
+                    }
+                    hook.install(res_addrs[i]);
+                },
+                Descriptor::Function { result, .. } | Descriptor::Object { result, .. } => {
+                    // SAFETY: The version DB ensures that we have the write object for
+                    //         the requested ID.
+                    *(result.as_ref().get()) = res_addrs[i];
+                }
+            }
+
+            // SAFETY: We have matched signatures to ensure our patch is valid.
+            let remain = sig.size() - hook_size;
+            if remain > 0 {
+                use_region(ret_addr, remain, || {
+                    ::std::ptr::write_bytes::<u8>(ret_addr as *mut u8, 0x90, remain);
+                });
+            }
+        }
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    // Integrity check patches
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+
+    static INSTALLED_PATCHES: RacyCell<Vec<PatchSet>> = RacyCell::new(Vec::new());
+    static DO_ONCE: RacyCell<bool> = RacyCell::new(true);
+    unsafe {
+        // SAFETY: SKSE plugin loading is single threaded, so its safe to mutate here.
+        (*INSTALLED_PATCHES.get()).push(installed_patches);
+        if *DO_ONCE.get() {
+            *DO_ONCE.get() = false;
+
+            //
+            // Verify the patch integrity just before the main window opens.
+            //
+            // Some plugins (e.g. Experience, I think) will apply patches during the post-load
+            // phase, so we can't actually panic there.
+            //
+            skse64::event::register_listener(Message::SKSE_POST_POST_LOAD, |_| {
+                for set in (*INSTALLED_PATCHES.get()).drain(0..) {
+                    set.verify();
+                }
+            });
+        }
+    }
+
+    skse_message!("[SUCCESS] Applied game patches.");
+    skse_message!("----------------------------------------------------------------");
+    Ok(())
+}
 
 /// Flattens multiple arrays of patches into a single array.
 pub fn flatten_patch_groups<const N: usize>(
@@ -352,27 +462,8 @@ impl Hook {
         &self,
         addr: usize
     ) {
-        match self {
-            Self::Jump12 { entry, clobber, .. } => {
-                write_flow(addr, *entry as usize, Flow::JumpRegAbsolute(*clobber)).unwrap();
-            },
-            Self::Call12 { entry, clobber, .. } => {
-                write_flow(addr, *entry as usize, Flow::CallRegAbsolute(*clobber)).unwrap();
-            },
-            Self::Jump14 { entry, .. } => {
-                write_flow(addr, *entry as usize, Flow::JumpAbsolute).unwrap();
-            },
-            Self::Call16(entry) => {
-                write_flow(addr, *entry as usize, Flow::CallAbsolute).unwrap();
-            },
-            Self::DirectJump { entry, .. } => {
-                write_flow(addr, *entry as usize, Flow::JumpRelative).unwrap();
-            },
-            Self::DirectCall(entry) => {
-                write_flow(addr, *entry as usize, Flow::CallRelative).unwrap();
-            },
-            Self::None => panic!("Cannot install to a None hook!"),
-        }
+        let (entry, flow) = self.get_install_config().unwrap();
+        write_flow(addr, entry, flow).unwrap();
     }
 
     ///
@@ -384,27 +475,26 @@ impl Hook {
         &self,
         addr: usize
     ) -> Result<(), ()> {
-        match self {
-            Self::Jump12 { entry, clobber, .. } => {
-                verify_flow(addr, *entry as usize, Flow::JumpRegAbsolute(*clobber))
-            },
-            Self::Call12 { entry, clobber, .. } => {
-                verify_flow(addr, *entry as usize, Flow::CallRegAbsolute(*clobber))
-            },
-            Self::Jump14 { entry, .. } => {
-                verify_flow(addr, *entry as usize, Flow::JumpAbsolute)
-            },
-            Self::Call16(entry) => {
-                verify_flow(addr, *entry as usize, Flow::CallAbsolute)
-            },
-            Self::DirectJump { entry, .. } => {
-                verify_flow(addr, *entry as usize, Flow::JumpRelative)
-            },
-            Self::DirectCall(entry) => {
-                verify_flow(addr, *entry as usize, Flow::CallRelative)
-            },
-            Self::None => Ok(()),
+        if let Some((entry, flow)) = self.get_install_config() {
+            verify_flow(addr, entry, flow)
+        } else {
+            Ok(())
         }
+    }
+
+    /// Gets the flow enumeration assocaited with the invoking hook.
+    fn get_install_config(
+        &self
+    ) -> Option<(usize, Flow)> {
+        match self {
+            Self::Jump12 { entry, clobber, .. } => Some((*entry, Flow::JumpRegAbsolute(*clobber))),
+            Self::Call12 { entry, clobber, .. } => Some((*entry, Flow::CallRegAbsolute(*clobber))),
+            Self::Jump14 { entry, .. }          => Some((*entry, Flow::JumpAbsolute)),
+            Self::Call16(entry)                 => Some((*entry, Flow::CallAbsolute)),
+            Self::DirectJump { entry, .. }      => Some((*entry, Flow::JumpRelative)),
+            Self::DirectCall(entry)             => Some((*entry, Flow::CallRelative)),
+            _ => None
+        }.map(|conf| (conf.0 as usize, conf.1))
     }
 }
 
@@ -453,7 +543,7 @@ impl Descriptor {
                 skse_message!(
                     "[FAILURE] {} at offset {:#x} did not match the expected code signature!",
                     self,
-                    bsig.reloc().offset()
+                    bsig.addr.offset()
                 );
                 skse_message!("\\------> [EXPECTED] {}", sig);
                 skse_message!(" \\-----> [FOUND...] {}", bsig);
@@ -519,15 +609,9 @@ impl std::fmt::Display for Descriptor {
         f: &mut std::fmt::Formatter<'_>
     ) -> Result<(), std::fmt::Error> {
         match self {
-            Self::Object { name, loc, .. } => {
-                write!(f, "Object {} {}", name, loc)
-            },
-            Self::Function { name, loc, .. } => {
-                write!(f, "Function {} {}", name, loc)
-            },
-            Self::Patch { name, loc, .. } => {
-                write!(f, "Patch {} {}", name, loc)
-            }
+            Self::Object { name, loc, .. }   => write!(f, "Object {} {}", name, loc),
+            Self::Function { name, loc, .. } => write!(f, "Function {} {}", name, loc),
+            Self::Patch { name, loc, .. }    => write!(f, "Patch {} {}", name, loc)
         }
     }
 }
@@ -611,113 +695,6 @@ unsafe impl Sync for Hook {}
 unsafe impl Sync for Descriptor {}
 unsafe impl<T> Sync for GameRef<T> {}
 
-/// Locates any game functions/objects, and applies any code patches.
-pub fn apply<const NUM_PATCHES: usize>(
-    patches: [&Descriptor; NUM_PATCHES]
-) -> Result<(), ()> {
-    skse_message!(
-        "--------------------- Skyrim Patcher {} ---------------------",
-        env!("CARGO_PKG_VERSION")
-    );
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    // Find patches
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-
-    let db = VersionDb::new(skse64::version::current_runtime());
-    let mut res_addrs: [usize; NUM_PATCHES] = [0; NUM_PATCHES];
-    let mut installed_patches: PatchSet = PatchSet(Vec::new());
-
-    // Attempt to locate all of the patch signatures.
-    let mut fails = 0;
-    for (i, sig) in patches.iter().enumerate() {
-        match sig.find(&db) {
-            Ok(addr) => {
-                assert!(sig.hook().map(|h| h.patch_size() <= sig.size()).unwrap_or(true));
-                res_addrs[i] = addr.addr();
-
-                if let Some(patch_result) = sig.patch_result(addr) {
-                    installed_patches.0.push(patch_result);
-                }
-            },
-            Err(DescriptorError::Disabled) | Err(DescriptorError::IncompatibleGameVersion) => (),
-            _ => fails += 1
-        }
-    }
-
-    if fails > 0 {
-        skse_message!("[FAILURE] Could not locate every game signature!");
-        skse_message!("----------------------------------------------------------------");
-        return Err(());
-    }
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    // Install patches
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-
-    for (i, sig) in patches.iter().enumerate() {
-        if sig.disabled() { continue; }
-
-        let hook_size = sig.hook().map(|h| h.patch_size()).unwrap_or(0);
-        let ret_addr = res_addrs[i] + hook_size;
-        unsafe {
-            match sig {
-                Descriptor::Patch { hook, .. } => {
-                    // SAFETY: We will ensure our return address is valid by writing NOPS to any
-                    //         bytes that are part of the patch and after the return address.
-                    if let Some(t) = hook.trampoline() {
-                        *(t.as_ref().get()) = ret_addr;
-                    }
-                    hook.install(res_addrs[i]);
-                },
-                Descriptor::Function { result, .. } | Descriptor::Object { result, .. } => {
-                    // SAFETY: The version DB ensures that we have the write object for
-                    //         the requested ID.
-                    *(result.as_ref().get()) = res_addrs[i];
-                }
-            }
-
-            // SAFETY: We have matched signatures to ensure our patch is valid.
-            let remain = sig.size() - hook_size;
-            if remain > 0 {
-                use_region(ret_addr, remain, || {
-                    ::std::ptr::write_bytes::<u8>(ret_addr as *mut u8, 0x90, remain);
-                });
-            }
-        }
-    }
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    // Integrity check patches
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-
-    static INSTALLED_PATCHES: RacyCell<Vec<PatchSet>> = RacyCell::new(Vec::new());
-    static DO_ONCE: RacyCell<bool> = RacyCell::new(true);
-    unsafe {
-        // SAFETY: SKSE plugin loading is single threaded, so its safe to mutate here.
-        (*INSTALLED_PATCHES.get()).push(installed_patches);
-        if *DO_ONCE.get() {
-            *DO_ONCE.get() = false;
-
-            //
-            // Verify the patch integrity just before the main window opens.
-            //
-            // Some plugins (e.g. Experience, I think) will apply patches during the post-load
-            // phase, so we can't actually panic there.
-            //
-            skse64::event::register_listener(Message::SKSE_POST_POST_LOAD, |_| {
-                for set in (*INSTALLED_PATCHES.get()).drain(0..) {
-                    set.verify();
-                }
-            });
-        }
-    }
-
-    skse_message!("[SUCCESS] Applied game patches.");
-    skse_message!("----------------------------------------------------------------");
-    Ok(())
-}
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Signature checking implementation
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -741,10 +718,10 @@ impl Signature {
         a: usize
     ) -> Result<(), DescriptorError> {
         assert!(a != 0);
-        if self.0.len() == 0 { return Ok(()); }
+        if self.len() == 0 { return Ok(()); }
 
         let mut diff = 0;
-        use_region(a, self.0.len(), || {
+        use_region(a, self.len(), || {
             for (i, op) in self.0.iter().enumerate() {
                 if let Opcode::Code(b) = *op {
                     diff += if b == *(a as *mut u8).add(i) { 0 } else { 1 };
@@ -753,7 +730,10 @@ impl Signature {
         });
 
         if diff > 0 {
-            Err(DescriptorError::Mismatch(*self, BinarySig(RelocAddr::from_addr(a), self.len())))
+            Err(DescriptorError::Mismatch(*self, BinarySig {
+                addr: RelocAddr::from_addr(a),
+                len: self.len()
+            }))
         } else {
             Ok(())
         }
@@ -764,14 +744,6 @@ impl Signature {
         &self
     ) -> usize {
         self.0.len()
-    }
-}
-
-impl BinarySig {
-    fn reloc(
-        &self
-    ) -> RelocAddr {
-        self.0
     }
 }
 
@@ -801,8 +773,8 @@ impl std::fmt::Display for BinarySig {
 
         unsafe {
             // SAFETY: The caller of the diff function ensures this is a valid sig.
-            use_region(self.0.addr(), self.1, || {
-                let sig = std::slice::from_raw_parts(self.0.addr() as *const u8, self.1);
+            use_region(self.addr.addr(), self.len, || {
+                let sig = std::slice::from_raw_parts(self.addr.addr() as *const u8, self.len);
 
                 if let Err(e) = write!(f, "{{ ") {
                     res = Err(e);
@@ -887,28 +859,6 @@ impl AssemblyHook {
         self.buf.split_at_mut(self.len).1.split_at_mut(s.len()).0.copy_from_slice(s);
         self.len += s.len();
     }
-
-    /// Applies the given patch, protecting the region.
-    unsafe fn apply(
-        self
-    ) {
-        use_region(self.addr, self.len, || {
-            std::ptr::copy(self.buf.as_ptr(), self.addr as *mut u8, self.len);
-        });
-    }
-
-    /// Verifies that the given region of code contains the patch, protecting the region.
-    unsafe fn verify(
-        self
-    ) -> Result<(), ()> {
-        let mut ret = Err(());
-        use_region(self.addr, self.len, || {
-            let patch = self.buf.split_at(self.len).0;
-            let code = std::slice::from_raw_parts(self.addr as *mut u8, self.len);
-            ret = if code == patch { Ok(()) } else { Err(()) };
-        });
-        return ret;
-    }
 }
 
 impl Flow {
@@ -978,7 +928,10 @@ unsafe fn write_flow(
     target: usize,
     flow: Flow
 ) -> Result<(), ()> {
-    flow.as_patch(addr, target)?.apply();
+    let asm_hook = flow.as_patch(addr, target)?;
+    use_region(asm_hook.addr, asm_hook.len, || {
+        std::ptr::copy(asm_hook.buf.as_ptr(), asm_hook.addr as *mut u8, asm_hook.len);
+    });
     Ok(())
 }
 
@@ -994,5 +947,12 @@ unsafe fn verify_flow(
     target: usize,
     flow: Flow
 ) -> Result<(), ()> {
-    flow.as_patch(addr, target)?.verify()
+    let asm_hook = flow.as_patch(addr, target)?;
+    let mut ret = Err(());
+    use_region(asm_hook.addr, asm_hook.len, || {
+        let patch = asm_hook.buf.split_at(asm_hook.len).0;
+        let code = std::slice::from_raw_parts(asm_hook.addr as *mut u8, asm_hook.len);
+        ret = if code == patch { Ok(()) } else { Err(()) };
+    });
+    return ret;
 }
