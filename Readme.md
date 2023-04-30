@@ -1,3 +1,7 @@
+# Releases
+
+[Nexus homepage](https://www.nexusmods.com/skyrimspecialedition/mods/82558)
+
 # Previous Versions
 
 [My original, C++, implementation of this mod (versions 1.1.0 and below)](https://github.com/TheDreadedAndy/SkyrimAEUncapper)

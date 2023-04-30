@@ -6,7 +6,6 @@
 //!
 
 pub use skse64_common::reloc;
-pub use skse64_common::util;
 
 pub mod version;
 pub mod event;

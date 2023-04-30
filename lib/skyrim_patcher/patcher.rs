@@ -27,6 +27,7 @@ use skse64::reloc::RelocAddr;
 use skse64::plugin_api::Message;
 use versionlib::VersionDb;
 use racy_cell::RacyCell;
+use keywords::test;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Code injection definitions
@@ -504,26 +505,28 @@ impl Descriptor {
         &self,
         db: &VersionDb
     ) -> FindResult {
-        let res = (|| { match self {
-            Self::Object { loc, .. } => loc.find(db),
-            Self::Function { loc, .. } => loc.find(db),
-            Self::Patch { enabled, loc, sig, .. } => {
-                // Incompatible game version needs to take priority, or we'll try to report on
-                // a patch that should be invisible.
-                if !loc.compatible() {
-                    return Err(DescriptorError::IncompatibleGameVersion);
-                }
+        let res = test! {{
+            match self {
+                Self::Object { loc, .. } => loc.find(db),
+                Self::Function { loc, .. } => loc.find(db),
+                Self::Patch { enabled, loc, sig, .. } => {
+                    // Incompatible game version needs to take priority, or we'll try to report on
+                    // a patch that should be invisible.
+                    if !loc.compatible() {
+                        return Err(DescriptorError::IncompatibleGameVersion);
+                    }
 
-                if !enabled() {
-                    return Err(DescriptorError::Disabled);
-                }
+                    if !enabled() {
+                        return Err(DescriptorError::Disabled);
+                    }
 
-                let addr = loc.find(db)?;
-                // SAFETY: We know addr is in the skyrim binary, since it came from the db.
-                unsafe { sig.check(addr.addr())?; }
-                Ok(addr)
+                    let addr = loc.find(db)?;
+                    // SAFETY: We know addr is in the skyrim binary, since it came from the db.
+                    unsafe { sig.check(addr.addr())?; }
+                    Ok(addr)
+                }
             }
-        }})();
+        }};
 
         match &res {
             Ok(addr) => {

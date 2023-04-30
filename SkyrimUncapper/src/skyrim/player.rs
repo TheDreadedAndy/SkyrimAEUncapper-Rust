@@ -9,7 +9,7 @@ use core::cell::Cell;
 
 use skse64::version::RUNTIME_VERSION_1_6_629;
 
-skse64::util::abstract_type! {
+keywords::abstract_type! {
     /// The player actor class.
     pub type PlayerCharacter;
 

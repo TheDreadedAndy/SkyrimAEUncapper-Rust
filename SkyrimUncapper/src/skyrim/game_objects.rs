@@ -48,7 +48,7 @@ static player_avo_mod_current_entry: GameRef<
     unsafe extern "system" fn(*mut ActorValueOwner, u32, ActorAttribute, f32)
 > = GameRef::new();
 
-disarray::disarray! {
+keywords::disarray! {
     ///
     /// Holds the relocatable locations of each object/function exposed by this file.
     ///

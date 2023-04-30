@@ -7,4 +7,3 @@
 
 pub mod version;
 pub mod reloc;
-pub mod util;

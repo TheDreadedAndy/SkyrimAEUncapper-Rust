@@ -95,7 +95,7 @@ static player_avo_get_current_return_trampoline: GameRef<usize> = GameRef::new()
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-disarray::disarray! {
+keywords::disarray! {
     /// The hooks which must be installed by the game patcher.
     pub static HOOK_SIGNATURES: [Descriptor; NUM_HOOK_SIGNATURES] = [
         //

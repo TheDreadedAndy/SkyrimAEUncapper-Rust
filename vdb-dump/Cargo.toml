@@ -1,0 +1,11 @@
+[package]
+name = "vdb-dump"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "vdb-dump"
+path = "main.rs"
+
+[dependencies]
+versionlib = { path = "../lib/versionlib" }

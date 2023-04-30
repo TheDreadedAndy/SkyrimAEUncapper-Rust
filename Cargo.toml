@@ -1,7 +1,7 @@
 [workspace]
 
 members = [
-    "lib/disarray",
+    "lib/keywords",
     "lib/later",
     "lib/racy_cell",
     "lib/deflate",
@@ -10,7 +10,7 @@ members = [
     "lib/skse64",
     "lib/versionlib",
     "lib/skyrim_patcher",
-    "lib/vdb-dump",
+    "vdb-dump",
     "SkyrimUncapper"
 ]
 
