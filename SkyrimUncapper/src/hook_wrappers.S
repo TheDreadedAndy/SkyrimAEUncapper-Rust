@@ -10,6 +10,13 @@
  * ASSEMBLY BELONGS IN ASSEMBLY FILES.
  *
  * Note:
+ * Within this file, some symbols will be surrended by curly braces. These
+ * instances are Rust inline assembly syntax, and they are redirected to a
+ * mangled symbol with the same (or a similar) name by the macro that includes
+ * this asm file. We access these symbols like that to avoid publically
+ * exporting them from the DLL file unnecessarily.
+ *
+ * Note:
  * x64 calling convention is weird, and it is very important that
  * it be obeyed (or else unwinding will cause UB). Notably, the stack
  * pointer must stay 16 byte alligned, which means any reg saving needs
@@ -85,10 +92,10 @@
 skill_cap_patch_wrapper_ae:
     SAVEALL
 
-    call player_avo_get_base_unchecked // Reimplement replaced call.
+    call {player_avo_get_base_unchecked} // Reimplement replaced call.
     movaps %xmm0, %xmm8 // Reimplement original move.
     mov %esi, %ecx // Move skill ID back into first arg.
-    call get_skill_cap_hook
+    call {get_skill_cap_hook}
     movss %xmm0, %xmm10 // Replace maximum with fn result.
     movss %xmm8, %xmm0 // Restore skill level for comparison.
 
@@ -98,10 +105,10 @@ skill_cap_patch_wrapper_ae:
 skill_cap_patch_wrapper_se:
     SAVEALL
 
-    call player_avo_get_base_unchecked // Reimplement replaced call.
+    call {player_avo_get_base_unchecked} // Reimplement replaced call.
     movaps %xmm0, %xmm6 // Reimplement og move.
     mov %esi, %ecx // Move skill ID back into first arg.
-    call get_skill_cap_hook
+    call {get_skill_cap_hook}
     movss %xmm0, %xmm8  // Replace max with fn result.
     movss %xmm6, %xmm0  // Fix xmm0 out of paranoia.
 
@@ -129,7 +136,7 @@ max_charge_begin_wrapper_se:
     mov %r15d, %ecx // Enchantment type is in r15d.
 
 _max_charge_begin_wrapper:
-    call max_charge_begin_hook
+    call {max_charge_begin_hook}
 
     RESTOREALL
 
@@ -154,7 +161,7 @@ max_charge_end_wrapper_se:
 
 _max_charge_end_wrapper:
     SAVEALL
-    call max_charge_end_hook
+    call {max_charge_end_hook}
     RESTOREALL
     ret
 
@@ -179,7 +186,7 @@ _calculate_charge_points_per_use_wrapper:
     xorps %xmm0, %xmm0 // Reimplement max from original code.
     maxss %xmm0, %xmm1
     movaps %xmm7, %xmm0 // Get base_points
-    call calculate_charge_points_per_use_hook
+    call {calculate_charge_points_per_use_hook}
 
     RESTOREALL retfpr=1
     ret
@@ -191,7 +198,7 @@ _calculate_charge_points_per_use_wrapper:
  */
 player_avo_get_current_wrapper:
     SAVEALL
-    call player_avo_get_current_hook
+    call {player_avo_get_current_hook}
     RESTOREALL retfpr=1
     ret
 
@@ -208,7 +215,7 @@ player_avo_get_current_original_wrapper_ae:
     push %r14
     push %r15
     sub $0x50, %rsp
-    jmp *player_avo_get_current_return_trampoline(%rip)
+    jmp *{player_avo_get_current_return_trampoline}(%rip)
 
 player_avo_get_current_original_wrapper_se:
     push %rbp
@@ -217,7 +224,7 @@ player_avo_get_current_original_wrapper_se:
     push %r14
     push %r15
     sub $0x40, %rsp
-    jmp *player_avo_get_current_return_trampoline(%rip)
+    jmp *{player_avo_get_current_return_trampoline}(%rip)
 
 /*
  * Forces the code which displays skill values in the skills menu to show the
@@ -230,19 +237,19 @@ display_true_skill_level_hook_ae:
 display_true_skill_color_hook:
     SAVEALL
 
-    call get_player_avo
+    call {get_player_avo}
     mov %edi, %edx
     jmp _display_true_skill_hook
 
 display_true_skill_level_hook_se:
     SAVEALL
 
-    call get_player_avo
+    call {get_player_avo}
     mov %esi, %edx
 
 _display_true_skill_hook:
     mov %rax, %rcx
-    call player_avo_get_current_unchecked
+    call {player_avo_get_current_unchecked}
 
     RESTOREALL retfpr=1
     ret
@@ -268,7 +275,7 @@ _improve_player_skill_points_wrapper:
     movss 0xf0(%rsp), %xmm1 // Get skill use mult.
     mulss %xmm0, %xmm1      // exp_base = base * mult
     movss 0xf4(%rsp), %xmm2 // Get skill offset
-    call improve_player_skill_points_hook
+    call {improve_player_skill_points_hook}
 
     RESTOREALL retfpr=1
     ret
@@ -280,14 +287,14 @@ _improve_player_skill_points_wrapper:
 modify_perk_pool_wrapper_ae:
     SAVEALL
     mov %dil, %cl // Get modification count.
-    call modify_perk_pool_hook
+    call {modify_perk_pool_hook}
     RESTOREALL
     ret
 
 modify_perk_pool_wrapper_se:
     SAVEALL
     mov %bl, %cl // Get modification count (%ebx in SE).
-    call modify_perk_pool_hook
+    call {modify_perk_pool_hook}
     RESTOREALL
     ret
 
@@ -304,7 +311,7 @@ improve_level_exp_by_skill_level_wrapper_ae:
     subss %xmm2, %xmm1 // Reimplement replaced code.
     movss %xmm1, %xmm0 // xmm1 contains level exp (without mult)
     mov %esi, %edx     // esi contains skill_id.
-    call improve_level_exp_by_skill_level_hook
+    call {improve_level_exp_by_skill_level_hook}
     movdqu %xmm0, 0x30(%rsp) // Replace xmm1 with our result.
 
     RESTOREALL
@@ -315,7 +322,7 @@ improve_level_exp_by_skill_level_wrapper_se:
 
     subss %xmm1, %xmm0 // Reimplement replaced code.
     mov %esi, %edx     // esi contains skill_id.
-    call improve_level_exp_by_skill_level_hook
+    call {improve_level_exp_by_skill_level_hook}
 
     RESTOREALL retfpr=1
     ret
@@ -326,7 +333,7 @@ improve_level_exp_by_skill_level_wrapper_se:
 improve_attribute_when_level_up_wrapper:
     SAVEALL
     mov %edx, %ecx
-    call improve_attribute_when_level_up_hook
+    call {improve_attribute_when_level_up_hook}
     RESTOREALL
     ret
 
@@ -338,14 +345,14 @@ legendary_reset_skill_level_wrapper:
     SAVEALL
 
     // Get the level we should set the legendary skill to.
-    call legendary_reset_skill_level_hook
+    call {legendary_reset_skill_level_hook}
 
     // Save the new value in what will be arg 3 (xmm2) of the call we return to.
     movdqu %xmm0, 0x40(%rsp)
 
     // Get the player AVO, we will return back to a call which applies
     // the new skill level value.
-    call get_player_avo
+    call {get_player_avo}
 
     mov %rax, 0xa8(%rsp) // Move player avo into arg 1 (saved rcx).
     mov (%rax), %rax     // Load v-table for the call we return to.
@@ -360,7 +367,7 @@ legendary_reset_skill_level_wrapper:
 check_condition_for_legendary_skill_wrapper:
     SAVEALL
     mov %eax, %ecx
-    call check_condition_for_legendary_skill_hook
+    call {check_condition_for_legendary_skill_hook}
     RESTOREALL retfpr=1
     ret
 
@@ -370,14 +377,14 @@ check_condition_for_legendary_skill_wrapper:
 hide_legendary_button_wrapper_ae:
     SAVEALL
     mov %r15d, %ecx
-    call hide_legendary_button_hook
+    call {hide_legendary_button_hook}
     RESTOREALL retfpr=1
     ret
 
 hide_legendary_button_wrapper_se:
     SAVEALL
     mov %esi, %ecx
-    call hide_legendary_button_hook
+    call {hide_legendary_button_hook}
     RESTOREALL retfpr=1
     ret
 
@@ -388,13 +395,13 @@ hide_legendary_button_wrapper_se:
 clear_legendary_button_wrapper_ae:
     SAVEALL
     mov %r15d, %ecx
-    call clear_legendary_button_hook
+    call {clear_legendary_button_hook}
     RESTOREALL retfpr=1
     ret
 
 clear_legendary_button_wrapper_se:
     SAVEALL
     mov %esi, %ecx
-    call clear_legendary_button_hook
+    call {clear_legendary_button_hook}
     RESTOREALL retfpr=1
     ret

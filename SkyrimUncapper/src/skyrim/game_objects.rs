@@ -184,8 +184,11 @@ fn get_player() -> *mut PlayerCharacter {
     }
 }
 
+///
 /// Gets the player actor value owner structure.
-#[no_mangle]
+///
+/// Marked as extern system, since it is called from assembly code.
+///
 pub extern "system" fn get_player_avo() -> *mut ActorValueOwner {
     unsafe {
         // SAFETY: The GameRef struct ensures our player pointer is valid.
@@ -211,7 +214,8 @@ pub fn get_player_level() -> u32 {
 ///
 /// In order to use this function safely, the given attribute and avo must be valid.
 ///
-#[no_mangle]
+/// Marked as extern system, since it is called from assembly code.
+///
 pub unsafe extern "system" fn player_avo_get_base_unchecked(
     av: *mut ActorValueOwner,
     attr: c_int
@@ -224,7 +228,8 @@ pub unsafe extern "system" fn player_avo_get_base_unchecked(
 ///
 /// In order to use this function safely, the given AVO and attr must be valid.
 ///
-#[no_mangle]
+/// Marked as extern system, since it is called from assembly code.
+///
 pub unsafe extern "system" fn player_avo_get_current_unchecked(
     av: *mut ActorValueOwner,
     attr: c_int

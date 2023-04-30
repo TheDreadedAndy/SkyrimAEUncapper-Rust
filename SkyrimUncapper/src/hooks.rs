@@ -55,6 +55,31 @@ extern "system" {
 
 core::arch::global_asm! {
     include_str!("hook_wrappers.S"),
+
+    // These symbol declarations let us access the mangled rust functions in the asm code by simply
+    // surrounding our reference to the symbol in curly braces. The benefit of this is that we
+    // don't need to use the no_mangle attribute, which also globally exports the symbol.
+    player_avo_get_current_return_trampoline = sym PLAYER_AVO_GET_CURRENT_RETURN_TRAMPOLINE,
+
+    get_skill_cap_hook                       = sym get_skill_cap_hook,
+    max_charge_begin_hook                    = sym max_charge_begin_hook,
+    max_charge_end_hook                      = sym max_charge_end_hook,
+    calculate_charge_points_per_use_hook     = sym calculate_charge_points_per_use_hook,
+    player_avo_get_current_hook              = sym player_avo_get_current_hook,
+    improve_player_skill_points_hook         = sym improve_player_skill_points_hook,
+    improve_level_exp_by_skill_level_hook    = sym improve_level_exp_by_skill_level_hook,
+    modify_perk_pool_hook                    = sym modify_perk_pool_hook,
+    improve_attribute_when_level_up_hook     = sym improve_attribute_when_level_up_hook,
+    legendary_reset_skill_level_hook         = sym legendary_reset_skill_level_hook,
+    check_condition_for_legendary_skill_hook = sym check_condition_for_legendary_skill_hook,
+    hide_legendary_button_hook               = sym hide_legendary_button_hook,
+    clear_legendary_button_hook              = sym clear_legendary_button_hook,
+
+    // These are defined in the skyrim game objects file.
+    player_avo_get_base_unchecked            = sym player_avo_get_base_unchecked,
+    player_avo_get_current_unchecked         = sym player_avo_get_current_unchecked,
+    get_player_avo                           = sym get_player_avo,
+
     options(att_syntax)
 }
 
@@ -90,8 +115,7 @@ const LEVEL_MULT_CONFLICTS: &str = ZAX_EXPERIENCE;
 //
 // Boing!
 //
-#[no_mangle]
-static player_avo_get_current_return_trampoline: GameRef<usize> = GameRef::new();
+static PLAYER_AVO_GET_CURRENT_RETURN_TRAMPOLINE: GameRef<usize> = GameRef::new();
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -262,7 +286,7 @@ keywords::disarray! {
             hook: Hook::Jump12 {
                 entry: player_avo_get_current_wrapper as *const u8,
                 clobber: Register::Rax,
-                trampoline: player_avo_get_current_return_trampoline.inner()
+                trampoline: PLAYER_AVO_GET_CURRENT_RETURN_TRAMPOLINE.inner()
             },
             loc: GameLocation::Ae { id: 38462, offset: 0 },
             sig: signature![
@@ -277,7 +301,7 @@ keywords::disarray! {
             hook: Hook::Jump12 {
                 entry: player_avo_get_current_wrapper as *const u8,
                 clobber: Register::Rax,
-                trampoline: player_avo_get_current_return_trampoline.inner()
+                trampoline: PLAYER_AVO_GET_CURRENT_RETURN_TRAMPOLINE.inner()
             },
             loc: GameLocation::Se { id: 37517, offset: 0 },
             sig: signature![
@@ -668,12 +692,6 @@ keywords::disarray! {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Patch implementations
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-//
-// Note that these implementations are marked "no_mangle" so that they can easily be called from
-// the assembly wrappers. This, however, also marks the symbols as external, which means the loader
-// of this library file can also call these functions directly. There doesn't seem to be much that
-// can be done about this side effect, as even using "export_name" instead also causes the symbol
-// to be global.
 
 /// The base game threshold for legendarying a skill.
 const BASE_LEGENDARY_THRESHOLD: f32 = 100.0;
@@ -681,7 +699,6 @@ const BASE_LEGENDARY_THRESHOLD: f32 = 100.0;
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Determines the real skill cap of the given skill.
-#[no_mangle]
 extern "system" fn get_skill_cap_hook(
     skill: c_int
 ) -> f32 {
@@ -692,7 +709,6 @@ extern "system" fn get_skill_cap_hook(
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Begins a calculation for weapon charge by setting the enchant cap to use the charge value.
-#[no_mangle]
 extern "system" fn max_charge_begin_hook(
     enchant_type: u32
 ) {
@@ -703,7 +719,6 @@ extern "system" fn max_charge_begin_hook(
 }
 
 /// Ends a calculation for weapon charge by returning the cap mode to magnitude, if necessary.
-#[no_mangle]
 extern "system" fn max_charge_end_hook() {
     settings::use_enchant_magnitude_cap();
 }
@@ -714,7 +729,6 @@ extern "system" fn max_charge_end_hook() {
 /// The original equation would fall apart for levels above 199, so this
 /// implementation caps the level in the calculation to 199.
 ///
-#[no_mangle]
 extern "system" fn calculate_charge_points_per_use_hook(
     base_points: f32,
     max_charge: f32
@@ -746,7 +760,6 @@ extern "system" fn calculate_charge_points_per_use_hook(
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Caps the formula results for each skill.
-#[no_mangle]
 extern "system" fn player_avo_get_current_hook(
     av: *mut ActorValueOwner,
     attr: c_int
@@ -768,7 +781,6 @@ extern "system" fn player_avo_get_current_hook(
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Applies a multiplier to the exp gain for the given skill.
-#[no_mangle]
 extern "system" fn improve_player_skill_points_hook(
     attr: c_int,
     mut exp_base: f32,
@@ -790,7 +802,6 @@ extern "system" fn improve_player_skill_points_hook(
 }
 
 /// Multiplies the exp gain of a level-up by the configured multiplier.
-#[no_mangle]
 extern "system" fn improve_level_exp_by_skill_level_hook(
     mut exp: f32,
     attr: c_int
@@ -811,7 +822,6 @@ extern "system" fn improve_level_exp_by_skill_level_hook(
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Adjusts the number of perks the player recieves at level-up.
-#[no_mangle]
 extern "system" fn modify_perk_pool_hook(
     count: i8
 ) {
@@ -826,7 +836,6 @@ extern "system" fn modify_perk_pool_hook(
 ///
 /// Adjusts the attribute gain at each level-up based on the configured settings.
 ///
-#[no_mangle]
 extern "system" fn improve_attribute_when_level_up_hook(
     choice: c_int
 ) {
@@ -843,7 +852,6 @@ extern "system" fn improve_attribute_when_level_up_hook(
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Determines what level a skill should take on after being legendary'd.
-#[no_mangle]
 extern "system" fn legendary_reset_skill_level_hook(
     base_level: f32
 ) -> f32 {
@@ -860,7 +868,6 @@ extern "system" fn legendary_reset_skill_level_hook(
 /// threshold. If the condition is valid, we return the threshold. Otherwise, we
 /// return threshold - 1.
 ///
-#[no_mangle]
 extern "system" fn check_condition_for_legendary_skill_hook(
     skill: c_int
 ) -> f32 {
@@ -881,7 +888,6 @@ extern "system" fn check_condition_for_legendary_skill_hook(
 /// threshold. If the condition is valid, we return the threshold. Otherwise, we
 /// return threshold - 1.
 ///
-#[no_mangle]
 extern "system" fn hide_legendary_button_hook(
     skill: c_int
 ) -> f32 {
@@ -903,7 +909,6 @@ extern "system" fn hide_legendary_button_hook(
 /// threshold or the threshold - 1 depending on if we want the hint to be invisible or
 /// visible, respectively.
 ///
-#[no_mangle]
 extern "system" fn clear_legendary_button_hook(
     skill: c_int
 ) -> f32 {
