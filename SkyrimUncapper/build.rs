@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::fs::File;
 use std::io::Write;
 
-const NATIVE_WRAPPERS: &str = "src/skyrim/native_wrappers.cpp";
+const NATIVE_WRAPPERS: &str = "src/native_wrappers.cpp";
 
 const RC_AUTHOR: &str = "Kasplat";
 const RC_NAME: &str = "Skyrim Uncapper AE";

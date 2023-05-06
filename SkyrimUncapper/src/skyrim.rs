@@ -34,7 +34,7 @@ use skyrim_patcher::{GameRef, Descriptor, GameLocation};
 use skse64::version::RUNTIME_VERSION_1_6_629;
 
 use crate::settings::SkillMult;
-use crate::settings;
+use crate::settings::SETTINGS;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Game object definitions
@@ -61,10 +61,11 @@ keywords::abstract_type! {
 /// The full list is here: https://en.uesp.net/wiki/Skyrim_Mod:Actor_Value_Indices
 ///
 #[repr(C)]
+#[allow(dead_code)] // Transmutes don't count as usage.
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum ActorAttribute {
     /* 0x0-0x5 ignored */
-    OneHanded = SKILL_OFFSET,
+    OneHanded = SKILL_OFFSET as isize,
     TwoHanded,
     Marksman,
     Block,
@@ -104,20 +105,18 @@ impl PlayerCharacter {
 
     /// Gets a reference to the players perk pool.
     pub fn get_perk_pool() -> &'static Cell<u8> {
-        unsafe {
-            // SAFETY: These offsets have been verified to be correct. Cell is transparent, so we
-            //         can use it here as a safe wrapper around a variable that we don't have
-            //         exclusive access to.
-            Cell::from_mut(Self::version_offset::<u8>(0xb09, 0xb01).as_mut().unwrap())
-        }
+        // SAFETY: These offsets have been verified to be correct. Cell is transparent, so we
+        //         can use it here as a safe wrapper around a variable that we don't have
+        //         exclusive access to.
+        unsafe { Cell::from_mut(Self::version_offset::<u8>(0xb09, 0xb01).as_mut().unwrap()) }
     }
 
     /// Gets the actor value owner for the player actor.
-    pub fn get_avo() -> *mut ActorValueOwner {
-        unsafe {
-            // SAFETY: These offsets have been verified to be correct.
-            Self::version_offset(0xb8, 0xb0)
-        }
+    ///
+    /// Called from ASM code, so we must mark it as extern "system".
+    pub extern "system" fn get_avo() -> *mut ActorValueOwner {
+        // SAFETY: These offsets have been verified to be correct.
+        unsafe { Self::version_offset(0xb8, 0xb0) }
     }
 
     /// Gets the base value of the given attribute.
@@ -153,7 +152,6 @@ impl PlayerCharacter {
 
     /// Gets a version dependent offset in the player structure.
     unsafe fn version_offset<T>(
-        &self,
         current: usize,
         compat: usize
     ) -> *mut T {
@@ -299,13 +297,17 @@ impl Iterator for SkillIterator {
         &mut self
     ) -> Option<Self::Item> {
         let ret = self.0;
-        self.0 = if self.0 == ActorAttribute::Enchanting {
-            None
+        self.0 = if let Some(attr) = self.0 {
+            if attr == ActorAttribute::Enchanting {
+                None
+            } else {
+                // The underlying representation of an actor attribute is a c_int, and we know that the
+                // order we want to iterate in is the same as the definition order, so we just
+                // increment, as a simplification.
+                Some(ActorAttribute::from_raw(attr as c_int + 1).unwrap())
+            }
         } else {
-            // The underlying representation of an actor attribute is a c_int, and we know that the
-            // order we want to iterate in is the same as the definition order, so we just
-            // increment, as a simplification.
-            ActorAttribute::from_raw(self.0 as c_int + 1).unwrap()
+            None
         };
         return ret;
     }
@@ -485,15 +487,6 @@ unsafe extern "system" fn handle_ffi_exception(
 // into the games code. They must therefore use the system calling convention.
 
 ///
-/// Gets the player actor value owner structure.
-///
-/// Marked as extern system, since it is called from assembly code.
-///
-pub extern "system" fn get_player_avo() -> *mut ActorValueOwner {
-    PlayerCharacter::get_avo()
-}
-
-///
 /// Gets the base value of a player attribute.
 ///
 /// In order to use this function safely, the given attribute and avo must be valid.
@@ -519,5 +512,5 @@ pub unsafe extern "system" fn player_avo_get_current_unchecked(
     attr: c_int
 ) -> f32 {
     let is_se = skse64::version::current_runtime() <= skse64::version::RUNTIME_VERSION_1_5_97;
-    player_avo_get_current_net(av, attr, is_se, settings::is_skill_formula_cap_enabled())
+    player_avo_get_current_net(av, attr, is_se, SETTINGS.general.skill_formula_caps_en.get())
 }

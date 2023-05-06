@@ -15,7 +15,7 @@ use core::sync::atomic::{AtomicBool, Ordering};
 
 use skyrim_patcher::{Descriptor, Hook, Register, GameLocation, GameRef, signature};
 
-use crate::settings;
+use crate::settings::SETTINGS;
 use crate::skyrim::*;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -79,7 +79,7 @@ core::arch::global_asm! {
     // These are defined in the skyrim game objects file.
     player_avo_get_base_unchecked            = sym player_avo_get_base_unchecked,
     player_avo_get_current_unchecked         = sym player_avo_get_current_unchecked,
-    get_player_avo                           = sym get_player_avo,
+    get_player_avo                           = sym PlayerCharacter::get_avo,
 
     options(att_syntax)
 }
@@ -170,7 +170,7 @@ keywords::disarray! {
         //
         Descriptor::Patch {
             name: "BeginMaxChargeCalculation",
-            enabled: || SETTINGS.general.enchant_patch_en.get(),
+            enabled: || SETTINGS.general.enchanting_patch_en.get(),
             conflicts: None,
             hook: Hook::Call12 {
                 entry: max_charge_begin_wrapper_ae as *const u8,
@@ -184,7 +184,7 @@ keywords::disarray! {
         },
         Descriptor::Patch {
             name: "BeginMaxChargeCalculation",
-            enabled: || SETTINGS.general.enchant_patch_en.get(),
+            enabled: || SETTINGS.general.enchanting_patch_en.get(),
             conflicts: None,
             hook: Hook::Call12 {
                 entry: max_charge_begin_wrapper_se as *const u8,
@@ -198,7 +198,7 @@ keywords::disarray! {
         },
         Descriptor::Patch {
             name: "EndMaxChargeCalculation",
-            enabled: || SETTINGS.general.enchant_patch_en.get(),
+            enabled: || SETTINGS.general.enchanting_patch_en.get(),
             conflicts: None,
             hook: Hook::Call12 {
                 entry: max_charge_end_wrapper_ae as *const u8,
@@ -212,7 +212,7 @@ keywords::disarray! {
         },
         Descriptor::Patch {
             name: "EndMaxChargeCalculation",
-            enabled: || SETTINGS.general.enchant_patch_en.get(),
+            enabled: || SETTINGS.general.enchanting_patch_en.get(),
             conflicts: None,
             hook: Hook::Call12 {
                 entry: max_charge_end_wrapper_se as *const u8,
@@ -238,7 +238,7 @@ keywords::disarray! {
         //
         Descriptor::Patch {
             name: "CalculateChargePointsPerUse",
-            enabled: || SETTINGS.general.enchant_patch_en.get(),
+            enabled: || SETTINGS.general.enchanting_patch_en.get(),
             conflicts: None,
             hook: Hook::Call12 {
                 entry: calculate_charge_points_per_use_wrapper_ae as *const u8,
@@ -258,7 +258,7 @@ keywords::disarray! {
         },
         Descriptor::Patch {
             name: "CalculateChargePointsPerUse",
-            enabled: || SETTINGS.general.enchant_patch_en.get(),
+            enabled: || SETTINGS.general.enchanting_patch_en.get(),
             conflicts: None,
             hook: Hook::Call12 {
                 entry: calculate_charge_points_per_use_wrapper_se as *const u8,
@@ -740,14 +740,16 @@ extern "system" fn calculate_charge_points_per_use_hook(
     base_points: f32,
     max_charge: f32
 ) -> f32 {
-    assert!(SETTINGS.general.enchant_patch_en.get());
+    assert!(SETTINGS.general.enchanting_patch_en.get());
 
     let cost_exponent = *ENCHANTING_COST_EXPONENT.get();
     let cost_base = *ENCHANTING_SKILL_COST_BASE.get();
     let cost_scale = *ENCHANTING_SKILL_COST_SCALE.get();
     let cost_mult = *ENCHANTING_SKILL_COST_MULT.get();
-    let cap = settings::get_enchant_charge_cap();
-    let enchanting_level = cap.min(player_avo_get_current(ActorAttribute::Enchanting));
+    let cap = (SETTINGS.enchant.charge_cap.get() as f32).min(199.0).min(
+        SETTINGS.skill_formula_caps.get(ActorAttribute::Enchanting).get() as f32
+    );
+    let enchanting_level = cap.min(PlayerCharacter::get_current(ActorAttribute::Enchanting));
 
     let base = cost_mult * base_points.powf(cost_exponent);
     if SETTINGS.enchant.use_linear_charge.get() {
@@ -779,7 +781,18 @@ extern "system" fn player_avo_get_current_hook(
     };
 
     if let Ok(skill) = ActorAttribute::from_raw_skill(attr) {
-        val = val.min(settings::get_skill_formula_cap(skill)).max(0.0);
+        let mut cap = SETTINGS.skill_formula_caps.get(skill).get() as f32;
+
+        // Enforce the additional enchanting caps.
+        if skill == ActorAttribute::Enchanting {
+            cap = cap.min(if IS_USING_CHARGE_CAP.load(Ordering::Relaxed) {
+                SETTINGS.enchant.charge_cap.get() as f32
+            } else {
+                SETTINGS.enchant.magnitude_cap.get() as f32
+            });
+        }
+
+        val = val.min(cap).max(0.0);
     }
 
     return val;
@@ -796,13 +809,16 @@ extern "system" fn improve_player_skill_points_hook(
     assert!(SETTINGS.general.skill_exp_mults_en.get());
 
     if let Ok(skill) = ActorAttribute::from_raw_skill(attr) {
-        let (base_mult, offset_mult) = settings::get_skill_exp_mult(
-            skill,
-            player_avo_get_base(skill) as u32,
-            get_player_level()
+        let base_mult = SETTINGS.skill_exp_mults.get(skill).get();
+        let skill_mult = SETTINGS.skill_exp_mults_with_skills.get(skill).get_nearest(
+            PlayerCharacter::get_base(skill) as u32
         );
-        exp_base *= base_mult;
-        exp_offset *= offset_mult;
+        let pc_mult = SETTINGS.skill_exp_mults_with_pc_lvl.get(skill).get_nearest(
+            PlayerCharacter::get_level()
+        );
+
+        exp_base   *= base_mult.base   * skill_mult.base   * pc_mult.base;
+        exp_offset *= base_mult.offset * skill_mult.offset * pc_mult.offset;
     }
 
     exp_base + exp_offset
@@ -816,11 +832,11 @@ extern "system" fn improve_level_exp_by_skill_level_hook(
     assert!(SETTINGS.general.level_exp_mults_en.get());
 
     if let Ok(skill) = ActorAttribute::from_raw_skill(attr) {
-        exp *= settings::get_level_exp_mult(
-            skill,
-            player_avo_get_base(skill) as u32,
-            get_player_level()
-        );
+        exp *= SETTINGS.level_exp_mults.get(skill).get()
+             * SETTINGS.level_exp_mults_with_skills.get(skill)
+                       .get_nearest(PlayerCharacter::get_base(skill) as u32)
+             * SETTINGS.level_exp_mults_with_pc_lvl.get(skill)
+                       .get_nearest(PlayerCharacter::get_level());
     }
 
     exp * *XP_PER_SKILL_RANK.get()
@@ -834,8 +850,11 @@ extern "system" fn modify_perk_pool_hook(
 ) {
     assert!(SETTINGS.general.perk_points_en.get());
 
-    let pool = get_player_perk_pool();
-    let delta = std::cmp::min(0xFF, settings::get_perk_delta(get_player_level()));
+    let pool = PlayerCharacter::get_perk_pool();
+    let delta = std::cmp::min(
+        0xFF,
+        SETTINGS.perks_at_lvl_up.get_cumulative_delta(PlayerCharacter::get_level())
+    );
     let res = (pool.get() as i16) + (if count > 0 { delta as i16 } else { count as i16 });
     pool.set(std::cmp::max(0, std::cmp::min(0xff, res)) as u8);
 }
@@ -847,13 +866,34 @@ extern "system" fn improve_attribute_when_level_up_hook(
     choice: c_int
 ) {
     assert!(SETTINGS.general.attr_points_en.get());
-    let choice = ActorAttribute::from_raw(choice).unwrap();
 
-    let (hp, mp, sp, cw) = settings::get_attribute_level_up(get_player_level(), choice);
-    player_avo_mod_base(ActorAttribute::Health, hp);
-    player_avo_mod_base(ActorAttribute::Magicka, mp);
-    player_avo_mod_base(ActorAttribute::Stamina, sp);
-    player_avo_mod_current(ActorAttribute::CarryWeight, cw);
+    let player_level = PlayerCharacter::get_level();
+    let (hp, mp, sp, cw) = match ActorAttribute::from_raw(choice).unwrap() {
+        ActorAttribute::Health => (
+            SETTINGS.hp_at_lvl_up.get_nearest(player_level) as f32,
+            SETTINGS.mp_at_hp_lvl_up.get_nearest(player_level) as f32,
+            SETTINGS.sp_at_hp_lvl_up.get_nearest(player_level) as f32,
+            SETTINGS.cw_at_hp_lvl_up.get_nearest(player_level) as f32
+        ),
+        ActorAttribute::Magicka => (
+            SETTINGS.hp_at_mp_lvl_up.get_nearest(player_level) as f32,
+            SETTINGS.mp_at_lvl_up.get_nearest(player_level) as f32,
+            SETTINGS.sp_at_mp_lvl_up.get_nearest(player_level) as f32,
+            SETTINGS.cw_at_mp_lvl_up.get_nearest(player_level) as f32
+        ),
+        ActorAttribute::Stamina => (
+            SETTINGS.hp_at_sp_lvl_up.get_nearest(player_level) as f32,
+            SETTINGS.mp_at_sp_lvl_up.get_nearest(player_level) as f32,
+            SETTINGS.sp_at_lvl_up.get_nearest(player_level) as f32,
+            SETTINGS.cw_at_sp_lvl_up.get_nearest(player_level) as f32
+        ),
+        _ => panic!("Cannot get the attribute level up with an invalid choice.")
+    };
+
+    PlayerCharacter::mod_base(ActorAttribute::Health, hp);
+    PlayerCharacter::mod_base(ActorAttribute::Magicka, mp);
+    PlayerCharacter::mod_base(ActorAttribute::Stamina, sp);
+    PlayerCharacter::mod_current(ActorAttribute::CarryWeight, cw);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -865,7 +905,20 @@ extern "system" fn legendary_reset_skill_level_hook(
     assert!(SETTINGS.general.legendary_en.get());
     assert!(base_level >= 0.0);
     let base_val = *LEGENDARY_SKILL_RESET_VALUE.get();
-    settings::get_post_legendary_skill_level(base_val, base_level)
+
+    // Check if legendarying should reset the level at all.
+    if SETTINGS.legendary.keep_skill_level.get() {
+        return base_level;
+    }
+
+    // 0 in the conf file means we should use the default value.
+    let mut reset_level = SETTINGS.legendary.skill_level_after.get() as f32;
+    if reset_level == 0.0 {
+        reset_level = base_val;
+    }
+
+    // Don't allow legendarying to raise the skill level.
+    reset_level.min(base_level)
 }
 
 ///
@@ -881,7 +934,7 @@ extern "system" fn check_condition_for_legendary_skill_hook(
     assert!(SETTINGS.general.legendary_en.get());
     let skill = ActorAttribute::from_raw_skill(skill).unwrap();
 
-    if settings::is_legendary_available(player_avo_get_base(skill) as u32) {
+    if PlayerCharacter::get_base(skill) as u32 >= SETTINGS.legendary.skill_level_en.get() {
         BASE_LEGENDARY_THRESHOLD
     } else {
         BASE_LEGENDARY_THRESHOLD - 1.0
@@ -901,7 +954,8 @@ extern "system" fn hide_legendary_button_hook(
     assert!(SETTINGS.general.legendary_en.get());
     let skill = ActorAttribute::from_raw_skill(skill).unwrap();
 
-    if settings::is_legendary_button_visible(player_avo_get_base(skill) as u32) {
+    if (PlayerCharacter::get_base(skill) as u32 >= SETTINGS.legendary.skill_level_en.get())
+            && !SETTINGS.legendary.hide_button.get() {
         BASE_LEGENDARY_THRESHOLD
     } else {
         BASE_LEGENDARY_THRESHOLD - 1.0
@@ -922,9 +976,10 @@ extern "system" fn clear_legendary_button_hook(
     assert!(SETTINGS.general.legendary_en.get());
 
     if let Ok(skill) = ActorAttribute::from_raw_skill(skill) {
-        let level = player_avo_get_base(skill);
+        let level = PlayerCharacter::get_base(skill);
         let game_vis = level >= BASE_LEGENDARY_THRESHOLD;
-        let mod_vis = settings::is_legendary_button_visible(level as u32);
+        let mod_vis = !SETTINGS.legendary.hide_button.get()
+            && (PlayerCharacter::get_base(skill) as u32 >= SETTINGS.legendary.skill_level_en.get());
 
         if game_vis == mod_vis {
             level
@@ -935,6 +990,6 @@ extern "system" fn clear_legendary_button_hook(
         }
     } else {
         // Some other perk menu. E.g. vampire or werewolf
-        unsafe { player_avo_get_base_unchecked(get_player_avo(), skill) }
+        unsafe { player_avo_get_base_unchecked(PlayerCharacter::get_avo(), skill) }
     }
 }

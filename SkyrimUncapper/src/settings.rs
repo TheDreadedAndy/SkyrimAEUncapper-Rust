@@ -7,8 +7,7 @@
 //!
 
 use std::vec::Vec;
-use core::ops::Deref;
-use core::path::Path;
+use std::path::Path;
 use core::fmt::Debug;
 use core::str::FromStr;
 
@@ -303,7 +302,7 @@ impl<T: Copy + FromStr> IniReadableSkill for LeveledIniSection<T>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-impl<T: IniReadableSkill + Default> IniSkillManager<T> {
+impl<T: Default> IniSkillManager<T> {
     /// Gets the configuration item for the given skill.
     pub fn get(
         &self,
@@ -334,70 +333,70 @@ const DEFAULT_INI_LZ: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/SkyrimUn
 
 /// Manages the loading of a skill multiplier, which contains both a base and offset multiplier.
 #[derive(Default, Copy, Clone)]
-pub (in crate) struct SkillMult {
-    base: f32,
-    offset: f32
+pub struct SkillMult {
+    pub base: f32,
+    pub offset: f32
 }
 
 #[derive(Default)]
-struct GeneralSettings {
-    skill_caps_en           : IniField<bool>,
-    skill_formula_caps_en   : IniField<bool>,
-    skill_formula_ui_fix_en : IniField<bool>,
-    enchanting_patch_en     : IniField<bool>,
-    skill_exp_mults_en      : IniField<bool>,
-    level_exp_mults_en      : IniField<bool>,
-    perk_points_en          : IniField<bool>,
-    attr_points_en          : IniField<bool>,
-    legendary_en            : IniField<bool>
+pub struct GeneralSettings {
+    pub skill_caps_en           : IniField<bool>,
+    pub skill_formula_caps_en   : IniField<bool>,
+    pub skill_formula_ui_fix_en : IniField<bool>,
+    pub enchanting_patch_en     : IniField<bool>,
+    pub skill_exp_mults_en      : IniField<bool>,
+    pub level_exp_mults_en      : IniField<bool>,
+    pub perk_points_en          : IniField<bool>,
+    pub attr_points_en          : IniField<bool>,
+    pub legendary_en            : IniField<bool>
 }
 
 #[derive(Default)]
-struct EnchantSettings {
-    magnitude_cap     : IniField<u32>,
-    charge_cap        : IniField<u32>,
-    use_linear_charge : IniField<bool>
+pub struct EnchantSettings {
+    pub magnitude_cap     : IniField<u32>,
+    pub charge_cap        : IniField<u32>,
+    pub use_linear_charge : IniField<bool>
 }
 
 #[derive(Default)]
-struct LegendarySettings {
-    keep_skill_level  : IniField<bool>,
-    hide_button       : IniField<bool>,
-    skill_level_en    : IniField<u32>,
-    skill_level_after : IniField<u32>
+pub struct LegendarySettings {
+    pub keep_skill_level  : IniField<bool>,
+    pub hide_button       : IniField<bool>,
+    pub skill_level_en    : IniField<u32>,
+    pub skill_level_after : IniField<u32>
 }
 
 /// Contains all the configuration settings loaded in from the INI file.
 #[derive(Default)]
-struct Settings {
-    general                     : GeneralSettings,
-    enchant                     : EnchantSettings,
-    legendary                   : LegendarySettings,
-    skill_caps                  : IniSkillManager<IniField<u32>>,
-    skill_formula_caps          : IniSkillManager<IniField<u32>>,
-    skill_exp_mults             : IniSkillManager<IniField<SkillMult>>,
-    skill_exp_mults_with_skills : IniSkillManager<LeveledIniSection<SkillMult>>,
-    skill_exp_mults_with_pc_lvl : IniSkillManager<LeveledIniSection<SkillMult>>,
-    level_exp_mults             : IniSkillManager<IniField<f32>>,
-    level_exp_mults_with_skills : IniSkillManager<LeveledIniSection<f32>>,
-    level_exp_mults_with_pc_lvl : IniSkillManager<LeveledIniSection<f32>>,
-    perks_at_lvl_up             : LeveledIniSection<f32>,
-    hp_at_lvl_up                : LeveledIniSection<u32>,
-    hp_at_mp_lvl_up             : LeveledIniSection<u32>,
-    hp_at_sp_lvl_up             : LeveledIniSection<u32>,
-    mp_at_lvl_up                : LeveledIniSection<u32>,
-    mp_at_hp_lvl_up             : LeveledIniSection<u32>,
-    mp_at_sp_lvl_up             : LeveledIniSection<u32>,
-    sp_at_lvl_up                : LeveledIniSection<u32>,
-    sp_at_hp_lvl_up             : LeveledIniSection<u32>,
-    sp_at_mp_lvl_up             : LeveledIniSection<u32>,
-    cw_at_hp_lvl_up             : LeveledIniSection<u32>,
-    cw_at_mp_lvl_up             : LeveledIniSection<u32>,
-    cw_at_sp_lvl_up             : LeveledIniSection<u32>
+pub struct Settings {
+    pub general                     : GeneralSettings,
+    pub enchant                     : EnchantSettings,
+    pub legendary                   : LegendarySettings,
+    pub skill_caps                  : IniSkillManager<IniField<u32>>,
+    pub skill_formula_caps          : IniSkillManager<IniField<u32>>,
+    pub skill_exp_mults             : IniSkillManager<IniField<SkillMult>>,
+    pub skill_exp_mults_with_skills : IniSkillManager<LeveledIniSection<SkillMult>>,
+    pub skill_exp_mults_with_pc_lvl : IniSkillManager<LeveledIniSection<SkillMult>>,
+    pub level_exp_mults             : IniSkillManager<IniField<f32>>,
+    pub level_exp_mults_with_skills : IniSkillManager<LeveledIniSection<f32>>,
+    pub level_exp_mults_with_pc_lvl : IniSkillManager<LeveledIniSection<f32>>,
+    pub perks_at_lvl_up             : LeveledIniSection<f32>,
+    pub hp_at_lvl_up                : LeveledIniSection<u32>,
+    pub hp_at_mp_lvl_up             : LeveledIniSection<u32>,
+    pub hp_at_sp_lvl_up             : LeveledIniSection<u32>,
+    pub mp_at_lvl_up                : LeveledIniSection<u32>,
+    pub mp_at_hp_lvl_up             : LeveledIniSection<u32>,
+    pub mp_at_sp_lvl_up             : LeveledIniSection<u32>,
+    pub sp_at_lvl_up                : LeveledIniSection<u32>,
+    pub sp_at_hp_lvl_up             : LeveledIniSection<u32>,
+    pub sp_at_mp_lvl_up             : LeveledIniSection<u32>,
+    pub cw_at_hp_lvl_up             : LeveledIniSection<u32>,
+    pub cw_at_mp_lvl_up             : LeveledIniSection<u32>,
+    pub cw_at_sp_lvl_up             : LeveledIniSection<u32>
 }
 
 /// Holds the global settings configuration, which is created when init() is called.
-static SETTINGS: Later<Settings> = Later::new();
+pub static SETTINGS: Later<Settings> = Later::new();
 
 /// Allows for the optional loading of an offset multiplier.
 impl FromStr for SkillMult {
@@ -551,156 +550,31 @@ pub fn init(
 ) {
     skse_message!("Loading config file: {}", path.display());
 
-    // Read the configuration from the file.
-    let ini = Ini::from_path(path);
-    if ini.is_err() {
-        skse_warning!("Could not load INI file. Defaults will be used.");
-    }
-
-    // Update the file with missing fields, if necessary.
-    let mut ini = ini.unwrap();
     let default_ini = Ini::from_str(unsafe {
         // SAFETY: We know this file was given as UTF8 text when it was compressed.
         &String::from_utf8_unchecked(deflate::decompress(DEFAULT_INI_LZ))
     }).unwrap();
-    if let Some(_) = ini.update(&default_ini) {
-        // If missing fields were added, update the INI file.
-        assert!(
-            ini.write_file(path).is_ok(),
-            "[ERROR] Failed to write to INI file. Please ensure Skyrim has permission to use the \
-             plugin directory."
-        );
 
-        skse_warning!("The INI file has been updated.");
+    // Read the configuration from the file.
+    let ini = Ini::from_path(path);
+    if let Ok(mut ini) = ini {
+        // Update the file with missing fields, if necessary.
+        if let Some(_) = ini.update(&default_ini) {
+            // If missing fields were added, update the INI file.
+            assert!(
+                ini.write_file(path).is_ok(),
+                "[ERROR] Failed to write to INI file. Please ensure Skyrim has \
+                         permission to use the plugin directory."
+            );
+
+            skse_warning!("The INI file has been updated.");
+        }
+
+        SETTINGS.init(Settings::new(&ini));
+    } else {
+        skse_warning!("Could not load INI file. Defaults will be used.");
+        SETTINGS.init(Settings::new(&default_ini));
     }
-
-    SETTINGS.init(Settings::new(&ini));
 
     skse_message!("Done initializing settings!");
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-/// Gets the formula cap for the given skill.
-pub fn get_skill_formula_cap(
-    skill: ActorAttribute
-) -> f32 {
-    let mut cap = SETTINGS.skill_formula_caps.get(skill).get() as f32;
-
-    // Enforce the additional enchanting caps.
-    if skill == ActorAttribute::Enchanting {
-        let specific_cap = if IS_USING_CHARGE_CAP.load(Ordering::Relaxed) {
-            SETTINGS.enchant.charge_cap.get() as f32
-        } else {
-            SETTINGS.enchant.magnitude_cap.get() as f32
-        };
-
-        cap = cap.min(specific_cap);
-    }
-
-    return cap;
-}
-
-/// Gets the formula cap for weapon-charge enchantments.
-pub fn get_enchant_charge_cap() -> f32 {
-    (SETTINGS.enchant.charge_cap.get() as f32).min(199.0).min(
-        SETTINGS.skill_formula_caps.get(ActorAttribute::Enchanting).get() as f32
-    )
-}
-
-/// Calculates the skill exp gain multiplier for the given skill, skill level, and player level.
-pub fn get_skill_exp_mult(
-    skill: ActorAttribute,
-    skill_level: u32,
-    player_level: u32
-) -> (f32, f32) {
-    let base_mult = SETTINGS.skill_exp_mults.get(skill).get();
-    let skill_mult = SETTINGS.skill_exp_mults_with_skills.get(skill).get_nearest(skill_level);
-    let pc_mult = SETTINGS.skill_exp_mults_with_pc_lvl.get(skill).get_nearest(player_level);
-
-    (base_mult.base * skill_mult.base * pc_mult.base,
-     base_mult.offset * skill_mult.offset * pc_mult.offset)
-}
-
-/// Calculates the level exp gain multiplier for the given skill, skill level, and player level.
-pub fn get_level_exp_mult(
-    skill: ActorAttribute,
-    skill_level: u32,
-    player_level: u32
-) -> f32 {
-    let base_mult = SETTINGS.level_exp_mults.get(skill).get();
-    let skill_mult = SETTINGS.level_exp_mults_with_skills.get(skill).get_nearest(skill_level);
-    let pc_mult = SETTINGS.level_exp_mults_with_pc_lvl.get(skill).get_nearest(player_level);
-    return base_mult * skill_mult * pc_mult;
-}
-
-/// Gets the number of perk points the player should receive for reaching the given level.
-pub fn get_perk_delta(
-    player_level: u32
-) -> u32 {
-    SETTINGS.perks_at_lvl_up.get_cumulative_delta(player_level)
-}
-
-/// Gets the number of (hp, mp, sp, cw) points the player should get for the given level and
-/// attribute selection.
-pub fn get_attribute_level_up(
-    player_level: u32,
-    attr: ActorAttribute
-) -> (f32, f32, f32, f32) {
-    match attr {
-        ActorAttribute::Health => (
-            SETTINGS.hp_at_lvl_up.get_nearest(player_level) as f32,
-            SETTINGS.mp_at_hp_lvl_up.get_nearest(player_level) as f32,
-            SETTINGS.sp_at_hp_lvl_up.get_nearest(player_level) as f32,
-            SETTINGS.cw_at_hp_lvl_up.get_nearest(player_level) as f32
-        ),
-        ActorAttribute::Magicka => (
-            SETTINGS.hp_at_mp_lvl_up.get_nearest(player_level) as f32,
-            SETTINGS.mp_at_lvl_up.get_nearest(player_level) as f32,
-            SETTINGS.sp_at_mp_lvl_up.get_nearest(player_level) as f32,
-            SETTINGS.cw_at_mp_lvl_up.get_nearest(player_level) as f32
-        ),
-        ActorAttribute::Stamina => (
-            SETTINGS.hp_at_sp_lvl_up.get_nearest(player_level) as f32,
-            SETTINGS.mp_at_sp_lvl_up.get_nearest(player_level) as f32,
-            SETTINGS.sp_at_lvl_up.get_nearest(player_level) as f32,
-            SETTINGS.cw_at_sp_lvl_up.get_nearest(player_level) as f32
-        ),
-        _ => panic!("Cannot get the attribute level up with an invalid choice.")
-    }
-}
-
-/// Checks if the legendary button should be displayed above a skill with the given level.
-pub fn is_legendary_button_visible(
-    skill_level: u32
-) -> bool {
-    (skill_level >= SETTINGS.legendary.skill_level_en.get())
-        && !(SETTINGS.legendary.hide_button.get())
-}
-
-/// Checks if the given skill level is high enough to legendary.
-pub fn is_legendary_available(
-    skill_level: u32
-) -> bool {
-    skill_level >= SETTINGS.legendary.skill_level_en.get()
-}
-
-/// Gets the level a skill should be set to after being legendaried.
-pub fn get_post_legendary_skill_level(
-    default_reset: f32,
-    base_level: f32
-) -> f32 {
-    // Check if legendarying should reset the level at all.
-    if SETTINGS.legendary.keep_skill_level.get() {
-        return base_level;
-    }
-
-    // 0 in the conf file means we should use the default value.
-    let mut reset_level = SETTINGS.legendary.skill_level_after.get() as f32;
-    if reset_level == 0.0 {
-        reset_level = default_reset;
-    }
-
-    // Don't allow legendarying to raise the skill level.
-    reset_level.min(base_level)
 }
