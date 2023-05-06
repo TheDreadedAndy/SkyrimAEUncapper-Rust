@@ -11,7 +11,7 @@
 
 typedef uint32_t u32;
 typedef uint16_t u16;
-typedef float f32;
+typedef float    f32;
 
 #define CATCH_UNWIND(body)                                    \
 do {                                                          \
