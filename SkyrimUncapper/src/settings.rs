@@ -11,7 +11,7 @@ use std::path::Path;
 use core::fmt::Debug;
 use core::str::FromStr;
 
-use later::Later;
+use core_util::Later;
 use plugin_ini::Ini;
 use skse64::log::{skse_message, skse_warning};
 

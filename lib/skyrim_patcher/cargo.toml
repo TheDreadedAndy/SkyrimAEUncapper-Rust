@@ -9,8 +9,7 @@ path = "patcher.rs"
 [dependencies]
 skse64 = { path = "../skse64" }
 versionlib = { path = "../versionlib" }
-racy_cell = { path = "../racy_cell" }
-keywords = { path = "../keywords" }
+core-util = { path = "../core-util" }
 
 [dependencies.windows-sys]
 version = "0.45.0"

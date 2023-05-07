@@ -7,7 +7,7 @@
 
 use core::ffi::c_char;
 
-use racy_cell::RacyCell;
+use core_util::RacyCell;
 
 use crate::plugin_api::{Message, SkseMessagingInterface, SkseInterface, InterfaceId};
 use crate::plugin_api;

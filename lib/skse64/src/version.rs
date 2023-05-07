@@ -6,7 +6,7 @@
 //!
 
 pub use skse64_common::version::*;
-use later::Later;
+use core_util::Later;
 
 /// Holds the running game/skse version. Initialized by the entry point.
 pub (in crate) static RUNNING_GAME_VERSION: Later<SkseVersion> = Later::new();

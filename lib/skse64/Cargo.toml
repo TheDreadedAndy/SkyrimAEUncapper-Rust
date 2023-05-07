@@ -4,8 +4,7 @@ version = "2.2.3"
 edition = "2021"
 
 [dependencies]
-later = { path = "../later" }
-racy_cell = { path = "../racy_cell" }
+core-util = { path = "../core-util" }
 skse64_common = { path = "../skse64_common" }
 
 [dependencies.windows-sys]

@@ -46,7 +46,7 @@ pub const SKILL_COUNT: usize = 18;
 /// The offset in the attribute enum to the start of the skill block.
 const SKILL_OFFSET: usize = 6;
 
-keywords::abstract_type! {
+core_util::abstract_type! {
     /// The player actor class.
     pub type PlayerCharacter;
 
@@ -123,14 +123,14 @@ impl PlayerCharacter {
     pub fn get_base(
         attr: ActorAttribute
     ) -> f32 {
-        unsafe { player_avo_get_base_unchecked(Self::get_avo(), attr as c_int) }
+        unsafe { Self::get_base_unchecked(attr as c_int) }
     }
 
     /// Gets the current value of the given attribute.
     pub fn get_current(
         attr: ActorAttribute
     ) -> f32 {
-        unsafe { player_avo_get_current_unchecked(Self::get_avo(), attr as c_int) }
+        unsafe { Self::get_current_unchecked(attr as c_int) }
     }
 
     /// Modifies the base value of the given attribute.
@@ -148,6 +148,37 @@ impl PlayerCharacter {
     ) {
         // No idea what second arg does; just match game calls.
         unsafe { player_avo_mod_current_net(Self::get_avo(), 0, attr as c_int, val) }
+    }
+
+    ///
+    /// Gets the base value of a player attribute.
+    ///
+    /// In order to use this function safely, the given attribute must be valid.
+    ///
+    /// Marked as extern system, since it is called from assembly code.
+    ///
+    pub unsafe extern "system" fn get_base_unchecked(
+        attr: c_int
+    ) -> f32 {
+        player_avo_get_base_net(Self::get_avo(), attr)
+    }
+
+    ///
+    /// Gets the base value of a player attribute.
+    ///
+    /// In order to use this function safely, the given attribute must be valid.
+    ///
+    /// Marked as extern system, since it is called from assembly code.
+    ///
+    pub unsafe extern "system" fn get_current_unchecked(
+        attr: c_int
+    ) -> f32 {
+        player_avo_get_current_net(
+            Self::get_avo(),
+            attr,
+            skse64::version::current_runtime() <= skse64::version::RUNTIME_VERSION_1_5_97,
+            SETTINGS.general.skill_formula_caps_en.get()
+        )
     }
 
     /// Gets a version dependent offset in the player structure.
@@ -353,7 +384,7 @@ static player_avo_mod_current_entry: GameRef<
     unsafe extern "system" fn(*mut ActorValueOwner, u32, ActorAttribute, f32)
 > = GameRef::new();
 
-keywords::disarray! {
+core_util::disarray! {
     ///
     /// Holds the relocatable locations of each object/function exposed by this file.
     ///
@@ -477,40 +508,4 @@ unsafe extern "system" fn handle_ffi_exception(
         "An exception occured while executing a native game function: {}",
         std::str::from_utf8_unchecked(std::slice::from_raw_parts(s, len))
     );
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// Externally used native game functions
-////////////////////////////////////////////////////////////////////////////////////////////////////
-//
-// These are wrapped functions which must also be called from the assembly hooks that are injected
-// into the games code. They must therefore use the system calling convention.
-
-///
-/// Gets the base value of a player attribute.
-///
-/// In order to use this function safely, the given attribute and avo must be valid.
-///
-/// Marked as extern system, since it is called from assembly code.
-///
-pub unsafe extern "system" fn player_avo_get_base_unchecked(
-    av: *mut ActorValueOwner,
-    attr: c_int
-) -> f32 {
-    player_avo_get_base_net(av, attr)
-}
-
-///
-/// Gets the current value of a player attribute, ignoring any skill formula caps.
-///
-/// In order to use this function safely, the given AVO and attr must be valid.
-///
-/// Marked as extern system, since it is called from assembly code.
-///
-pub unsafe extern "system" fn player_avo_get_current_unchecked(
-    av: *mut ActorValueOwner,
-    attr: c_int
-) -> f32 {
-    let is_se = skse64::version::current_runtime() <= skse64::version::RUNTIME_VERSION_1_5_97;
-    player_avo_get_current_net(av, attr, is_se, SETTINGS.general.skill_formula_caps_en.get())
 }

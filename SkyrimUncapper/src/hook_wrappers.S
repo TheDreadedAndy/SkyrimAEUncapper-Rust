@@ -92,6 +92,7 @@
 skill_cap_patch_wrapper_ae:
     SAVEALL
 
+    mov %edx, %ecx // We don't have an AVO arg.
     call {player_avo_get_base_unchecked} // Reimplement replaced call.
     movaps %xmm0, %xmm8 // Reimplement original move.
     mov %esi, %ecx // Move skill ID back into first arg.
@@ -105,6 +106,7 @@ skill_cap_patch_wrapper_ae:
 skill_cap_patch_wrapper_se:
     SAVEALL
 
+    mov %edx, %ecx // We don't have an AVO arg.
     call {player_avo_get_base_unchecked} // Reimplement replaced call.
     movaps %xmm0, %xmm6 // Reimplement og move.
     mov %esi, %ecx // Move skill ID back into first arg.
@@ -237,18 +239,15 @@ display_true_skill_level_hook_ae:
 display_true_skill_color_hook:
     SAVEALL
 
-    call {get_player_avo}
-    mov %edi, %edx
+    mov %edi, %ecx
     jmp _display_true_skill_hook
 
 display_true_skill_level_hook_se:
     SAVEALL
 
-    call {get_player_avo}
-    mov %esi, %edx
+    mov %esi, %ecx
 
 _display_true_skill_hook:
-    mov %rax, %rcx
     call {player_avo_get_current_unchecked}
 
     RESTOREALL retfpr=1

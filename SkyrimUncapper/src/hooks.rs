@@ -77,8 +77,8 @@ core::arch::global_asm! {
     clear_legendary_button_hook              = sym clear_legendary_button_hook,
 
     // These are defined in the skyrim game objects file.
-    player_avo_get_base_unchecked            = sym player_avo_get_base_unchecked,
-    player_avo_get_current_unchecked         = sym player_avo_get_current_unchecked,
+    player_avo_get_base_unchecked            = sym PlayerCharacter::get_base_unchecked,
+    player_avo_get_current_unchecked         = sym PlayerCharacter::get_current_unchecked,
     get_player_avo                           = sym PlayerCharacter::get_avo,
 
     options(att_syntax)
@@ -120,7 +120,7 @@ static PLAYER_AVO_GET_CURRENT_RETURN_TRAMPOLINE: GameRef<usize> = GameRef::new()
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-keywords::disarray! {
+core_util::disarray! {
     /// The hooks which must be installed by the game patcher.
     pub static HOOK_SIGNATURES: [Descriptor; NUM_HOOK_SIGNATURES] = [
         //
@@ -774,10 +774,11 @@ extern "system" fn player_avo_get_current_hook(
     attr: c_int
 ) -> f32 {
     assert!(SETTINGS.general.skill_formula_caps_en.get());
+    assert!(av == PlayerCharacter::get_avo());
 
     let mut val = unsafe {
         // SAFETY: We are passing through the original arguments.
-        player_avo_get_current_unchecked(av, attr)
+        PlayerCharacter::get_current_unchecked(attr)
     };
 
     if let Ok(skill) = ActorAttribute::from_raw_skill(attr) {
@@ -990,6 +991,6 @@ extern "system" fn clear_legendary_button_hook(
         }
     } else {
         // Some other perk menu. E.g. vampire or werewolf
-        unsafe { player_avo_get_base_unchecked(PlayerCharacter::get_avo(), skill) }
+        unsafe { PlayerCharacter::get_base_unchecked(skill) }
     }
 }

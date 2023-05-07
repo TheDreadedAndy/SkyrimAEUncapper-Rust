@@ -26,8 +26,8 @@ use skse64::log::{skse_message, skse_fatal};
 use skse64::reloc::RelocAddr;
 use skse64::plugin_api::Message;
 use versionlib::VersionDb;
-use racy_cell::RacyCell;
-use keywords::test;
+use core_util::RacyCell;
+use core_util::attempt;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Code injection definitions
@@ -505,7 +505,7 @@ impl Descriptor {
         &self,
         db: &VersionDb
     ) -> FindResult {
-        let res = test! {{
+        let res = attempt! {{
             match self {
                 Self::Object { loc, .. } => loc.find(db),
                 Self::Function { loc, .. } => loc.find(db),

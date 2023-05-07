@@ -5,7 +5,7 @@
 //! @bug No known bugs.
 //!
 
-use racy_cell::RacyCell;
+use core_util::RacyCell;
 
 use crate::version::{RUNNING_GAME_VERSION, RUNNING_SKSE_VERSION, RUNTIME_VERSION_1_5_97};
 use crate::plugin_api::{SkseInterface, SksePluginVersionData, PluginInfo, PLUGIN_HANDLE};

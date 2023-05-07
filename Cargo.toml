@@ -1,9 +1,7 @@
 [workspace]
 
 members = [
-    "lib/keywords",
-    "lib/later",
-    "lib/racy_cell",
+    "lib/core-util",
     "lib/deflate",
     "lib/plugin_ini",
     "lib/skse64_common",

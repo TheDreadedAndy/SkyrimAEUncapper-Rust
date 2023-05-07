@@ -5,7 +5,7 @@
 //! @bug No known bugs.
 //!
 
-use std::collections::HashMap;
+use std::vec::Vec;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::mem::size_of;
@@ -13,10 +13,16 @@ use std::mem::size_of;
 use skse64_common::version::{SkseVersion, RUNTIME_VERSION_1_6_317};
 use skse64_common::reloc::RelocAddr;
 
+/// An item in the version database, which holds its ID and the address that maps to it.
+pub struct DatabaseItem {
+    pub id   : usize,
+    pub addr : RelocAddr
+}
+
 /// A version database, which allows for offsets/ids to be searched for by each other.
 pub struct VersionDb {
-    pub (in crate) by_id: HashMap<usize, RelocAddr>,
-    version: SkseVersion
+    by_id   : Vec<DatabaseItem>,
+    version : SkseVersion
 }
 
 ///
@@ -83,6 +89,7 @@ impl VersionDb {
 
         const DB_NAME_PARTS: usize = 5;
 
+        // Parse the DB name into its individual parts.
         let db_name = path.file_name().unwrap().to_str().unwrap().split('.').next().unwrap();
         let mut parts: [Option<&str>; DB_NAME_PARTS] = [None; DB_NAME_PARTS];
         for (i, part) in db_name.split('-').enumerate() {
@@ -90,6 +97,7 @@ impl VersionDb {
             parts[i] = Some(part);
         }
 
+        // Build the version information.
         let base = parts[0].unwrap();
         let major = u32::from_str(parts[1].unwrap()).unwrap();
         let minor = u32::from_str(parts[2].unwrap()).unwrap();
@@ -97,7 +105,6 @@ impl VersionDb {
         let build = u32::from_str(parts[4].unwrap()).unwrap();
         assert!(build == 0);
 
-        let mut f = std::fs::File::open(path).unwrap();
         let version = SkseVersion::new(major, minor, revision, build);
         let format = if version < RUNTIME_VERSION_1_6_317 {
             assert!(base == "version");
@@ -107,6 +114,7 @@ impl VersionDb {
             2
         };
 
+        let mut f = std::fs::File::open(path).unwrap();
         Self::new_from_file(&mut f, version, format)
     }
 
@@ -122,13 +130,16 @@ impl VersionDb {
         &self,
         id: usize
     ) -> Result<RelocAddr, ()> {
-        self.by_id.get(&id).ok_or(()).copied()
+        match self.by_id.binary_search_by(|lhs| lhs.id.cmp(&id)) {
+            Ok(index) => Ok(self.by_id[index].addr),
+            Err(_)   => Err(())
+        }
     }
 
-    /// Gets the underlying map associated with the database.
-    pub fn as_map(
+    /// Returns a reference to the underlying database.
+    pub fn as_vec(
         &self
-    ) -> &HashMap<usize, RelocAddr> {
+    ) -> &Vec<DatabaseItem> {
         &self.by_id
     }
 
@@ -138,83 +149,70 @@ impl VersionDb {
         version: SkseVersion,
         format: u32
     ) -> Self {
-        let mut by_id = HashMap::<usize, RelocAddr>::new();
+        let mut by_id = Vec::new();
 
-        let (ptr_size, addr_count) = Self::parse_header(f, format);
+        //
+        // Parses the header of a version database file.
+        //
+        // The version db file format seems to be as follows:
+        // - Each binary begins with a u32 version, where 1 is SE and 2 is AE.
+        // - After that, there is a (major, minor, build, sub) u32 tuple. This can be skipped.
+        // - The version tuple is followed by a u32 module name string len, between 0 and 0x10000.
+        // - This string length is followed by exactly len many bytes encoding the name.
+        // - Next, there is a u32 encoding a pointer size for the file.
+        // - After that, there is a u32 count for the number of addresses in the database.
+        // - The remainder of the database is the addresses contained within it.
+        //
+        assert!(Self::read::<u32>(f) == format); // File format.
+        Self::skip(f, (size_of::<u32>() * 4) as u32); // Runtime version
+        let mod_len = Self::read::<u32>(f); // Module name length
+        Self::skip(f, mod_len); // Module name.
+        let (ptr_size, addr_count) = (Self::read::<u32>(f) as usize, Self::read::<u32>(f));
+
+        // The previous ID/offset are necessary to parse the database, and are initialized to zero.
         let (mut pid, mut poffset) = (0, 0);
         for _ in 0..addr_count {
-            let (id, offset) = Self::parse_addr(f, pid, poffset, ptr_size);
+            //
+            // Parses an address in the version database.
+            //
+            // Each address seems to be encoded as follows:
+            // - First, is a control byte encoding two 3-bit values denoting an item type.
+            //   The msb of the control byte determines if offset calculations should use
+            //   the previous offset (0) or the poffset/ptr_size (1). We call this modified
+            //   offset "tpoffset".
+            // - Then, the encoded data. Relative control encoding is applied to pid/tpoffset.
+            //   If the high byte of the control bit was set, the resulting offset is later
+            //   multiplied by pointer size (equiv, each delta is multiplied by pointer size and
+            //   we can just use poffset).
+            //
+            let control = Self::read::<u8>(f);
+            assert!(control & 0x08 == 0);
 
-            assert!(by_id.insert(id, RelocAddr::from_offset(offset)).is_none());
+            // SAFETY: This is the defined encoding of the control byte.
+            //         The enum is sized to always be in range.
+            let (id_enc, offset_enc) = unsafe {(
+                std::mem::transmute::<u8, AddrEncoding>(control & 0x07),
+                std::mem::transmute::<u8, AddrEncoding>((control >> 4) & 0x07)
+            )};
+
+            let id     = id_enc.read(f, pid);
+            let offset = if (control & 0x80) != 0 /* is the offset by pointer? */ {
+                offset_enc.read(f, poffset / ptr_size) * ptr_size
+            } else {
+                offset_enc.read(f, poffset)
+            };
+
+            let index = by_id.binary_search_by(|lhs: &DatabaseItem| lhs.id.cmp(&id)).unwrap_err();
+            by_id.insert(index, DatabaseItem {
+                id,
+                addr: RelocAddr::from_offset(offset)
+            });
 
             pid = id;
             poffset = offset;
         }
 
-        Self {
-            by_id,
-            version: version
-        }
-    }
-
-    ///
-    /// Parses the header of a version database file.
-    ///
-    /// The version db file format seems to be as follows:
-    /// - Each binary begins with a u32 version, where 1 is SE and 2 is AE.
-    /// - After that, there is a (major, minor, build, sub) u32 tuple. This can be skipped.
-    /// - The version tuple is followed by a u32 module name string len, between 0 and 0x10000.
-    /// - This string length is followed by exactly len many bytes encoding the name.
-    /// - Next, there is a u32 encoding a pointer size for the file.
-    /// - After that, there is a u32 count for the number of addresses in the database.
-    /// - The remainder of the database is the addresses contained within it.
-    ///
-    fn parse_header(
-        f: &mut File,
-        format: u32
-    ) -> (u32, u32) {
-        assert!(Self::read::<u32>(f) == format); // version
-        Self::skip(f, (size_of::<u32>() * 4) as u32); // Runtime version
-        let mod_len = Self::read::<u32>(f); // Module name length
-        Self::skip(f, mod_len); // Module name.
-        let ptr_size = Self::read::<u32>(f);
-        let addr_count = Self::read::<u32>(f);
-        (ptr_size, addr_count)
-    }
-
-    ///
-    /// Parses an address in the version database.
-    ///
-    /// Each address seems to be encoded as follows:
-    /// - First, is a control byte encoding two 3-bit values denoting an item type.
-    ///   The msb of the control byte determines if offset calculations should use
-    ///   the previous offset (0) or the poffset/ptr_size (1). We call this modified
-    ///   offset "tpoffset".
-    /// - Then, the encoded data. Relative control encoding is applied to pid/tpoffset.
-    ///   If the high byte of the control bit was set, the resulting offset is later
-    ///   multiplied by pointer size (equiv, each delta is multiplied by pointer size and
-    ///   we can just use poffset).
-    ///
-    fn parse_addr(
-        f: &mut File,
-        pid: usize,
-        poffset: usize,
-        ptr_size: u32
-    ) -> (usize, usize) {
-        // SAFETY: This is the defined encoding of the control byte. The enum is sized to always
-        //         be in range.
-        let control = Self::read::<u8>(f);
-        assert!(control & 0x08 == 0);
-        let id_enc = unsafe { std::mem::transmute::<u8, AddrEncoding>(control & 0x07) };
-        let offset_enc = unsafe { std::mem::transmute::<u8, AddrEncoding>((control >> 4) & 0x07) };
-
-        let is_by_ptr = (control & 0x80) != 0;
-        let poffset = if is_by_ptr { poffset / (ptr_size as usize) } else { poffset };
-
-        let id = id_enc.read(f, pid);
-        let offset = offset_enc.read(f, poffset);
-        let offset = if is_by_ptr { offset * (ptr_size as usize) } else { offset };
-        (id, offset)
+        Self { by_id, version }
     }
 
     /// Read T from file.

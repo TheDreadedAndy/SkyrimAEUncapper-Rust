@@ -4,7 +4,7 @@ version = "2.2.3"
 edition = "2021"
 
 [dependencies]
-later = { path = "../later" }
+core-util = { path = "../core-util" }
 
 [dependencies.windows-sys]
 version = "0.45.0"
