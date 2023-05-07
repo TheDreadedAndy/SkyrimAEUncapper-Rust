@@ -1,7 +1,7 @@
 //!
 //! @file lib.rs
 //! @author Andrew Spaulding (Kasplat)
-//! @brief Reimplements the Skyrim AE versionlibdb header.
+//! @brief Reimplements the Skyrim SE/AE versionlibdb header.
 //! @bug No known bugs.
 //!
 
@@ -12,6 +12,8 @@ use std::mem::size_of;
 
 use skse64_common::version::{SkseVersion, RUNTIME_VERSION_1_6_317};
 use skse64_common::reloc::RelocAddr;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// An item in the version database, which holds its ID and the address that maps to it.
 pub struct DatabaseItem {
@@ -34,121 +36,50 @@ pub struct VersionDb {
 #[repr(u8)]
 #[allow(dead_code)] // Transmutes don't count as usage.
 enum AddrEncoding {
-    Raw64 = 0,
-    Raw32 = 7,
-    Raw16 = 6,
-    Inc = 1,
-    PosDelta8 = 2,
-    NegDelta8 = 3,
+    Raw64      = 0,
+    Raw32      = 7,
+    Raw16      = 6,
+    Inc        = 1,
+    PosDelta8  = 2,
+    NegDelta8  = 3,
     PosDelta16 = 4,
     NegDelta16 = 5
 }
 
-// Trait used to ensure read only works on unsigned ints.
+// Trait used to ensure VersionDb::read only works on unsigned ints.
 trait Unsigned {}
-impl Unsigned for u8 {}
+impl Unsigned for u8  {}
 impl Unsigned for u16 {}
 impl Unsigned for u32 {}
 impl Unsigned for u64 {}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 
 impl VersionDb {
     /// Attempts to create a new version database, loading it with the specified version
     pub fn new(
         version: SkseVersion
     ) -> Self {
-        // Figure out what kind of version db we're loading, so we can enforce the format later.
-        // It also effects the base of the file name.
-        let (file_base, format) = if version < RUNTIME_VERSION_1_6_317 {
-            ("version", 1)
-        } else {
-            ("versionlib", 2)
-        };
-
         //
         // Note that we hard-code the build number to 0, as Bethesda doesn't use it.
         //
         // The SKSE64 team uses it to denote which store the game was obtained from, so
         // we can't just pull it from our version structure.
         //
-        let mut f = std::fs::File::open(std::path::PathBuf::from(format!(
+        Self::new_from_path(&std::path::PathBuf::from(format!(
             "Data\\SKSE\\Plugins\\{}-{}-{}-{}-0.bin",
-            file_base,
+            if version < RUNTIME_VERSION_1_6_317 { "version" } else { "versionlib" },
             version.major(),
             version.minor(),
             version.build()
-        ))).unwrap();
-
-        Self::new_from_file(&mut f, version, format)
+        )))
     }
 
     /// Creates a version database from the given path, setting the version based on the file.
     pub fn new_from_path(
         path: &std::path::Path
     ) -> Self {
-        use std::str::FromStr;
-
-        const DB_NAME_PARTS: usize = 5;
-
-        // Parse the DB name into its individual parts.
-        let db_name = path.file_name().unwrap().to_str().unwrap().split('.').next().unwrap();
-        let mut parts: [Option<&str>; DB_NAME_PARTS] = [None; DB_NAME_PARTS];
-        for (i, part) in db_name.split('-').enumerate() {
-            assert!(i < DB_NAME_PARTS);
-            parts[i] = Some(part);
-        }
-
-        // Build the version information.
-        let base = parts[0].unwrap();
-        let major = u32::from_str(parts[1].unwrap()).unwrap();
-        let minor = u32::from_str(parts[2].unwrap()).unwrap();
-        let revision = u32::from_str(parts[3].unwrap()).unwrap();
-        let build = u32::from_str(parts[4].unwrap()).unwrap();
-        assert!(build == 0);
-
-        let version = SkseVersion::new(major, minor, revision, build);
-        let format = if version < RUNTIME_VERSION_1_6_317 {
-            assert!(base == "version");
-            1
-        } else {
-            assert!(base == "versionlib");
-            2
-        };
-
-        let mut f = std::fs::File::open(path).unwrap();
-        Self::new_from_file(&mut f, version, format)
-    }
-
-    /// Gets the version that is currently loaded into the database.
-    pub fn loaded_version(
-        &self
-    ) -> SkseVersion {
-        self.version
-    }
-
-    /// Attempts to find the offset of the given address independent id.
-    pub fn find_addr_by_id(
-        &self,
-        id: usize
-    ) -> Result<RelocAddr, ()> {
-        match self.by_id.binary_search_by(|lhs| lhs.id.cmp(&id)) {
-            Ok(index) => Ok(self.by_id[index].addr),
-            Err(_)   => Err(())
-        }
-    }
-
-    /// Returns a reference to the underlying database.
-    pub fn as_vec(
-        &self
-    ) -> &Vec<DatabaseItem> {
-        &self.by_id
-    }
-
-    /// Loads in a version database from the given file and version.
-    fn new_from_file(
-        f: &mut File,
-        version: SkseVersion,
-        format: u32
-    ) -> Self {
+        let     f     = &mut std::fs::File::open(path).unwrap();
         let mut by_id = Vec::new();
 
         //
@@ -163,10 +94,17 @@ impl VersionDb {
         // - After that, there is a u32 count for the number of addresses in the database.
         // - The remainder of the database is the addresses contained within it.
         //
-        assert!(Self::read::<u32>(f) == format); // File format.
-        Self::skip(f, (size_of::<u32>() * 4) as u32); // Runtime version
+        let format = Self::read::<u32>(f); // File format.
+        assert!((format == 1) || (format == 2));
+        let version = SkseVersion::new(
+            Self::read::<u32>(f), // major
+            Self::read::<u32>(f), // minor
+            Self::read::<u32>(f), // build/revision
+            Self::read::<u32>(f)  // sub
+        );
         let mod_len = Self::read::<u32>(f); // Module name length
-        Self::skip(f, mod_len); // Module name.
+        let pos = f.seek(SeekFrom::Current(0)).unwrap();
+        assert!(f.seek(SeekFrom::Current(mod_len as i64)).unwrap() == pos + (mod_len as u64));
         let (ptr_size, addr_count) = (Self::read::<u32>(f) as usize, Self::read::<u32>(f));
 
         // The previous ID/offset are necessary to parse the database, and are initialized to zero.
@@ -215,27 +153,43 @@ impl VersionDb {
         Self { by_id, version }
     }
 
+    /// Gets the version that is currently loaded into the database.
+    pub fn loaded_version(
+        &self
+    ) -> SkseVersion {
+        self.version
+    }
+
+    /// Attempts to find the offset of the given address independent id.
+    pub fn find_addr_by_id(
+        &self,
+        id: usize
+    ) -> Result<RelocAddr, ()> {
+        match self.by_id.binary_search_by(|lhs| lhs.id.cmp(&id)) {
+            Ok(index) => Ok(self.by_id[index].addr),
+            Err(_)    => Err(())
+        }
+    }
+
+    /// Returns a reference to the underlying database.
+    pub fn as_vec(
+        &self
+    ) -> &Vec<DatabaseItem> {
+        &self.by_id
+    }
+
     /// Read T from file.
     fn read<T: Unsigned>(
         f: &mut File
     ) -> T {
         let mut b: [u8; size_of::<u64>()] = [0; size_of::<u64>()];
         assert!(f.read(b.split_at_mut(size_of::<T>()).0).unwrap() == size_of::<T>());
-        unsafe {
-            // SAFETY: We only read integer types, and ensure that the buffer is the right size.
-            std::ptr::read_unaligned(b.as_ptr() as *mut T)
-        }
-    }
-
-    /// Skips bytes in a file.
-    fn skip(
-        f: &mut File,
-        n: u32
-    ) {
-        let pos = f.seek(SeekFrom::Current(0)).unwrap();
-        assert!(f.seek(SeekFrom::Current(n as i64)).unwrap() == pos + (n as u64));
+        // SAFETY: We only read integer types, and ensure that the buffer is the right size.
+        unsafe { std::ptr::read_unaligned(b.as_ptr() as *mut T) }
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 
 impl AddrEncoding {
     /// Uses an address encoding to read in new data from the file, returning the result.
@@ -245,12 +199,12 @@ impl AddrEncoding {
         prev: usize
     ) -> usize {
         match self {
-            Self::Raw64 => VersionDb::read::<u64>(f) as usize,
-            Self::Raw32 => VersionDb::read::<u32>(f) as usize,
-            Self::Raw16 => VersionDb::read::<u16>(f) as usize,
-            Self::Inc => prev + 1,
-            Self::PosDelta8 => prev + (VersionDb::read::<u8>(f) as usize),
-            Self::NegDelta8 => prev - (VersionDb::read::<u8>(f) as usize),
+            Self::Raw64      => VersionDb::read::<u64>(f) as usize,
+            Self::Raw32      => VersionDb::read::<u32>(f) as usize,
+            Self::Raw16      => VersionDb::read::<u16>(f) as usize,
+            Self::Inc        => prev + 1,
+            Self::PosDelta8  => prev + (VersionDb::read::<u8>(f) as usize),
+            Self::NegDelta8  => prev - (VersionDb::read::<u8>(f) as usize),
             Self::PosDelta16 => prev + (VersionDb::read::<u16>(f) as usize),
             Self::NegDelta16 => prev - (VersionDb::read::<u16>(f) as usize)
         }
