@@ -173,11 +173,9 @@ impl PlayerCharacter {
     pub unsafe extern "system" fn get_current_unchecked(
         attr: c_int
     ) -> f32 {
-        player_avo_get_current_net(
+        avo_get_current_unchecked(
             Self::get_avo(),
             attr,
-            skse64::version::current_runtime() <= skse64::version::RUNTIME_VERSION_1_5_97,
-            SETTINGS.general.skill_formula_caps_en.get()
         )
     }
 
@@ -495,8 +493,20 @@ extern "system" {
         attr: c_int,
         delta: f32
     );
-    pub (in crate) fn display_skill_color_unchecked(attr: c_int) -> *mut ();
     pub (in crate) fn update_skill_list_unchecked(unk: *mut ());
+}
+
+/// Gets the current actor value by passing through to the original function.
+pub unsafe fn avo_get_current_unchecked(
+    av: *mut ActorValueOwner,
+    attr: c_int
+) -> f32 {
+    player_avo_get_current_net(
+        av,
+        attr,
+        skse64::version::current_runtime() <= skse64::version::RUNTIME_VERSION_1_5_97,
+        SETTINGS.general.skill_formula_caps_en.get()
+    )
 }
 
 /// Handles a C++ exception by just panicking.

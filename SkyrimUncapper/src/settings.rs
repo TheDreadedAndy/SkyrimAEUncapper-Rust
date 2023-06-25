@@ -503,7 +503,7 @@ impl Settings {
         ////////////////////////////////////////////////////////////////////////////////////////////
 
         ret.skill_caps.read_ini_section(ini, "SkillCaps", 100);
-        ret.skill_caps.read_ini_section(ini, "SkillFormulaCaps", 100);
+        ret.skill_formula_caps.read_ini_section(ini, "SkillFormulaCaps", 100);
         ret.skill_exp_mults.read_ini_section(ini, "SkillExpGainMults", DEFAULT_SKILL_EXP_MULT);
         ret.skill_exp_mults_with_skills.read_ini_section(
             ini,

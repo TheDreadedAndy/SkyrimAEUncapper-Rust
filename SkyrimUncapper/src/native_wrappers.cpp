@@ -88,11 +88,6 @@ extern "C" {
         CATCH_UNWIND(player_avo_mod_current_entry(av, unk1, attr, delta););
     }
 
-    void *display_skill_color_unchecked(int attr)
-    {
-        CATCH_UNWIND(return display_skill_color_original_wrapper(attr););
-    }
-
     void update_skill_list_unchecked(void *unk)
     {
         CATCH_UNWIND(update_skill_list_original_wrapper(unk););
