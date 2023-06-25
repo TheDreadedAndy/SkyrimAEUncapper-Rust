@@ -495,6 +495,8 @@ extern "system" {
         attr: c_int,
         delta: f32
     );
+    pub (in crate) fn display_skill_color_unchecked(attr: c_int) -> *mut ();
+    pub (in crate) fn update_skill_list_unchecked(unk: *mut ());
 }
 
 /// Handles a C++ exception by just panicking.

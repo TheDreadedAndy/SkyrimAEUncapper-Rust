@@ -36,9 +36,8 @@ extern "system" {
     fn calculate_charge_points_per_use_wrapper_ae();
     fn calculate_charge_points_per_use_wrapper_se();
     fn player_avo_get_current_wrapper();
-    fn display_true_skill_level_hook_ae();
-    fn display_true_skill_level_hook_se();
-    fn display_true_skill_color_hook();
+    fn update_skill_list_wrapper();
+    fn display_skill_color_wrapper();
     fn improve_player_skill_points_wrapper_ae();
     fn improve_player_skill_points_wrapper_se();
     fn improve_level_exp_by_skill_level_wrapper_ae();
@@ -61,12 +60,16 @@ core::arch::global_asm! {
     // surrounding our reference to the symbol in curly braces. The benefit of this is that we
     // don't need to use the no_mangle attribute, which also globally exports the symbol.
     player_avo_get_current_return_trampoline = sym PLAYER_AVO_GET_CURRENT_RETURN_TRAMPOLINE,
+    display_skill_color_return_trampoline    = sym DISPLAY_SKILL_COLOR_RETURN_TRAMPOLINE,
+    update_skill_list_return_trampoline      = sym UPDATE_SKILL_LIST_RETURN_TRAMPOLINE,
 
     get_skill_cap_hook                       = sym get_skill_cap_hook,
     max_charge_begin_hook                    = sym max_charge_begin_hook,
     max_charge_end_hook                      = sym max_charge_end_hook,
     calculate_charge_points_per_use_hook     = sym calculate_charge_points_per_use_hook,
     player_avo_get_current_hook              = sym player_avo_get_current_hook,
+    display_skill_color_hook                 = sym display_skill_color_hook,
+    update_skill_list_hook                   = sym update_skill_list_hook,
     improve_player_skill_points_hook         = sym improve_player_skill_points_hook,
     improve_level_exp_by_skill_level_hook    = sym improve_level_exp_by_skill_level_hook,
     modify_perk_pool_hook                    = sym modify_perk_pool_hook,
@@ -78,7 +81,6 @@ core::arch::global_asm! {
 
     // These are defined in the skyrim game objects file.
     player_avo_get_base_unchecked            = sym PlayerCharacter::get_base_unchecked,
-    player_avo_get_current_unchecked         = sym PlayerCharacter::get_current_unchecked,
     get_player_avo                           = sym PlayerCharacter::get_avo,
 
     options(att_syntax)
@@ -103,20 +105,21 @@ core::arch::global_asm! {
 // with those conflicts are loaded by the game.
 
 // Mods we conflict with.
-const MEH_CUSTOM_SKILL: &str = "Meh321's Custom Skills Framework";
-const ZAX_EXPERIENCE: &str = "Zax's Experience";
+const MEH_CUSTOM_SKILL : &str = "Meh321's Custom Skills Framework";
+const ZAX_EXPERIENCE   : &str = "Zax's Experience";
 
 // Conflicts for each patch group.
-const FORMULA_UI_CONFLICTS: &str = MEH_CUSTOM_SKILL;
-const LEGENDARY_CONFLICTS: &str = MEH_CUSTOM_SKILL;
-const LEVEL_MULT_CONFLICTS: &str = ZAX_EXPERIENCE;
+const LEGENDARY_CONFLICTS  : &str = MEH_CUSTOM_SKILL;
+const LEVEL_MULT_CONFLICTS : &str = ZAX_EXPERIENCE;
 
 //
 // Trampolines used by hooks to return to game code.
 //
 // Boing!
 //
-static PLAYER_AVO_GET_CURRENT_RETURN_TRAMPOLINE: GameRef<usize> = GameRef::new();
+static PLAYER_AVO_GET_CURRENT_RETURN_TRAMPOLINE : GameRef<usize> = GameRef::new();
+static UPDATE_SKILL_LIST_RETURN_TRAMPOLINE      : GameRef<usize> = GameRef::new();
+static DISPLAY_SKILL_COLOR_RETURN_TRAMPOLINE    : GameRef<usize> = GameRef::new();
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -312,73 +315,72 @@ core_util::disarray! {
         },
 
         //
-        // Overwrites the skill display player_avo_get_current() call to display the
-        // actual, non-damaged, skill level.
+        // Wraps the call to UpdateSkillList() to temporarily disable the formula cap patch, which
+        // avoids a UI bug that would otherwise display the wrong level.
+        //
+        // We must implement this as a function wrapper, since our previous patch location
+        // conflicted with Custom Skills Framework.
         //
         // This patch doesn't serve a real purpose other than to avoid confusing players.
         //
         Descriptor::Patch {
-            name: "DisplayTrueSkillLevel",
+            name: "UpdateSkillList",
             enabled: || SETTINGS.general.skill_formula_caps_en.get() &&
                         SETTINGS.general.skill_formula_ui_fix_en.get(),
-            conflicts: Some(FORMULA_UI_CONFLICTS),
-            hook: Hook::Call12 {
-                entry: display_true_skill_level_hook_ae as *const u8,
-                clobber: Register::Rax
+            conflicts: None,
+            hook: Hook::Jump12 {
+                entry: update_skill_list_wrapper as *const u8,
+                clobber: Register::Rax, // Start of a function call.
+                trampoline: UPDATE_SKILL_LIST_RETURN_TRAMPOLINE.inner()
             },
-            loc: GameLocation::Ae { id: 52525, offset: 0x10d },
-            sig: signature![
-                0x48, 0x8b, 0x0d, ?, ?, ?, ?,
-                0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
-                0x48, 0x8b, 0x01,
-                0x8b, 0xd7,
-                0xff, 0x50, 0x08; 22
-            ]
-        },
-        Descriptor::Patch {
-            name: "DisplayTrueSkillLevel",
-            enabled: || SETTINGS.general.skill_formula_caps_en.get() &&
-                        SETTINGS.general.skill_formula_ui_fix_en.get(),
-            conflicts: Some(FORMULA_UI_CONFLICTS),
-            hook: Hook::Call12 {
-                entry: display_true_skill_level_hook_se as *const u8,
-                clobber: Register::Rax
+            loc: GameLocation::All {
+                id_ae: 52525,
+                id_se: 51652,
+                offset_ae: 0,
+                offset_se: 0
             },
-            loc: GameLocation::Se { id: 51652, offset: 0x108 },
             sig: signature![
-                0x48, 0x8b, 0x0d, ?, ?, ?, ?,
-                0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
-                0x48, 0x8b, 0x01,
-                0x8b, 0xd6,
-                0xff, 0x50, 0x08; 22
+                0x48, 0x8b, 0xc4, // mov %rsp, %rax
+                0x55,             // push %rbp
+                0x53,             // push %rbx
+                0x56,             // push %rsi
+                0x57,             // push %rdi
+                0x41, 0x54,       // push %r12
+                0x41, 0x55,       // push %r13
+                0x41, 0x56; 13    // push %r14
             ]
         },
 
         //
-        // Overwrites the skill color displays call to player_avo_get_current() to
-        // call the original function.
+        // Wraps the call to DisplaySkillColor() to temporarily disable the formula cap patch, which
+        // avoids a UI bug that would otherwise color the skill incorrectly.
+        //
+        // We must implement this as a function wrapper, since our previous patch location
+        // conflicted with Custom Skills Framework.
         //
         // This patch exists for the same reason as the above patch.
         //
         Descriptor::Patch {
-            name: "DisplayTrueSkillColor",
+            name: "DisplaySkillColor",
             enabled: || SETTINGS.general.skill_formula_caps_en.get() &&
                         SETTINGS.general.skill_formula_ui_fix_en.get(),
-            conflicts: Some(FORMULA_UI_CONFLICTS),
-            hook: Hook::Call12 {
-                entry: display_true_skill_color_hook as *const u8,
-                clobber: Register::Rax
+            conflicts: None,
+            hook: Hook::Jump12 {
+                entry: display_skill_color_wrapper as *const u8,
+                clobber: Register::Rax, // Start of a function.
+                trampoline: DISPLAY_SKILL_COLOR_RETURN_TRAMPOLINE.inner()
             },
             loc: GameLocation::All {
                 id_se: 52059,
                 id_ae: 52945,
-                offset_se: 0x24,
-                offset_ae: 0x24
+                offset_se: 0,
+                offset_ae: 0
             },
             sig: signature![
-                0x48, 0x8b, 0x86, ?, 0x00, 0x00, 0x00,
-                0x48, 0x8d, 0x8e, ?, 0x00, 0x00, 0x00,
-                0xff, 0x50, 0x08; 17
+                0x48, 0x89, 0x5c, 0x24, 0x08, // mov %rbx, 0x8(%rsp)
+                0x48, 0x89, 0x74, 0x24, 0x10, // mov %rsi, 0x10(%rsp)
+                0x57,                         // push %rdi
+                0x48, 0x83, 0xec, 0x40; 15    // sub $0x40, %rsp
             ]
         },
 
@@ -768,6 +770,9 @@ extern "system" fn calculate_charge_points_per_use_hook(
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// Used to temporarily disable the formula cap during UI functions.
+static IS_FORMULA_CAP_DISABLED_FOR_UI: AtomicBool = AtomicBool::new(false);
+
 /// Caps the formula results for each skill.
 extern "system" fn player_avo_get_current_hook(
     av: *mut ActorValueOwner,
@@ -780,6 +785,11 @@ extern "system" fn player_avo_get_current_hook(
         // SAFETY: We are passing through the original arguments.
         PlayerCharacter::get_current_unchecked(attr)
     };
+
+    // If we're in a UI function, don't apply the cap.
+    if IS_FORMULA_CAP_DISABLED_FOR_UI.load(Ordering::Relaxed) {
+        return val;
+    }
 
     if let Ok(skill) = ActorAttribute::from_raw_skill(attr) {
         let mut cap = SETTINGS.skill_formula_caps.get(skill).get() as f32;
@@ -797,6 +807,35 @@ extern "system" fn player_avo_get_current_hook(
     }
 
     return val;
+}
+
+/// Wraps the function which colors the skill level in the UI, resolving a graphical bug caused by
+/// the formula cap patch.
+///
+/// Without this patch, skills may appear to be damaged/not fortified at incorrect times.
+///
+/// I don't know what the return value of this function is, but we must preserve it, since we are
+/// wrapping the original function.
+extern "system" fn display_skill_color_hook(
+    attr: c_int
+) -> *mut () {
+    assert!(!IS_FORMULA_CAP_DISABLED_FOR_UI.swap(true, Ordering::Relaxed));
+    let ret = unsafe { display_skill_color_unchecked(attr) };
+    assert!(IS_FORMULA_CAP_DISABLED_FOR_UI.swap(false, Ordering::Relaxed));
+    return ret;
+}
+
+/// Wraps the function which determines the number displayed for the skill level in the skills menu.
+///
+/// Without this patch, the skill level will appear to be capped at the formula cap.
+///
+/// Difficult to prove it with this function, but it appears to return void.
+extern "system" fn update_skill_list_hook(
+    unk: *mut ()
+) {
+    assert!(!IS_FORMULA_CAP_DISABLED_FOR_UI.swap(true, Ordering::Relaxed));
+    unsafe { update_skill_list_unchecked(unk); }
+    assert!(IS_FORMULA_CAP_DISABLED_FOR_UI.swap(false, Ordering::Relaxed));
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

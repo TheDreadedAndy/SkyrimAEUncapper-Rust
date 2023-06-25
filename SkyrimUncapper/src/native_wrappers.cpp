@@ -8,6 +8,7 @@
  */
 
 #include <cstdint>
+#include <cstddef>
 
 typedef uint32_t u32;
 typedef uint16_t u16;
@@ -33,6 +34,8 @@ extern "C" {
     /* ASM wrappers */
     extern f32 player_avo_get_current_original_wrapper_se(void*, int);
     extern f32 player_avo_get_current_original_wrapper_ae(void*, int);
+    extern void *display_skill_color_original_wrapper(int);
+    extern void update_skill_list_original_wrapper(void *);
 
     /* Panic function */
     __declspec(noreturn) extern void handle_ffi_exception(const char *, size_t);
@@ -83,5 +86,15 @@ extern "C" {
                                     f32  delta)
     {
         CATCH_UNWIND(player_avo_mod_current_entry(av, unk1, attr, delta););
+    }
+
+    void *display_skill_color_unchecked(int attr)
+    {
+        CATCH_UNWIND(return display_skill_color_original_wrapper(attr););
+    }
+
+    void update_skill_list_unchecked(void *unk)
+    {
+        CATCH_UNWIND(update_skill_list_original_wrapper(unk););
     }
 }

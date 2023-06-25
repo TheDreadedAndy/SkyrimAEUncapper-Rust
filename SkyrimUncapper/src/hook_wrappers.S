@@ -36,6 +36,8 @@
 // directly included in source file that references them.
 .global player_avo_get_current_original_wrapper_ae
 .global player_avo_get_current_original_wrapper_se
+.global display_skill_color_original_wrapper
+.global update_skill_list_original_wrapper
 
 // Saves all caller saved registers.
 .macro SAVEALL is_jump
@@ -229,29 +231,50 @@ player_avo_get_current_original_wrapper_se:
     jmp *{player_avo_get_current_return_trampoline}(%rip)
 
 /*
- * Forces the code which displays skill values in the skills menu to show the
- * true skill level/color instead of the damaged value by calling the OG function.
- *
- * It just so happens that things get thrown in the same regs, so the patch is
- * the same for both (for AE, at least).
+ * FEAR! (as above)
  */
-display_true_skill_level_hook_ae:
-display_true_skill_color_hook:
+display_skill_color_wrapper:
     SAVEALL
-
-    mov %edi, %ecx
-    jmp _display_true_skill_hook
-
-display_true_skill_level_hook_se:
-    SAVEALL
-
-    mov %esi, %ecx
-
-_display_true_skill_hook:
-    call {player_avo_get_current_unchecked}
-
-    RESTOREALL retfpr=1
+    call {display_skill_color_hook}
+    RESTOREALL retgpr=1
     ret
+
+/*
+ * Reimplements the prologue of the function which colors skill levels in the
+ * UI, which allows us to call the original function despite redirecting at the
+ * prologue.
+ */
+display_skill_color_original_wrapper:
+    mov %rbx, 0x8(%rsp)
+    mov %rsi, 0x10(%rsp)
+    push %rdi
+    sub $0x40, %rsp
+    jmp *{display_skill_color_return_trampoline}(%rip)
+
+/*
+ * Absolute paranoia, as above.
+ */
+update_skill_list_wrapper:
+    SAVEALL
+    call {update_skill_list_hook}
+    RESTOREALL
+    ret
+
+/*
+ * Reimplements the prologue of the function which displays skill levels in the
+ * UI, which allows us to call the original function despite redirecting at the
+ * prologue.
+ */
+update_skill_list_original_wrapper:
+    mov %rsp, %rax
+    push %rbp
+    push %rbx
+    push %rsi
+    push %rdi
+    push %r12
+    push %r13
+    push %r14
+    jmp *{update_skill_list_return_trampoline}(%rip)
 
 /*
  * Applies additional multipliers to the skill experience gained in the location

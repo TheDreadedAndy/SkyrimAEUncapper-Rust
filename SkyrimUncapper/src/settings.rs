@@ -395,9 +395,6 @@ pub struct Settings {
     pub cw_at_sp_lvl_up             : LeveledIniSection<u32>
 }
 
-/// Holds the global settings configuration, which is created when init() is called.
-pub static SETTINGS: Later<Settings> = Later::new();
-
 /// Allows for the optional loading of an offset multiplier.
 impl FromStr for SkillMult {
     type Err = <f32 as FromStr>::Err;
@@ -420,6 +417,9 @@ impl FromStr for SkillMult {
         }
     }
 }
+
+/// Holds the global settings configuration, which is created when init() is called.
+pub static SETTINGS: Later<Settings> = Later::new();
 
 impl Settings {
     /// Creates a new settings structure from the given INI.
@@ -559,7 +559,7 @@ pub fn init(
     let ini = Ini::from_path(path);
     if let Ok(mut ini) = ini {
         // Update the file with missing fields, if necessary.
-        if let Some(_) = ini.update(&default_ini) {
+        if ini.update(&default_ini) {
             // If missing fields were added, update the INI file.
             assert!(
                 ini.write_file(path).is_ok(),
