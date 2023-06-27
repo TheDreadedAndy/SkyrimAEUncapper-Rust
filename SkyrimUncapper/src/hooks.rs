@@ -743,21 +743,14 @@ extern "system" fn player_avo_get_current_hook(
 ) -> f32 {
     assert!(SETTINGS.general.skill_formula_caps_en.get());
 
-    // FIXME: It is somehow the case that the av we're given isn't always the player AV. This makes
-    // me very nervous, and I suspect it means other actors are being capped. Yikes.
-    //
-    // I'm hesitant to just "fix" this "feature", though, since some users may rely on it for game
-    // balance.
-    //
-    // TODO: Log the different values and see whats going on. Best case, we're just getting NULL
-    // sometimes.
     let mut val = unsafe {
         // SAFETY: We are passing through the original arguments.
         avo_get_current_unchecked(av, attr)
     };
 
-    // If we're in a UI function, don't apply the cap.
-    if IS_FORMULA_CAP_DISABLED_FOR_UI.load(Ordering::Relaxed) {
+    // If we're in a UI function, don't apply the cap. Also, ignore NPCs.
+    if IS_FORMULA_CAP_DISABLED_FOR_UI.load(Ordering::Relaxed) ||
+            av != PlayerCharacter::get_avo() {
         return val;
     }
 

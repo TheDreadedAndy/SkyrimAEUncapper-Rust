@@ -81,11 +81,7 @@ enum Encoding {
     AbsoluteQ(u64)
 }
 
-///
 /// An enumeration of the different types of control flow which can be written.
-///
-/// Indirect calling methods require an address to write the trampoline to.
-///
 enum Flow {
     CallRelative,
     JumpRelative,
@@ -100,7 +96,7 @@ enum Flow {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 ///
-/// @brief Used to match code to pre-defined signatures.
+/// Used to match code to pre-defined signatures.
 ///
 /// This enumeration is used in the system that ensures that, regardless of game version, the
 /// intended code is being overwritten.
@@ -116,7 +112,7 @@ pub enum Opcode {
 #[derive(Copy, Clone, Debug)]
 pub struct Signature(&'static [Opcode]);
 
-/// @brief Generates a new signature out of hex digits and question marks.
+/// Generates a new signature out of hex digits and question marks.
 #[macro_export]
 macro_rules! signature {
     ( $($sig:tt),+; $size:literal ) => {{
