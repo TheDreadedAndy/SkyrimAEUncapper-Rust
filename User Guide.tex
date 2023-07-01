@@ -335,6 +335,12 @@ introduced in version 1.1.0 of the plugin.
 
 This section includes options to disable individual patches, as well as some
 now depreciated options related to updating the INI file.
+
+Note that when a patch group is disabled the patches it governs will not be
+installed to the game, and thus will not conflict with any mods. If, for
+example, thu uncapper notes that DisplayTrueSkillLevel could not be installed
+or was clobbered, disabling bUseSkillFormulaCapsUIFix would allow the plugin
+to load at the cost minor graphical issues being present on the skills menu.
 \stopblock
 
 \startblock
@@ -353,8 +359,30 @@ should be updated. Versions 2.0.0 and above ignore this field.
 \startblock
 \subsubsection{bUseSkillCaps = \textlangle true/false\textrangle}\hfill\\
 
+Enables the patch group which allows the absolute level cap of skills to be
+changed. Without this group, all skills will have a level cap of 100.
+
+Enables patches:
+\begin{itemize}
+    \item GetSkillCap
+\end{itemize}
+\stopblock
+
+\startblock
 \subsubsection{bUseSkillFormulaCaps = \textlangle true/false\textrangle}\hfill\\
 
+Enables the patch group which allows the formula cap for skills to be altered.
+Without this group, there is no formula cap.
+
+Enables patches:
+\begin{itemize}
+    \item PlayerAVOGetCurrent
+    \item DisplayTrueSkillLevel
+    \item DisplayTrueSkillColor
+\end{itemize}
+\stopblock
+
+\startblock
 \subsubsection{bUseSkillFormulaCapsUIFix = \textlangle true/false\textrangle}\hfill\\
 
 \subsubsection{bUseEnchanterCaps = \textlangle true/false\textrangle}\hfill\\
@@ -370,6 +398,14 @@ should be updated. Versions 2.0.0 and above ignore this field.
 \subsubsection{bUseLegendarySettings = \textlangle true/false\textrangle}\hfill\\
 
 \subsection{[SkillCaps]}\hfill\\
+
+\subsection{[SkillFormulaCaps]}\hfill\\
+
+\subsection{[Enchanting]}\hfill\\
+
+\subsection{[SkillExpGainMults]}
+
+\subsubsection
 \stopblock
 
 \startblock
