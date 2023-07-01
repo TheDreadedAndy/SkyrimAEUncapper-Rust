@@ -11,7 +11,6 @@
 #![allow(non_snake_case)]
 
 mod skyrim;
-mod hook_wrappers;
 mod hooks;
 mod settings;
 

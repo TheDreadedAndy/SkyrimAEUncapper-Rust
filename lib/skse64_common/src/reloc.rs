@@ -5,7 +5,7 @@
 //! @bug No known bugs.
 //!
 
-use later::Later;
+use core_util::Later;
 
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleA;
 

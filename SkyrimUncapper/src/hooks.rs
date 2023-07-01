@@ -10,35 +10,116 @@
 //! an assembly wrapper, so they must be declared extern system.
 //!
 
-use std::ffi::c_int;
+use core::ffi::c_int;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 use skyrim_patcher::{Descriptor, Hook, Register, GameLocation, GameRef, signature};
 
-use crate::settings;
-use crate::hook_wrappers::*;
+use crate::settings::SETTINGS;
 use crate::skyrim::*;
 
-/// The base game threshold for legendarying a skill.
-const BASE_LEGENDARY_THRESHOLD: f32 = 100.0;
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Patch wrappers
+////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+// These are the assembly entry points that ensure that the jump between skyrims game code and our
+// patches is safe and well-defined. Documentation on how the individual patches accomplish this
+// can be found in hook_wrappers.S.
+
+extern "system" {
+    fn skill_cap_patch_wrapper_ae();
+    fn skill_cap_patch_wrapper_se();
+    fn max_charge_begin_wrapper_ae();
+    fn max_charge_begin_wrapper_se();
+    fn max_charge_end_wrapper_ae();
+    fn max_charge_end_wrapper_se();
+    fn calculate_charge_points_per_use_wrapper_ae();
+    fn calculate_charge_points_per_use_wrapper_se();
+    fn player_avo_get_current_wrapper();
+    fn update_skill_list_wrapper();
+    fn improve_player_skill_points_wrapper_ae();
+    fn improve_player_skill_points_wrapper_se();
+    fn improve_level_exp_by_skill_level_wrapper_ae();
+    fn improve_level_exp_by_skill_level_wrapper_se();
+    fn improve_attribute_when_level_up_wrapper();
+    fn modify_perk_pool_wrapper_ae();
+    fn modify_perk_pool_wrapper_se();
+    fn legendary_reset_skill_level_wrapper();
+    fn check_condition_for_legendary_skill_wrapper();
+    fn hide_legendary_button_wrapper_ae();
+    fn hide_legendary_button_wrapper_se();
+    fn clear_legendary_button_wrapper_ae();
+    fn clear_legendary_button_wrapper_se();
+}
+
+core::arch::global_asm! {
+    include_str!("hook_wrappers.S"),
+
+    // These symbol declarations let us access the mangled rust functions in the asm code by simply
+    // surrounding our reference to the symbol in curly braces. The benefit of this is that we
+    // don't need to use the no_mangle attribute, which also globally exports the symbol.
+    player_avo_get_current_return_trampoline = sym PLAYER_AVO_GET_CURRENT_RETURN_TRAMPOLINE,
+    update_skill_list_return_trampoline      = sym UPDATE_SKILL_LIST_RETURN_TRAMPOLINE,
+
+    get_skill_cap_hook                       = sym get_skill_cap_hook,
+    max_charge_begin_hook                    = sym max_charge_begin_hook,
+    max_charge_end_hook                      = sym max_charge_end_hook,
+    calculate_charge_points_per_use_hook     = sym calculate_charge_points_per_use_hook,
+    player_avo_get_current_hook              = sym player_avo_get_current_hook,
+    update_skill_list_hook                   = sym update_skill_list_hook,
+    improve_player_skill_points_hook         = sym improve_player_skill_points_hook,
+    improve_level_exp_by_skill_level_hook    = sym improve_level_exp_by_skill_level_hook,
+    modify_perk_pool_hook                    = sym modify_perk_pool_hook,
+    improve_attribute_when_level_up_hook     = sym improve_attribute_when_level_up_hook,
+    legendary_reset_skill_level_hook         = sym legendary_reset_skill_level_hook,
+    check_condition_for_legendary_skill_hook = sym check_condition_for_legendary_skill_hook,
+    hide_legendary_button_hook               = sym hide_legendary_button_hook,
+    clear_legendary_button_hook              = sym clear_legendary_button_hook,
+
+    // These are defined in the skyrim game objects file.
+    player_avo_get_base_unchecked            = sym PlayerCharacter::get_base_unchecked,
+    get_player_avo                           = sym PlayerCharacter::get_avo,
+
+    options(att_syntax)
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Patch definitions
+////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+// These structures inform the skyrim patcher of where each patch is located for the various game
+// versions, and how the patch should be installed.
+//
+// Note that, for increased compatibility, we do not use calls/jumps that would require an indirect
+// or relative jump. Instead, each call/jump clobbers a register that is not currently being used.
+// This means that the plugin does not contribute to the practical limit on the number of SKSE
+// plugins that can be loaded at a time (due to there being a limited address space before the
+// skyrim binary), but it complicates the injection of hooks as some skyrim versions are compiled
+// with settings that allow the compiler to disobey calling conventions and assume that registers
+// that would conventionally be considered clobbered still hold their values.
+//
+// We additionally define strings to inform users of known conflicts, when the patches associated
+// with those conflicts are loaded by the game.
 
 // Mods we conflict with.
-const MEH_CUSTOM_SKILL: &str = "Meh321's Custom Skills Framework";
-const ZAX_EXPERIENCE: &str = "Zax's Experience";
+const MEH_CUSTOM_SKILL : &str = "Meh321's Custom Skills Framework";
+const ZAX_EXPERIENCE   : &str = "Zax's Experience";
 
 // Conflicts for each patch group.
-const FORMULA_UI_CONFLICTS: &str = MEH_CUSTOM_SKILL;
-const LEGENDARY_CONFLICTS: &str = MEH_CUSTOM_SKILL;
-const LEVEL_MULT_CONFLICTS: &str = ZAX_EXPERIENCE;
+const LEGENDARY_CONFLICTS  : &str = MEH_CUSTOM_SKILL;
+const LEVEL_MULT_CONFLICTS : &str = ZAX_EXPERIENCE;
 
 //
 // Trampolines used by hooks to return to game code.
 //
 // Boing!
 //
-#[no_mangle]
-static player_avo_get_current_return_trampoline: GameRef<usize> = GameRef::new();
+static PLAYER_AVO_GET_CURRENT_RETURN_TRAMPOLINE : GameRef<usize> = GameRef::new();
+static UPDATE_SKILL_LIST_RETURN_TRAMPOLINE      : GameRef<usize> = GameRef::new();
 
-disarray::disarray! {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+core_util::disarray! {
     /// The hooks which must be installed by the game patcher.
     pub static HOOK_SIGNATURES: [Descriptor; NUM_HOOK_SIGNATURES] = [
         //
@@ -51,7 +132,7 @@ disarray::disarray! {
         //
         Descriptor::Patch {
             name: "GetSkillCap",
-            enabled: settings::is_skill_cap_enabled,
+            enabled: || SETTINGS.general.skill_caps_en.get(),
             conflicts: None,
             hook: Hook::Call12 {
                 entry: skill_cap_patch_wrapper_ae as *const u8,
@@ -66,7 +147,7 @@ disarray::disarray! {
         },
         Descriptor::Patch {
             name: "GetSkillCap",
-            enabled: settings::is_skill_cap_enabled,
+            enabled: || SETTINGS.general.skill_caps_en.get(),
             conflicts: None,
             hook: Hook::Call12 {
                 entry: skill_cap_patch_wrapper_se as *const u8,
@@ -88,7 +169,7 @@ disarray::disarray! {
         //
         Descriptor::Patch {
             name: "BeginMaxChargeCalculation",
-            enabled: settings::is_enchant_patch_enabled,
+            enabled: || SETTINGS.general.enchanting_patch_en.get(),
             conflicts: None,
             hook: Hook::Call12 {
                 entry: max_charge_begin_wrapper_ae as *const u8,
@@ -102,7 +183,7 @@ disarray::disarray! {
         },
         Descriptor::Patch {
             name: "BeginMaxChargeCalculation",
-            enabled: settings::is_enchant_patch_enabled,
+            enabled: || SETTINGS.general.enchanting_patch_en.get(),
             conflicts: None,
             hook: Hook::Call12 {
                 entry: max_charge_begin_wrapper_se as *const u8,
@@ -116,7 +197,7 @@ disarray::disarray! {
         },
         Descriptor::Patch {
             name: "EndMaxChargeCalculation",
-            enabled: settings::is_enchant_patch_enabled,
+            enabled: || SETTINGS.general.enchanting_patch_en.get(),
             conflicts: None,
             hook: Hook::Call12 {
                 entry: max_charge_end_wrapper_ae as *const u8,
@@ -130,7 +211,7 @@ disarray::disarray! {
         },
         Descriptor::Patch {
             name: "EndMaxChargeCalculation",
-            enabled: settings::is_enchant_patch_enabled,
+            enabled: || SETTINGS.general.enchanting_patch_en.get(),
             conflicts: None,
             hook: Hook::Call12 {
                 entry: max_charge_end_wrapper_se as *const u8,
@@ -156,7 +237,7 @@ disarray::disarray! {
         //
         Descriptor::Patch {
             name: "CalculateChargePointsPerUse",
-            enabled: settings::is_enchant_patch_enabled,
+            enabled: || SETTINGS.general.enchanting_patch_en.get(),
             conflicts: None,
             hook: Hook::Call12 {
                 entry: calculate_charge_points_per_use_wrapper_ae as *const u8,
@@ -176,7 +257,7 @@ disarray::disarray! {
         },
         Descriptor::Patch {
             name: "CalculateChargePointsPerUse",
-            enabled: settings::is_enchant_patch_enabled,
+            enabled: || SETTINGS.general.enchanting_patch_en.get(),
             conflicts: None,
             hook: Hook::Call12 {
                 entry: calculate_charge_points_per_use_wrapper_se as *const u8,
@@ -200,12 +281,12 @@ disarray::disarray! {
         //
         Descriptor::Patch {
             name: "PlayerAVOGetCurrent",
-            enabled: settings::is_skill_formula_cap_enabled,
+            enabled: || SETTINGS.general.skill_formula_caps_en.get(),
             conflicts: None,
             hook: Hook::Jump12 {
                 entry: player_avo_get_current_wrapper as *const u8,
                 clobber: Register::Rax,
-                trampoline: player_avo_get_current_return_trampoline.inner()
+                trampoline: PLAYER_AVO_GET_CURRENT_RETURN_TRAMPOLINE.inner()
             },
             loc: GameLocation::Ae { id: 38462, offset: 0 },
             sig: signature![
@@ -215,12 +296,12 @@ disarray::disarray! {
         },
         Descriptor::Patch {
             name: "PlayerAVOGetCurrent",
-            enabled: settings::is_skill_formula_cap_enabled,
+            enabled: || SETTINGS.general.skill_formula_caps_en.get(),
             conflicts: None,
             hook: Hook::Jump12 {
                 entry: player_avo_get_current_wrapper as *const u8,
                 clobber: Register::Rax,
-                trampoline: player_avo_get_current_return_trampoline.inner()
+                trampoline: PLAYER_AVO_GET_CURRENT_RETURN_TRAMPOLINE.inner()
             },
             loc: GameLocation::Se { id: 37517, offset: 0 },
             sig: signature![
@@ -230,77 +311,46 @@ disarray::disarray! {
         },
 
         //
-        // Overwrites the skill display player_avo_get_current() call to display the
-        // actual, non-damaged, skill level.
+        // Wraps the call to UpdateSkillList() to temporarily disable the formula cap patch, which
+        // avoids a UI bug that would otherwise display the wrong level.
+        //
+        // We must implement this as a function wrapper, since our previous patch location
+        // conflicted with Custom Skills Framework.
         //
         // This patch doesn't serve a real purpose other than to avoid confusing players.
         //
         Descriptor::Patch {
-            name: "DisplayTrueSkillLevel",
-            enabled: settings::is_skill_formula_cap_ui_fix_enabled,
-            conflicts: Some(FORMULA_UI_CONFLICTS),
-            hook: Hook::Call12 {
-                entry: display_true_skill_level_hook_ae as *const u8,
-                clobber: Register::Rax
-            },
-            loc: GameLocation::Ae { id: 52525, offset: 0x10d },
-            sig: signature![
-                0x48, 0x8b, 0x0d, ?, ?, ?, ?,
-                0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
-                0x48, 0x8b, 0x01,
-                0x8b, 0xd7,
-                0xff, 0x50, 0x08; 22
-            ]
-        },
-        Descriptor::Patch {
-            name: "DisplayTrueSkillLevel",
-            enabled: settings::is_skill_formula_cap_ui_fix_enabled,
-            conflicts: Some(FORMULA_UI_CONFLICTS),
-            hook: Hook::Call12 {
-                entry: display_true_skill_level_hook_se as *const u8,
-                clobber: Register::Rax
-            },
-            loc: GameLocation::Se { id: 51652, offset: 0x108 },
-            sig: signature![
-                0x48, 0x8b, 0x0d, ?, ?, ?, ?,
-                0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
-                0x48, 0x8b, 0x01,
-                0x8b, 0xd6,
-                0xff, 0x50, 0x08; 22
-            ]
-        },
-
-        //
-        // Overwrites the skill color displays call to player_avo_get_current() to
-        // call the original function.
-        //
-        // This patch exists for the same reason as the above patch.
-        //
-        Descriptor::Patch {
-            name: "DisplayTrueSkillColor",
-            enabled: settings::is_skill_formula_cap_ui_fix_enabled,
-            conflicts: Some(FORMULA_UI_CONFLICTS),
-            hook: Hook::Call12 {
-                entry: display_true_skill_color_hook as *const u8,
-                clobber: Register::Rax
+            name: "UpdateSkillList",
+            enabled: || SETTINGS.general.skill_formula_caps_en.get() &&
+                        SETTINGS.general.skill_formula_ui_fix_en.get(),
+            conflicts: None,
+            hook: Hook::Jump12 {
+                entry: update_skill_list_wrapper as *const u8,
+                clobber: Register::Rax, // Start of a function call.
+                trampoline: UPDATE_SKILL_LIST_RETURN_TRAMPOLINE.inner()
             },
             loc: GameLocation::All {
-                id_se: 52059,
-                id_ae: 52945,
-                offset_se: 0x24,
-                offset_ae: 0x24
+                id_ae: 52525,
+                id_se: 51652,
+                offset_ae: 0,
+                offset_se: 0
             },
             sig: signature![
-                0x48, 0x8b, 0x86, ?, 0x00, 0x00, 0x00,
-                0x48, 0x8d, 0x8e, ?, 0x00, 0x00, 0x00,
-                0xff, 0x50, 0x08; 17
+                0x48, 0x8b, 0xc4, // mov %rsp, %rax
+                0x55,             // push %rbp
+                0x53,             // push %rbx
+                0x56,             // push %rsi
+                0x57,             // push %rdi
+                0x41, 0x54,       // push %r12
+                0x41, 0x55,       // push %r13
+                0x41, 0x56; 13    // push %r14
             ]
         },
 
         // Applies the multipliers from the INI file to skill experience.
         Descriptor::Patch {
             name: "ImprovePlayerSkillPoints",
-            enabled: settings::is_skill_exp_enabled,
+            enabled: || SETTINGS.general.skill_exp_mults_en.get(),
             conflicts: None,
             hook: Hook::Call12 {
                 entry: improve_player_skill_points_wrapper_ae as *const u8,
@@ -315,7 +365,7 @@ disarray::disarray! {
         },
         Descriptor::Patch {
             name: "ImprovePlayerSkillPoints",
-            enabled: settings::is_skill_exp_enabled,
+            enabled: || SETTINGS.general.skill_exp_mults_en.get(),
             conflicts: None,
             hook: Hook::Call12 {
                 entry: improve_player_skill_points_wrapper_se as *const u8,
@@ -335,7 +385,7 @@ disarray::disarray! {
         //
         Descriptor::Patch {
             name: "ModifyPerkPool",
-            enabled: settings::is_perk_points_enabled,
+            enabled: || SETTINGS.general.perk_points_en.get(),
             conflicts: None,
             hook: Hook::Call12 {
                 entry: modify_perk_pool_wrapper_ae as *const u8,
@@ -354,7 +404,7 @@ disarray::disarray! {
         },
         Descriptor::Patch {
             name: "ModifyPerkPool",
-            enabled: settings::is_perk_points_enabled,
+            enabled: || SETTINGS.general.perk_points_en.get(),
             conflicts: None,
             hook: Hook::Call12 {
                 entry: modify_perk_pool_wrapper_se as *const u8,
@@ -378,7 +428,7 @@ disarray::disarray! {
         //
         Descriptor::Patch {
             name: "ImproveLevelExpBySkillLevel",
-            enabled: settings::is_level_exp_enabled,
+            enabled: || SETTINGS.general.level_exp_mults_en.get(),
             conflicts: Some(LEVEL_MULT_CONFLICTS),
             hook: Hook::Call12 {
                 entry: improve_level_exp_by_skill_level_wrapper_ae as *const u8,
@@ -392,7 +442,7 @@ disarray::disarray! {
         },
         Descriptor::Patch {
             name: "ImproveLevelExpBySkillLevel",
-            enabled: settings::is_level_exp_enabled,
+            enabled: || SETTINGS.general.level_exp_mults_en.get(),
             conflicts: Some(LEVEL_MULT_CONFLICTS),
             hook: Hook::Call12 {
                 entry: improve_level_exp_by_skill_level_wrapper_se as *const u8,
@@ -420,7 +470,7 @@ disarray::disarray! {
         //
         Descriptor::Patch {
             name: "ImproveAttributeWhenLevelUp",
-            enabled: settings::is_attr_points_enabled,
+            enabled: || SETTINGS.general.attr_points_en.get(),
             conflicts: None,
             hook: Hook::Call12 {
                 entry: improve_attribute_when_level_up_wrapper as *const u8,
@@ -452,7 +502,7 @@ disarray::disarray! {
         //
         Descriptor::Patch {
             name: "LegendaryResetSkillLevel",
-            enabled: settings::is_legendary_enabled,
+            enabled: || SETTINGS.general.legendary_en.get(),
             conflicts: Some(LEGENDARY_CONFLICTS),
             hook: Hook::Call12 {
                 entry: legendary_reset_skill_level_wrapper as *const u8,
@@ -477,7 +527,7 @@ disarray::disarray! {
         // Replaces the call to the legendary condition check function with our own.
         Descriptor::Patch {
             name: "CheckConditionForLegendarySkill",
-            enabled: settings::is_legendary_enabled,
+            enabled: || SETTINGS.general.legendary_en.get(),
             conflicts: Some(LEGENDARY_CONFLICTS),
             hook: Hook::Call12 {
                 entry: check_condition_for_legendary_skill_wrapper as *const u8,
@@ -499,7 +549,7 @@ disarray::disarray! {
         // As above, except this is for the function where the jump key is remapped.
         Descriptor::Patch {
             name: "CheckConditionForLegendarySkillAlt",
-            enabled: settings::is_legendary_enabled,
+            enabled: || SETTINGS.general.legendary_en.get(),
             conflicts: Some(LEGENDARY_CONFLICTS),
             hook: Hook::Call12 {
                 entry: check_condition_for_legendary_skill_wrapper as *const u8,
@@ -521,7 +571,7 @@ disarray::disarray! {
         // As above, except this is for the UI button display.
         Descriptor::Patch {
             name: "HideLegendaryButton",
-            enabled: settings::is_legendary_enabled,
+            enabled: || SETTINGS.general.legendary_en.get(),
             conflicts: Some(LEGENDARY_CONFLICTS),
             hook: Hook::Call12 {
                 entry: hide_legendary_button_wrapper_ae as *const u8,
@@ -538,7 +588,7 @@ disarray::disarray! {
         },
         Descriptor::Patch {
             name: "HideLegendaryButton",
-            enabled: settings::is_legendary_enabled,
+            enabled: || SETTINGS.general.legendary_en.get(),
             conflicts: Some(LEGENDARY_CONFLICTS),
             hook: Hook::Call12 {
                 entry: hide_legendary_button_wrapper_se as *const u8,
@@ -573,7 +623,7 @@ disarray::disarray! {
         //
         Descriptor::Patch {
             name: "ClearLegendaryButton",
-            enabled: settings::is_legendary_enabled,
+            enabled: || SETTINGS.general.legendary_en.get(),
             conflicts: Some(LEGENDARY_CONFLICTS),
             hook: Hook::Call12 {
                 entry: clear_legendary_button_wrapper_ae as *const u8,
@@ -590,7 +640,7 @@ disarray::disarray! {
         },
         Descriptor::Patch {
             name: "ClearLegendaryButton",
-            enabled: settings::is_legendary_enabled,
+            enabled: || SETTINGS.general.legendary_en.get(),
             conflicts: Some(LEGENDARY_CONFLICTS),
             hook: Hook::Call12 {
                 entry: clear_legendary_button_wrapper_se as *const u8,
@@ -608,30 +658,41 @@ disarray::disarray! {
     ];
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Patch implementations
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// The base game threshold for legendarying a skill.
+const BASE_LEGENDARY_THRESHOLD: f32 = 100.0;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 /// Determines the real skill cap of the given skill.
-#[no_mangle]
 extern "system" fn get_skill_cap_hook(
     skill: c_int
 ) -> f32 {
-    assert!(settings::is_skill_cap_enabled());
-    settings::get_skill_cap(ActorAttribute::from_raw_skill(skill).unwrap())
+    assert!(SETTINGS.general.skill_caps_en.get());
+    SETTINGS.skill_caps.get(ActorAttribute::from_raw_skill(skill).unwrap()).get() as f32
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Used to ensure that the max_charge critical section is not entered twice.
+static IS_USING_CHARGE_CAP: AtomicBool = AtomicBool::new(false);
+
 /// Begins a calculation for weapon charge by setting the enchant cap to use the charge value.
-#[no_mangle]
 extern "system" fn max_charge_begin_hook(
     enchant_type: u32
 ) {
     const WEAPON_ENCHANT_TYPE: u32 = 0x29; // Defined by the game.
     if enchant_type == WEAPON_ENCHANT_TYPE {
-        settings::use_enchant_charge_cap();
+        assert!(!IS_USING_CHARGE_CAP.swap(true, Ordering::Relaxed));
     }
 }
 
 /// Ends a calculation for weapon charge by returning the cap mode to magnitude, if necessary.
-#[no_mangle]
 extern "system" fn max_charge_end_hook() {
-    settings::use_enchant_magnitude_cap();
+    let _ = IS_USING_CHARGE_CAP.compare_exchange(true, false, Ordering::Relaxed, Ordering::Relaxed);
 }
 
 ///
@@ -640,22 +701,23 @@ extern "system" fn max_charge_end_hook() {
 /// The original equation would fall apart for levels above 199, so this
 /// implementation caps the level in the calculation to 199.
 ///
-#[no_mangle]
 extern "system" fn calculate_charge_points_per_use_hook(
     base_points: f32,
     max_charge: f32
 ) -> f32 {
-    assert!(settings::is_enchant_patch_enabled());
+    assert!(SETTINGS.general.enchanting_patch_en.get());
 
     let cost_exponent = *ENCHANTING_COST_EXPONENT.get();
     let cost_base = *ENCHANTING_SKILL_COST_BASE.get();
     let cost_scale = *ENCHANTING_SKILL_COST_SCALE.get();
     let cost_mult = *ENCHANTING_SKILL_COST_MULT.get();
-    let cap = settings::get_enchant_charge_cap();
-    let enchanting_level = cap.min(player_avo_get_current(ActorAttribute::Enchanting));
+    let cap = (SETTINGS.enchant.charge_cap.get() as f32).min(199.0).min(
+        SETTINGS.skill_formula_caps.get(ActorAttribute::Enchanting).get() as f32
+    );
+    let enchanting_level = cap.min(PlayerCharacter::get_current(ActorAttribute::Enchanting));
 
     let base = cost_mult * base_points.powf(cost_exponent);
-    if settings::is_enchant_charge_linear() {
+    if SETTINGS.enchant.use_linear_charge.get() {
         // Linearly scale between current min/max of charge points. Max scales with skills/perks,
         // so this isn't perfectly linear. It still smooths the EQ a lot, though.
         let max_level_scale = (cap * cost_base).powf(cost_scale);
@@ -669,106 +731,182 @@ extern "system" fn calculate_charge_points_per_use_hook(
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Used to temporarily disable the formula cap during UI functions.
+static IS_FORMULA_CAP_DISABLED_FOR_UI: AtomicBool = AtomicBool::new(false);
+
 /// Caps the formula results for each skill.
-#[no_mangle]
 extern "system" fn player_avo_get_current_hook(
     av: *mut ActorValueOwner,
     attr: c_int
 ) -> f32 {
-    assert!(settings::is_skill_formula_cap_enabled());
+    assert!(SETTINGS.general.skill_formula_caps_en.get());
 
     let mut val = unsafe {
         // SAFETY: We are passing through the original arguments.
-        player_avo_get_current_unchecked(av, attr)
+        avo_get_current_unchecked(av, attr)
     };
 
+    // If we're in a UI function, don't apply the cap. Also, ignore NPCs.
+    if IS_FORMULA_CAP_DISABLED_FOR_UI.load(Ordering::Relaxed) ||
+            av != PlayerCharacter::get_avo() {
+        return val;
+    }
+
     if let Ok(skill) = ActorAttribute::from_raw_skill(attr) {
-        val = val.min(settings::get_skill_formula_cap(skill)).max(0.0);
+        let mut cap = SETTINGS.skill_formula_caps.get(skill).get() as f32;
+
+        // Enforce the additional enchanting caps.
+        if skill == ActorAttribute::Enchanting {
+            cap = cap.min(if IS_USING_CHARGE_CAP.load(Ordering::Relaxed) {
+                SETTINGS.enchant.charge_cap.get() as f32
+            } else {
+                SETTINGS.enchant.magnitude_cap.get() as f32
+            });
+        }
+
+        val = val.min(cap).max(0.0);
     }
 
     return val;
 }
 
+/// Wraps the function which determines the number displayed for the skill level in the skills menu.
+///
+/// Without this patch, the skill level will appear to be capped at the formula cap. The color will
+/// also appear to be damaged/not fortified depending on how the true value differs from the cap.
+///
+/// Difficult to prove it with this function, but it appears to return void.
+extern "system" fn update_skill_list_hook(
+    unk: *mut ()
+) {
+    assert!(!IS_FORMULA_CAP_DISABLED_FOR_UI.swap(true, Ordering::Relaxed));
+    unsafe { update_skill_list_unchecked(unk); }
+    assert!(IS_FORMULA_CAP_DISABLED_FOR_UI.swap(false, Ordering::Relaxed));
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 /// Applies a multiplier to the exp gain for the given skill.
-#[no_mangle]
 extern "system" fn improve_player_skill_points_hook(
     attr: c_int,
     mut exp_base: f32,
     mut exp_offset: f32
 ) -> f32 {
-    assert!(settings::is_skill_exp_enabled());
+    assert!(SETTINGS.general.skill_exp_mults_en.get());
 
     if let Ok(skill) = ActorAttribute::from_raw_skill(attr) {
-        let (base_mult, offset_mult) = settings::get_skill_exp_mult(
-            skill,
-            player_avo_get_base(skill) as u32,
-            get_player_level()
+        let base_mult = SETTINGS.skill_exp_mults.get(skill).get();
+        let skill_mult = SETTINGS.skill_exp_mults_with_skills.get(skill).get_nearest(
+            PlayerCharacter::get_base(skill) as u32
         );
-        exp_base *= base_mult;
-        exp_offset *= offset_mult;
+        let pc_mult = SETTINGS.skill_exp_mults_with_pc_lvl.get(skill).get_nearest(
+            PlayerCharacter::get_level()
+        );
+
+        exp_base   *= base_mult.base   * skill_mult.base   * pc_mult.base;
+        exp_offset *= base_mult.offset * skill_mult.offset * pc_mult.offset;
     }
 
     exp_base + exp_offset
 }
 
-/// Adjusts the number of perks the player recieves at level-up.
-#[no_mangle]
-extern "system" fn modify_perk_pool_hook(
-    count: i8
-) {
-    assert!(settings::is_perk_points_enabled());
-
-    let pool = get_player_perk_pool();
-    let delta = std::cmp::min(0xFF, settings::get_perk_delta(get_player_level()));
-    let res = (pool.get() as i16) + (if count > 0 { delta as i16 } else { count as i16 });
-    pool.set(std::cmp::max(0, std::cmp::min(0xff, res)) as u8);
-}
-
 /// Multiplies the exp gain of a level-up by the configured multiplier.
-#[no_mangle]
 extern "system" fn improve_level_exp_by_skill_level_hook(
     mut exp: f32,
     attr: c_int
 ) -> f32 {
-    assert!(settings::is_level_exp_enabled());
+    assert!(SETTINGS.general.level_exp_mults_en.get());
 
     if let Ok(skill) = ActorAttribute::from_raw_skill(attr) {
-        exp *= settings::get_level_exp_mult(
-            skill,
-            player_avo_get_base(skill) as u32,
-            get_player_level()
-        );
+        exp *= SETTINGS.level_exp_mults.get(skill).get()
+             * SETTINGS.level_exp_mults_with_skills.get(skill)
+                       .get_nearest(PlayerCharacter::get_base(skill) as u32)
+             * SETTINGS.level_exp_mults_with_pc_lvl.get(skill)
+                       .get_nearest(PlayerCharacter::get_level());
     }
 
     exp * *XP_PER_SKILL_RANK.get()
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Adjusts the number of perks the player recieves at level-up.
+extern "system" fn modify_perk_pool_hook(
+    count: i8
+) {
+    assert!(SETTINGS.general.perk_points_en.get());
+
+    let pool = PlayerCharacter::get_perk_pool();
+    let delta = std::cmp::min(
+        0xFF,
+        SETTINGS.perks_at_lvl_up.get_cumulative_delta(PlayerCharacter::get_level())
+    );
+    let res = (pool.get() as i16) + (if count > 0 { delta as i16 } else { count as i16 });
+    pool.set(std::cmp::max(0, std::cmp::min(0xff, res)) as u8);
+}
+
 ///
 /// Adjusts the attribute gain at each level-up based on the configured settings.
 ///
-#[no_mangle]
 extern "system" fn improve_attribute_when_level_up_hook(
     choice: c_int
 ) {
-    assert!(settings::is_attr_points_enabled());
-    let choice = ActorAttribute::from_raw(choice).unwrap();
+    assert!(SETTINGS.general.attr_points_en.get());
 
-    let (hp, mp, sp, cw) = settings::get_attribute_level_up(get_player_level(), choice);
-    player_avo_mod_base(ActorAttribute::Health, hp);
-    player_avo_mod_base(ActorAttribute::Magicka, mp);
-    player_avo_mod_base(ActorAttribute::Stamina, sp);
-    player_avo_mod_current(ActorAttribute::CarryWeight, cw);
+    let player_level = PlayerCharacter::get_level();
+    let (hp, mp, sp, cw) = match ActorAttribute::from_raw(choice).unwrap() {
+        ActorAttribute::Health => (
+            SETTINGS.hp_at_lvl_up.get_nearest(player_level) as f32,
+            SETTINGS.mp_at_hp_lvl_up.get_nearest(player_level) as f32,
+            SETTINGS.sp_at_hp_lvl_up.get_nearest(player_level) as f32,
+            SETTINGS.cw_at_hp_lvl_up.get_nearest(player_level) as f32
+        ),
+        ActorAttribute::Magicka => (
+            SETTINGS.hp_at_mp_lvl_up.get_nearest(player_level) as f32,
+            SETTINGS.mp_at_lvl_up.get_nearest(player_level) as f32,
+            SETTINGS.sp_at_mp_lvl_up.get_nearest(player_level) as f32,
+            SETTINGS.cw_at_mp_lvl_up.get_nearest(player_level) as f32
+        ),
+        ActorAttribute::Stamina => (
+            SETTINGS.hp_at_sp_lvl_up.get_nearest(player_level) as f32,
+            SETTINGS.mp_at_sp_lvl_up.get_nearest(player_level) as f32,
+            SETTINGS.sp_at_lvl_up.get_nearest(player_level) as f32,
+            SETTINGS.cw_at_sp_lvl_up.get_nearest(player_level) as f32
+        ),
+        _ => panic!("Cannot get the attribute level up with an invalid choice.")
+    };
+
+    PlayerCharacter::mod_base(ActorAttribute::Health, hp);
+    PlayerCharacter::mod_base(ActorAttribute::Magicka, mp);
+    PlayerCharacter::mod_base(ActorAttribute::Stamina, sp);
+    PlayerCharacter::mod_current(ActorAttribute::CarryWeight, cw);
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 /// Determines what level a skill should take on after being legendary'd.
-#[no_mangle]
 extern "system" fn legendary_reset_skill_level_hook(
     base_level: f32
 ) -> f32 {
-    assert!(settings::is_legendary_enabled());
+    assert!(SETTINGS.general.legendary_en.get());
     assert!(base_level >= 0.0);
     let base_val = *LEGENDARY_SKILL_RESET_VALUE.get();
-    settings::get_post_legendary_skill_level(base_val, base_level)
+
+    // Check if legendarying should reset the level at all.
+    if SETTINGS.legendary.keep_skill_level.get() {
+        return base_level;
+    }
+
+    // 0 in the conf file means we should use the default value.
+    let mut reset_level = SETTINGS.legendary.skill_level_after.get() as f32;
+    if reset_level == 0.0 {
+        reset_level = base_val;
+    }
+
+    // Don't allow legendarying to raise the skill level.
+    reset_level.min(base_level)
 }
 
 ///
@@ -778,14 +916,13 @@ extern "system" fn legendary_reset_skill_level_hook(
 /// threshold. If the condition is valid, we return the threshold. Otherwise, we
 /// return threshold - 1.
 ///
-#[no_mangle]
 extern "system" fn check_condition_for_legendary_skill_hook(
     skill: c_int
 ) -> f32 {
-    assert!(settings::is_legendary_enabled());
+    assert!(SETTINGS.general.legendary_en.get());
     let skill = ActorAttribute::from_raw_skill(skill).unwrap();
 
-    if settings::is_legendary_available(player_avo_get_base(skill) as u32) {
+    if PlayerCharacter::get_base(skill) as u32 >= SETTINGS.legendary.skill_level_en.get() {
         BASE_LEGENDARY_THRESHOLD
     } else {
         BASE_LEGENDARY_THRESHOLD - 1.0
@@ -799,14 +936,14 @@ extern "system" fn check_condition_for_legendary_skill_hook(
 /// threshold. If the condition is valid, we return the threshold. Otherwise, we
 /// return threshold - 1.
 ///
-#[no_mangle]
 extern "system" fn hide_legendary_button_hook(
     skill: c_int
 ) -> f32 {
-    assert!(settings::is_legendary_enabled());
+    assert!(SETTINGS.general.legendary_en.get());
     let skill = ActorAttribute::from_raw_skill(skill).unwrap();
 
-    if settings::is_legendary_button_visible(player_avo_get_base(skill) as u32) {
+    if (PlayerCharacter::get_base(skill) as u32 >= SETTINGS.legendary.skill_level_en.get())
+            && !SETTINGS.legendary.hide_button.get() {
         BASE_LEGENDARY_THRESHOLD
     } else {
         BASE_LEGENDARY_THRESHOLD - 1.0
@@ -821,16 +958,16 @@ extern "system" fn hide_legendary_button_hook(
 /// threshold or the threshold - 1 depending on if we want the hint to be invisible or
 /// visible, respectively.
 ///
-#[no_mangle]
 extern "system" fn clear_legendary_button_hook(
     skill: c_int
 ) -> f32 {
-    assert!(settings::is_legendary_enabled());
+    assert!(SETTINGS.general.legendary_en.get());
 
     if let Ok(skill) = ActorAttribute::from_raw_skill(skill) {
-        let level = player_avo_get_base(skill);
+        let level = PlayerCharacter::get_base(skill);
         let game_vis = level >= BASE_LEGENDARY_THRESHOLD;
-        let mod_vis = settings::is_legendary_button_visible(level as u32);
+        let mod_vis = !SETTINGS.legendary.hide_button.get()
+            && (PlayerCharacter::get_base(skill) as u32 >= SETTINGS.legendary.skill_level_en.get());
 
         if game_vis == mod_vis {
             level
@@ -841,6 +978,6 @@ extern "system" fn clear_legendary_button_hook(
         }
     } else {
         // Some other perk menu. E.g. vampire or werewolf
-        unsafe { player_avo_get_base_unchecked(get_player_avo(), skill) }
+        unsafe { PlayerCharacter::get_base_unchecked(skill) }
     }
 }

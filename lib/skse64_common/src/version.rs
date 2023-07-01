@@ -7,8 +7,8 @@
 //! Bindgen can't evaluate macros, so these have to be written manually.
 //!
 
-use std::num::NonZeroU32;
-use std::fmt::{Display, Debug, Formatter, Error};
+use core::num::NonZeroU32;
+use core::fmt::{Display, Debug, Formatter, Error};
 
 /// @brief Wraps a skse version.
 #[derive(Copy, Clone, PartialOrd, Ord, PartialEq, Eq)]

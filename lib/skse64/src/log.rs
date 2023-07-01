@@ -13,8 +13,8 @@ use std::io::Write;
 use std::ffi::{CStr, OsString};
 use std::os::windows::ffi::{OsStrExt, OsStringExt};
 
-use later::Later;
-use racy_cell::RacyCell;
+use core_util::Later;
+use core_util::RacyCell;
 use windows_sys::Win32::UI::WindowsAndMessaging::MessageBoxW;
 use windows_sys::Win32::UI::Shell::{SHGetFolderPathW, CSIDL_MYDOCUMENTS, SHGFP_TYPE_CURRENT};
 use windows_sys::Win32::Foundation::MAX_PATH;

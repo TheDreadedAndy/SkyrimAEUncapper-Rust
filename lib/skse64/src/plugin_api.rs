@@ -7,7 +7,7 @@
 
 use core::ffi::{c_char, c_void};
 
-use later::Later;
+use core_util::Later;
 
 use crate::version::SkseVersion;
 

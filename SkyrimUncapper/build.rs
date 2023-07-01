@@ -9,12 +9,12 @@ use std::path::PathBuf;
 use std::fs::File;
 use std::io::Write;
 
-const NATIVE_WRAPPERS: &str = "src/skyrim/native_wrappers.cpp";
+const NATIVE_WRAPPERS: &str = "src/native_wrappers.cpp";
 
-const RC_AUTHOR: &str = "Kasplat";
-const RC_NAME: &str = "Skyrim Uncapper AE";
-const RC_VERSION: &str = env!("CARGO_PKG_VERSION");
-const RC_FILE: &str = "SkyrimUncapper.dll";
+const RC_AUTHOR  : &str = "Kasplat";
+const RC_NAME    : &str = "Skyrim Uncapper AE";
+const RC_VERSION : &str = env!("CARGO_PKG_VERSION");
+const RC_FILE    : &str = "SkyrimUncapper.dll";
 
 fn main() {
     // Always rerun this build script.
@@ -38,7 +38,7 @@ fn main() {
     res.write_resource_file(&resource_file).unwrap();
 
     // Win-res can't cross compile, but embed-resource can. Thus, we use winres to generate
-    // the rc file nad embed-resource to embed it. It do be like that sometimes.
+    // the rc file and embed-resource to embed it. It do be like that sometimes.
     embed_resource::compile(&resource_file);
 
     // Generate git version information.

@@ -11,10 +11,7 @@ pub mod version;
 pub mod event;
 mod errors;
 pub mod log;
-pub mod util;
 pub mod plugin_api;
-#[cfg(feature = "trampoline")] pub mod trampoline;
-pub mod safe;
 pub mod loader;
 
 // For macros.
