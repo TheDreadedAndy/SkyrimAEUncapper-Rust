@@ -459,8 +459,9 @@ impl Hook {
         &self,
         addr: usize
     ) {
-        let (entry, flow) = self.get_install_config().unwrap();
-        write_flow(addr, entry, flow).unwrap();
+        if let Some((entry, flow)) = self.get_install_config() {
+            write_flow(addr, entry, flow).unwrap();
+        }
     }
 
     ///

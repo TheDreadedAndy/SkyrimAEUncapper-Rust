@@ -311,6 +311,27 @@ core_util::disarray! {
         },
 
         //
+        // Uncaps the formula for magic CDR, which is now capped by PlayerAVOGetCurrent(). Without
+        // these patches, magic CDR cannot use skill levels above 100.
+        //
+        Descriptor::Patch {
+            name: "CapMagickaCDR",
+            enabled: || SETTINGS.general.skill_formula_caps_en.get(),
+            conflicts: None,
+            hook: Hook::None,
+            loc: GameLocation::Ae { id: 27284, offset: 0x2c },
+            sig: signature![0xf3, 0x0f, 0x5d, 0x0d, ?, ?, ?, ?; 8] // minss <100.0>, %xmm1
+        },
+        Descriptor::Patch {
+            name: "CapMagickaCDR",
+            enabled: || SETTINGS.general.skill_formula_caps_en.get(),
+            conflicts: None,
+            hook: Hook::None,
+            loc: GameLocation::Se { id: 26616, offset: 0x34 },
+            sig: signature![0x73, 0x44; 2] // jae <end of function>
+        },
+
+        //
         // Wraps the call to UpdateSkillList() to temporarily disable the formula cap patch, which
         // avoids a UI bug that would otherwise display the wrong level.
         //
