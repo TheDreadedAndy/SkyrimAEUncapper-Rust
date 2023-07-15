@@ -25,7 +25,7 @@ use windows_sys::Win32::System::Memory::{VirtualProtect, PAGE_EXECUTE_READWRITE}
 use skse64::log::{skse_message, skse_fatal};
 use skse64::reloc::RelocAddr;
 use skse64::plugin_api::Message;
-use versionlib::VersionDb;
+use sre_common::versiondb::VersionDb;
 use core_util::RacyCell;
 use core_util::attempt;
 

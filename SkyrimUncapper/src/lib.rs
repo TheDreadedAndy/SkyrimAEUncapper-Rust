@@ -27,7 +27,7 @@ use hooks::{HOOK_SIGNATURES, NUM_HOOK_SIGNATURES};
 
 const NUM_PATCHES: usize = NUM_GAME_SIGNATURES + NUM_HOOK_SIGNATURES;
 
-skse64::plugin_version_data! {
+skse64::plugin_api::plugin_version_data! {
     version: SkseVersion::new(
         unsigned_from_str(env!("CARGO_PKG_VERSION_MAJOR")),
         unsigned_from_str(env!("CARGO_PKG_VERSION_MINOR")),

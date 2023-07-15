@@ -8,4 +8,4 @@ name = "vdb-dump"
 path = "main.rs"
 
 [dependencies]
-versionlib = { path = "../lib/versionlib" }
+sre-common = { path = "../lib/sre-common" }

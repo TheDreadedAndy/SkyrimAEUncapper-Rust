@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 core-util = { path = "../core-util" }
-skse64_common = { path = "../skse64_common" }
+sre-common = { path = "../sre-common" }
 
 [dependencies.windows-sys]
 version = "0.45.0"

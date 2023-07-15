@@ -8,7 +8,7 @@ path = "patcher.rs"
 
 [dependencies]
 skse64 = { path = "../skse64" }
-versionlib = { path = "../versionlib" }
+sre-common = { path = "../sre-common" }
 core-util = { path = "../core-util" }
 
 [dependencies.windows-sys]

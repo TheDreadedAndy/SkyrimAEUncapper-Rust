@@ -7,9 +7,7 @@
 
 use core::ffi::{c_char, c_void};
 
-use core_util::Later;
-
-use crate::version::SkseVersion;
+use crate::skse64::version::SkseVersion;
 
 /// A macro to construct SKSE version data.
 #[macro_export]
@@ -24,16 +22,17 @@ macro_rules! plugin_version_data {
         compat_versions: [ $($compat:expr),* ]
     ) => {
         #[no_mangle]
-        pub static SKSEPlugin_Version: $crate::plugin_api::SksePluginVersionData =
-        $crate::plugin_api::SksePluginVersionData {
-            data_version: $crate::plugin_api::SksePluginVersionData::VERSION,
+        pub static SKSEPlugin_Version: $crate::skse64::plugin_api::SksePluginVersionData =
+        $crate::skse64::plugin_api::SksePluginVersionData {
+            data_version: $crate::skse64::plugin_api::SksePluginVersionData::VERSION,
             plugin_version: $ver,
-            name: $crate::plugin_api::SksePluginVersionData::make_str($name),
-            author: $crate::plugin_api::SksePluginVersionData::make_str($author),
-            support_email: $crate::plugin_api::SksePluginVersionData::make_str($email),
+            name: $crate::skse64::plugin_api::SksePluginVersionData::make_str($name),
+            author: $crate::skse64::plugin_api::SksePluginVersionData::make_str($author),
+            support_email: $crate::skse64::plugin_api::SksePluginVersionData::make_str($email),
             version_indep_ex: $vix,
             version_indep: $vi,
-            compat_versions: $crate::plugin_api::SksePluginVersionData::make_vers(&[$($compat),*]),
+            compat_versions:
+                $crate::skse64::plugin_api::SksePluginVersionData::make_vers(&[$($compat),*]),
             se_version_required: None
         };
     };
@@ -125,8 +124,7 @@ pub struct SksePluginVersionData {
     pub se_version_required: Option<SkseVersion> // Minimum SKSE version required.
 }
 
-/// Holds the plugin handle for this plugin.
-pub (in crate) static PLUGIN_HANDLE: Later<PluginHandle> = Later::new();
+////////////////////////////////////////////////////////////////////////////////////////////////////
 
 impl PluginInfo {
     pub const VERSION: u32 = 1;
@@ -212,9 +210,4 @@ impl SksePluginVersionData {
 
         ret
     }
-}
-
-/// Gets the handle for this plugin.
-pub fn handle() -> PluginHandle {
-    *PLUGIN_HANDLE
 }

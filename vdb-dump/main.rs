@@ -10,8 +10,8 @@ fn main() {
     assert!(args.len() == 2);
 
     println!("|----ID----|--OFFSET--|");
-    let db = versionlib::VersionDb::new_from_path(std::path::Path::new(&args[1]));
-    for versionlib::DatabaseItem { id, addr } in db.as_vec().iter() {
+    let db = sre_common::versiondb::VersionDb::new_from_path(std::path::Path::new(&args[1]));
+    for sre_common::versiondb::DatabaseItem { id, addr } in db.as_vec().iter() {
         println!("| {:08} | {:08x} |", id, addr.offset());
     }
     println!("|----------|----------|");

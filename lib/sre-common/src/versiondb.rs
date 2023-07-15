@@ -10,8 +10,8 @@ use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::mem::size_of;
 
-use skse64_common::version::{SkseVersion, RUNTIME_VERSION_1_6_317};
-use skse64_common::reloc::RelocAddr;
+use crate::skse64::version::{SkseVersion, RUNTIME_VERSION_1_6_317};
+use crate::skse64::reloc::RelocAddr;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
