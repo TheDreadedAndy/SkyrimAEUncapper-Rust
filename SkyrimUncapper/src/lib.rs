@@ -28,13 +28,6 @@ use hooks::{HOOK_SIGNATURES, NUM_HOOK_SIGNATURES};
 const NUM_PATCHES: usize = NUM_GAME_SIGNATURES + NUM_HOOK_SIGNATURES;
 
 skse64::plugin_api::plugin_version_data! {
-    version: SkseVersion::new(
-        unsigned_from_str(env!("CARGO_PKG_VERSION_MAJOR")),
-        unsigned_from_str(env!("CARGO_PKG_VERSION_MINOR")),
-        unsigned_from_str(env!("CARGO_PKG_VERSION_PATCH")),
-        unsigned_from_str(env!("CARGO_PKG_VERSION_PRE"))
-    ),
-    name: "SkyrimUncapper",
     author: "Andrew Spaulding (Kasplat)",
     email: "andyespaulding@gmail.com",
     version_indep_ex: SksePluginVersionData::VINDEPEX_NO_STRUCT_USE,
@@ -54,8 +47,8 @@ pub fn skse_plugin_rust_entry(
     // Log runtime/skse info.
     skse_message!(
         "{} {:?} ({})\n\
-         Compiled: SKSE64 {}, Skyrim AE {}\n\
-         Running: SKSE64 {}, Skyrim AE {}\n\
+         Compiled: SKSE64 {}, Skyrim SE {}\n\
+         Running: SKSE64 {}, Skyrim SE {}\n\
          Base addr: {:#x}",
         unsafe { CStr::from_ptr(SKSEPlugin_Version.name.as_ptr()).to_str().unwrap() },
         SKSEPlugin_Version.plugin_version,
@@ -80,20 +73,4 @@ pub fn skse_plugin_rust_entry(
 
     skse_message!("Initialization complete!");
     Ok(())
-}
-
-// Converts strings to ints in const context, for version numbers.
-const fn unsigned_from_str(
-    s: &str
-) -> u32 {
-    let s = s.as_bytes();
-    let mut i = 0;
-    let mut res = 0;
-    while i < s.len() {
-        assert!(b'0' <= s[i] && s[i] <= b'9');
-        res *= 10;
-        res += (s[i] - b'0') as u32;
-        i += 1;
-    }
-    return res;
 }

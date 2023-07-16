@@ -9,36 +9,6 @@ use core::ffi::{c_char, c_void};
 
 use crate::skse64::version::SkseVersion;
 
-/// A macro to construct SKSE version data.
-#[macro_export]
-macro_rules! plugin_version_data {
-    (
-        version: $ver:expr,
-        name: $name:literal,
-        author: $author:literal,
-        email: $email:literal,
-        version_indep_ex: $vix:expr,
-        version_indep: $vi:expr,
-        compat_versions: [ $($compat:expr),* ]
-    ) => {
-        #[no_mangle]
-        pub static SKSEPlugin_Version: $crate::skse64::plugin_api::SksePluginVersionData =
-        $crate::skse64::plugin_api::SksePluginVersionData {
-            data_version: $crate::skse64::plugin_api::SksePluginVersionData::VERSION,
-            plugin_version: $ver,
-            name: $crate::skse64::plugin_api::SksePluginVersionData::make_str($name),
-            author: $crate::skse64::plugin_api::SksePluginVersionData::make_str($author),
-            support_email: $crate::skse64::plugin_api::SksePluginVersionData::make_str($email),
-            version_indep_ex: $vix,
-            version_indep: $vi,
-            compat_versions:
-                $crate::skse64::plugin_api::SksePluginVersionData::make_vers(&[$($compat),*]),
-            se_version_required: None
-        };
-    };
-}
-pub use plugin_version_data;
-
 /// Plugin interface IDs.
 #[repr(u32)]
 pub enum InterfaceId {
@@ -174,40 +144,4 @@ impl SksePluginVersionData {
     // Allows the plugin to load with all AE versions. Only set if you don't use structs
     // or check your version before accessing them manually.
     pub const VINDEPEX_NO_STRUCT_USE: u32 = 1 << 0;
-
-    // Converts an ascii string literal to a C string array.
-    #[doc(hidden)]
-    pub const fn make_str<const N: usize>(
-        s: &str
-    ) -> [c_char; N] {
-        let mut ret: [c_char; N] = [0; N];
-
-        let s = s.as_bytes();
-        assert!(s.len() <= (N - 1), "Cannot fit string in C array!");
-
-        let mut i = 0;
-        while i < s.len() {
-            ret[i] = s[i] as i8;
-            i += 1;
-        }
-
-        ret
-    }
-
-    // Converts a list of SKSE versions into a compatible versions array.
-    #[doc(hidden)]
-    pub const fn make_vers<const N: usize>(
-        v: &[SkseVersion]
-    ) -> [Option<SkseVersion>; N] {
-        let mut ret = [None; N];
-        assert!(v.len() <= (N - 1), "Too many compatible versions!");
-
-        let mut i = 0;
-        while i < v.len() {
-            ret[i] = Some(v[i]);
-            i += 1;
-        }
-
-        ret
-    }
 }

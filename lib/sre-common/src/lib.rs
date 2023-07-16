@@ -10,6 +10,3 @@ pub mod skse64 {
     pub mod plugin_api;
     pub mod reloc;
 }
-
-// For macros.
-pub use core;
