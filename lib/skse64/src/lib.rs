@@ -76,7 +76,7 @@ pub mod plugin_api {
                     $crate::plugin_api::unsigned_from_str(::std::env!("CARGO_PKG_VERSION_PATCH")),
                     $crate::plugin_api::unsigned_from_str(::std::env!("CARGO_PKG_VERSION_PRE"))
                 ),
-                name: $crate::plugin_api::make_str(::std::env!("CARGO_PKG_VERSION")),
+                name: $crate::plugin_api::make_str(::std::env!("CARGO_CRATE_NAME")),
                 author: $crate::plugin_api::make_str($author),
                 support_email: $crate::plugin_api::make_str($email),
                 version_indep_ex: $vix,
