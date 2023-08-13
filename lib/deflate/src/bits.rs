@@ -9,10 +9,7 @@ const VEC_BITS: usize = u8::BITS as usize;
 /// Type-safe enum of a bit. Can be cast to u8 safely.
 #[repr(u8)]
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Bit {
-    Zero = 0,
-    One = 1
-}
+pub enum Bit { Zero = 0, One = 1 }
 
 /// A vector of bits, ordered lsb first in each byte.
 #[derive(Clone)]

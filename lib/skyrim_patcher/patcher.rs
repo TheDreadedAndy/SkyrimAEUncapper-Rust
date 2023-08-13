@@ -56,7 +56,7 @@ pub enum Register {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// The maximum patch size. Chosen as our largest patch size is 16 (call absolute).
-const MAX_ASM_HOOK_SIZE: usize = 16;
+const MAX_ASM_HOOK_SIZE: usize = 12;
 
 /// Represents an assembled x86-64 patch to be written.
 struct AssemblyHook {
@@ -67,28 +67,13 @@ struct AssemblyHook {
 
 /// Encodes the addressing mode of an instruction, or its opcode.
 enum Encoding {
-    JumpNear,
     CallRelative,
     JumpRelative,
-    CallIndirect,
-    JumpIndirect,
     CallReg(Register),
     JumpReg(Register),
     MoveImmQReg(Register),
     RelativeD(usize),
-    AbsoluteSH(i8),
-    AbsoluteD(u32),
     AbsoluteQ(u64)
-}
-
-/// An enumeration of the different types of control flow which can be written.
-enum Flow {
-    CallRelative,
-    JumpRelative,
-    CallAbsolute,
-    JumpAbsolute,
-    CallRegAbsolute(Register),
-    JumpRegAbsolute(Register),
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -117,9 +102,7 @@ pub struct Signature(&'static [Opcode]);
 macro_rules! signature {
     ( $($sig:tt),+; $size:literal ) => {{
         let psize = [ $($crate::signature!(@munch $sig)),* ].len();
-        if $size != psize {
-            ::std::panic!("Patch size is incorrect.");
-        }
+        ::std::assert!($size == psize, "Patch size is incorrect.");
         $crate::Signature::new(&[ $($crate::signature!(@munch $sig)),* ])
     }};
 
@@ -170,13 +153,6 @@ pub enum Hook {
         entry: *const u8,
         clobber: Register
     },
-
-    Jump14 {
-        entry: *const u8,
-        trampoline: NonNull<UnsafeCell<usize>>
-    },
-
-    Call16(*const u8)
 }
 
 /// Describes a location in code to be parsed and acted on by the patcher.
@@ -258,23 +234,21 @@ pub fn apply<const NUM_PATCHES: usize>(
     let mut installed_patches: PatchSet = PatchSet(Vec::new());
 
     // Attempt to locate all of the patch signatures.
-    let mut fails = 0;
+    let mut failed = false;
     for (i, sig) in patches.iter().enumerate() {
         match sig.find(&db) {
             Ok(addr) => {
-                assert!(sig.hook().map(|h| h.patch_size() <= sig.size()).unwrap_or(true));
                 res_addrs[i] = addr.addr();
-
                 if let Some(patch_result) = sig.patch_result(addr) {
                     installed_patches.0.push(patch_result);
                 }
             },
             Err(DescriptorError::Disabled) | Err(DescriptorError::IncompatibleGameVersion) => (),
-            _ => fails += 1
+            _ => { failed = true; }
         }
     }
 
-    if fails > 0 {
+    if failed {
         skse_message!("[FAILURE] Could not locate every game signature!");
         skse_message!("----------------------------------------------------------------");
         return Err(());
@@ -284,21 +258,36 @@ pub fn apply<const NUM_PATCHES: usize>(
     // Install patches
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
-    for (i, sig) in patches.iter().enumerate() {
-        if sig.disabled() { continue; }
+    for (i, descriptor) in patches.iter().enumerate() {
+        if descriptor.disabled() { continue; }
 
-        let hook_size = sig.hook().map(|h| h.patch_size()).unwrap_or(0);
-        let ret_addr = res_addrs[i] + hook_size;
         unsafe {
-            match sig {
-                Descriptor::Patch { hook, .. } => {
+            match descriptor {
+                Descriptor::Patch { hook, sig, .. } => {
+                    let hook_size = hook.patch_size();
+                    let ret_addr = res_addrs[i] + hook_size;
+
                     // SAFETY: We will ensure our return address is valid by writing NOPS to any
                     //         bytes that are part of the patch and after the return address.
-                    if let Some(t) = hook.trampoline() {
-                        *(t.as_ref().get()) = ret_addr;
+                    match hook {
+                        Hook::Jump12 { trampoline, .. } |
+                        Hook::DirectJump { trampoline, .. } => {
+                            *(trampoline.as_ref().get()) = ret_addr;
+                        },
+                        _ => ()
                     }
-                    hook.install(res_addrs[i]);
+
+                    // SAFETY: We have matched signatures to ensure our patch is valid.
+                    use_region(res_addrs[i], sig.len(), || {
+                        if let Some(asm_hook) = hook.get_install_asm(res_addrs[i]).unwrap() {
+                                std::ptr::copy(asm_hook.buf.as_ptr(), asm_hook.addr as *mut u8,
+                                               asm_hook.len);
+                        }
+                        std::ptr::write_bytes::<u8>(ret_addr as *mut u8, 0x90 /* NOP */,
+                                                    sig.len() - hook_size);
+                    });
                 },
+
                 Descriptor::Function { result, .. } | Descriptor::Object { result, .. } => {
                     // SAFETY: The version DB ensures that we have the write object for
                     //         the requested ID.
@@ -306,13 +295,6 @@ pub fn apply<const NUM_PATCHES: usize>(
                 }
             }
 
-            // SAFETY: We have matched signatures to ensure our patch is valid.
-            let remain = sig.size() - hook_size;
-            if remain > 0 {
-                use_region(ret_addr, remain, || {
-                    ::std::ptr::write_bytes::<u8>(ret_addr as *mut u8, 0x90, remain);
-                });
-            }
         }
     }
 
@@ -381,13 +363,6 @@ impl GameLocation {
         }
     }
 
-    /// Checks if the game location is compatible with the running version.
-    fn compatible(
-        &self
-    ) -> bool {
-        self.get().is_ok()
-    }
-
     /// Gets the address independent location, if it is compatible with the running game version.
     fn get(
         &self
@@ -429,38 +404,7 @@ impl Hook {
         match self {
             Hook::None => 0,
             Hook::DirectJump { .. } | Hook::DirectCall(_) => 5,
-            Hook::Jump12 { .. } | Hook::Call12 { .. } => 12,
-            Hook::Jump14 { .. } => 14,
-            Hook::Call16(_) => 16,
-        }
-    }
-
-    /// Gets a pointer to the patches return trampoline, if it exists.
-    fn trampoline(
-        &self
-    ) -> Option<NonNull<UnsafeCell<usize>>> {
-        match self {
-            Hook::Jump12 { trampoline, .. } |
-            Hook::Jump14 { trampoline, .. } |
-            Hook::DirectJump { trampoline, .. } => {
-                Some(*trampoline)
-            },
-            _ => None
-        }
-    }
-
-    ///
-    /// Installs the given patch.
-    ///
-    /// In order to use this function safely, the given address must be the correct
-    /// location for this patch to be installed to.
-    ///
-    unsafe fn install(
-        &self,
-        addr: usize
-    ) {
-        if let Some((entry, flow)) = self.get_install_config() {
-            write_flow(addr, entry, flow).unwrap();
+            Hook::Jump12 { .. } | Hook::Call12 { .. } => 12
         }
     }
 
@@ -473,26 +417,45 @@ impl Hook {
         &self,
         addr: usize
     ) -> Result<(), ()> {
-        if let Some((entry, flow)) = self.get_install_config() {
-            verify_flow(addr, entry, flow)
+        if let Some(asm_hook) = self.get_install_asm(addr)? {
+            let mut ret = Err(());
+            use_region(asm_hook.addr, asm_hook.len, || {
+                let patch = asm_hook.buf.split_at(asm_hook.len).0;
+                let code = std::slice::from_raw_parts(asm_hook.addr as *mut u8, asm_hook.len);
+                ret = if code == patch { Ok(()) } else { Err(()) };
+            });
+            return ret;
         } else {
             Ok(())
         }
     }
 
-    /// Gets the flow enumeration assocaited with the invoking hook.
-    fn get_install_config(
-        &self
-    ) -> Option<(usize, Flow)> {
-        match self {
-            Self::Jump12 { entry, clobber, .. } => Some((*entry, Flow::JumpRegAbsolute(*clobber))),
-            Self::Call12 { entry, clobber, .. } => Some((*entry, Flow::CallRegAbsolute(*clobber))),
-            Self::Jump14 { entry, .. }          => Some((*entry, Flow::JumpAbsolute)),
-            Self::Call16(entry)                 => Some((*entry, Flow::CallAbsolute)),
-            Self::DirectJump { entry, .. }      => Some((*entry, Flow::JumpRelative)),
-            Self::DirectCall(entry)             => Some((*entry, Flow::CallRelative)),
+    /// Gets the assembly hook assocaited with the invoking hook.
+    fn get_install_asm(
+        &self,
+        addr: usize
+    ) -> Result<Option<AssemblyHook>, ()> {
+        Ok(match self {
+            Self::Jump12 { entry, clobber, .. } => Some(AssemblyHook::new(addr, &[
+                Encoding::MoveImmQReg(*clobber), Encoding::AbsoluteQ(*entry as u64),
+                Encoding::JumpReg(*clobber)
+            ])?),
+
+            Self::Call12 { entry, clobber, .. } => Some(AssemblyHook::new(addr, &[
+                Encoding::MoveImmQReg(*clobber), Encoding::AbsoluteQ(*entry as u64),
+                Encoding::CallReg(*clobber)
+            ])?),
+
+            Self::DirectJump { entry, .. } => Some(AssemblyHook::new(addr, &[
+                Encoding::JumpRelative, Encoding::RelativeD(*entry as usize)
+            ])?),
+
+            Self::DirectCall(entry) => Some(AssemblyHook::new(addr,  &[
+                Encoding::CallRelative, Encoding::RelativeD(*entry as usize)
+            ])?),
+
             _ => None
-        }.map(|conf| (conf.0 as usize, conf.1))
+        })
     }
 }
 
@@ -506,10 +469,12 @@ impl Descriptor {
             match self {
                 Self::Object { loc, .. } => loc.find(db),
                 Self::Function { loc, .. } => loc.find(db),
-                Self::Patch { enabled, loc, sig, .. } => {
+                Self::Patch { enabled, loc, sig, hook, .. } => {
+                    assert!(hook.patch_size() <= sig.len());
+
                     // Incompatible game version needs to take priority, or we'll try to report on
                     // a patch that should be invisible.
-                    if !loc.compatible() {
+                    if !loc.get().is_ok() {
                         return Err(DescriptorError::IncompatibleGameVersion);
                     }
 
@@ -572,33 +537,13 @@ impl Descriptor {
         }
     }
 
-    /// Gets the number of bytes in the game code this patch expects to alter.
-    fn size(
-        &self
-    ) -> usize {
-        match self {
-            Self::Patch { sig, .. } => sig.len(),
-            _ => 0
-        }
-    }
-
-    /// Gets the hook for this patch.
-    fn hook<'a>(
-        &'a self
-    ) -> Option<&'a Hook> {
-        match self {
-            Self::Patch { hook, .. } => Some(hook),
-            _ => None
-        }
-    }
-
     /// Checks if the given patch is disabled.
     fn disabled(
         &self
     ) -> bool {
         match self {
-            Self::Patch { enabled, loc, .. } => !enabled() || !loc.compatible(),
-            Self::Function { loc, .. } | Self::Object { loc, .. } => !loc.compatible()
+            Self::Patch { enabled, loc, .. } => !enabled() || !loc.get().is_ok(),
+            Self::Function { loc, .. } | Self::Object { loc, .. } => !loc.get().is_ok()
         }
     }
 }
@@ -655,10 +600,8 @@ impl PatchResult {
     fn verify(
         &self
     ) -> Result<(), ()> {
-        unsafe {
-            // SAFETY: We give this hook the address it was installed to.
-            self.hook.verify(self.loc.addr())
-        }
+        // SAFETY: We give this hook the address it was installed to.
+        unsafe { self.hook.verify(self.loc.addr()) }
     }
 }
 
@@ -775,20 +718,11 @@ impl std::fmt::Display for BinarySig {
             // SAFETY: The caller of the diff function ensures this is a valid sig.
             use_region(self.addr.addr(), self.len, || {
                 let sig = std::slice::from_raw_parts(self.addr.addr() as *const u8, self.len);
-
-                if let Err(e) = write!(f, "{{ ") {
-                    res = Err(e);
-                    return;
-                }
-
-                for b in sig.iter() {
-                    if let Err(e) = write!(f, "{:02x} ", b) {
-                        res = Err(e);
-                        return;
-                    }
-                }
-
-                res = write!(f, "}}");
+                res = attempt! {{
+                    write!(f, "{{ ")?;
+                    for b in sig.iter() { write!(f, "{:02x} ", b)?; }
+                    write!(f, "}}")
+                }};
             });
         }
 
@@ -797,7 +731,7 @@ impl std::fmt::Display for BinarySig {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// Code injection implementation
+// Assembly code generation
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 impl AssemblyHook {
@@ -814,11 +748,8 @@ impl AssemblyHook {
 
         for chunk in chunks.iter() {
             match chunk {
-                Encoding::JumpNear => this.append(&[0xeb]),
                 Encoding::CallRelative => this.append(&[0xe8]),
                 Encoding::JumpRelative => this.append(&[0xe9]),
-                Encoding::CallIndirect => this.append(&[0xff, 0x15]),
-                Encoding::JumpIndirect => this.append(&[0xff, 0x25]),
                 Encoding::CallReg(reg) => this.append(&[0xff, 0xd0 + (*reg as u8)]),
                 Encoding::JumpReg(reg) => this.append(&[0xff, 0xe0 + (*reg as u8)]),
                 Encoding::MoveImmQReg(reg) => this.append(&[0x48, 0xb8 + (*reg as u8)]),
@@ -833,12 +764,6 @@ impl AssemblyHook {
                             size_of::<i32>()
                         ));
                     }
-                },
-                Encoding::AbsoluteSH(h) => this.append(&[*h as u8]),
-                Encoding::AbsoluteD(d) => unsafe {
-                    this.append(
-                        slice::from_raw_parts(d as *const u32 as *const u8, size_of::<u32>())
-                    );
                 },
                 Encoding::AbsoluteQ(q) => unsafe {
                     this.append(
@@ -861,48 +786,9 @@ impl AssemblyHook {
     }
 }
 
-impl Flow {
-    ///
-    /// Creates a new patch from the invoking flow, address, and target.
-    ///
-    /// If the flow is an indirect, the target is written to the trampoline on success.
-    ///
-    fn as_patch(
-        &self,
-        addr: usize,
-        target: usize
-    ) -> Result<AssemblyHook, ()> {
-        let patch = match self {
-            Flow::CallRelative => AssemblyHook::new(addr,  &[
-                Encoding::CallRelative, Encoding::RelativeD(target)
-            ]),
-
-            Flow::JumpRelative => AssemblyHook::new(addr, &[
-                Encoding::JumpRelative, Encoding::RelativeD(target)
-            ]),
-
-            Flow::CallAbsolute => AssemblyHook::new(addr, &[
-                Encoding::CallIndirect, Encoding::AbsoluteD(0x02),
-                Encoding::JumpNear, Encoding::AbsoluteSH(0x08),
-                Encoding::AbsoluteQ(target as u64)
-            ]),
-            Flow::JumpAbsolute => AssemblyHook::new(addr, &[
-                Encoding::JumpIndirect, Encoding::AbsoluteD(0),
-                Encoding::AbsoluteQ(target as u64)
-            ]),
-            Flow::CallRegAbsolute(reg) => AssemblyHook::new(addr, &[
-                Encoding::MoveImmQReg(*reg), Encoding::AbsoluteQ(target as u64),
-                Encoding::CallReg(*reg)
-            ]),
-            Flow::JumpRegAbsolute(reg) => AssemblyHook::new(addr, &[
-                Encoding::MoveImmQReg(*reg), Encoding::AbsoluteQ(target as u64),
-                Encoding::JumpReg(*reg)
-            ]),
-        }?;
-
-        Ok(patch)
-    }
-}
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// OS goop
+////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Temporarily marks the given memory region for read/write, then calls the given fn.
 unsafe fn use_region(
@@ -914,45 +800,4 @@ unsafe fn use_region(
     VirtualProtect(addr as *const c_void, size, PAGE_EXECUTE_READWRITE, &mut old_prot);
     func();
     VirtualProtect(addr as *const c_void, size, old_prot, &mut old_prot);
-}
-
-///
-/// Writes the given instruction type to the given address, changing RIP to the given target.
-///
-/// This function may be called on code which is not currently marked read/write.
-///
-/// In order to use this function safely, the given address must be in the skyrim binary.
-///
-unsafe fn write_flow(
-    addr: usize,
-    target: usize,
-    flow: Flow
-) -> Result<(), ()> {
-    let asm_hook = flow.as_patch(addr, target)?;
-    use_region(asm_hook.addr, asm_hook.len, || {
-        std::ptr::copy(asm_hook.buf.as_ptr(), asm_hook.addr as *mut u8, asm_hook.len);
-    });
-    Ok(())
-}
-
-///
-/// Verifies that the given control flow operation was installed correctly to the given address.
-///
-/// This function may be called on code which is not currently marked read/write.
-///
-/// In order to use this function safely, the given address must be in the skyrim binary.
-///
-unsafe fn verify_flow(
-    addr: usize,
-    target: usize,
-    flow: Flow
-) -> Result<(), ()> {
-    let asm_hook = flow.as_patch(addr, target)?;
-    let mut ret = Err(());
-    use_region(asm_hook.addr, asm_hook.len, || {
-        let patch = asm_hook.buf.split_at(asm_hook.len).0;
-        let code = std::slice::from_raw_parts(asm_hook.addr as *mut u8, asm_hook.len);
-        ret = if code == patch { Ok(()) } else { Err(()) };
-    });
-    return ret;
 }

@@ -37,106 +37,73 @@ struct MatchGroup {
     stream: Vec<u8>
 }
 
-impl Window {
-    const fn new() -> Self {
-        Self { front: 0, back: 0, size: 0, buf: [0; WINDOW_SIZE] }
-    }
-
-    /// Adds a byte to the window buffer so that it may be matched by the next byte.
-    fn enq(
-        &mut self,
-        input: u8
-    ) {
-        self.buf[self.back] = input;
-        self.back = (self.back + 1) % WINDOW_SIZE;
-        self.size += 1;
-
-        if self.size > WINDOW_SIZE {
-            assert!(self.size == WINDOW_SIZE + 1);
-            self.size = WINDOW_SIZE;
-            self.front = (self.front + 1) % WINDOW_SIZE;
-            assert!(self.front == self.back);
-        }
-    }
-
-    /// Matches the current set of offsets to the next byte in the sequence, or returns one
-    /// of the sequences if there is no match.
-    fn match_next(
-        &self,
-        next: u8,
-        mut group: MatchGroup
-    ) -> Result<MatchGroup, (u16, Vec<u8>)> {
-        let mut new_matches = Vec::new();
-        for offset in group.offsets.iter() {
-            if self.buf[(self.front + (self.size - (*offset as usize))) % WINDOW_SIZE] == next {
-                new_matches.push(*offset);
-            }
-        }
-
-        if new_matches.len() > 0 && group.stream.len() < MAX_MATCH_SIZE {
-            group.stream.push(next);
-            Ok(MatchGroup { offsets: new_matches, stream: group.stream })
-        } else {
-            Err((group.offsets[0], group.stream))
-        }
-    }
-
-    /// Searches the window buffer for a copy of next, returning a match group containing
-    /// the offsets which index into any copies.
-    fn match_first(
-        &self,
-        next: u8
-    ) -> Result<MatchGroup, ()> {
-        let mut offsets: Vec<u16> = Vec::new();
-        for i in 0..self.size {
-            if self.buf[(self.front + i) % WINDOW_SIZE] == next {
-                offsets.push((self.size - i).try_into().unwrap());
-            }
-        }
-
-        if offsets.len() > 0 {
-            Ok(MatchGroup { offsets, stream: vec![next] })
-        } else {
-            Err(())
-        }
-    }
-}
-
 /// Compresses the given byte stream.
 pub fn compress(
     data: &[u8]
 ) -> Vec<Token> {
-    let mut win = Window::new();
+    let mut win = Window { front: 0, back: 0, size: 0, buf: [0; WINDOW_SIZE] };
     let mut current_match: Option<MatchGroup> = None;
     let mut ret = Vec::new();
 
     for b in data.iter() {
-        if let Some(group) = current_match.take() {
-            match win.match_next(*b, group) {
-                Ok(group) => {
-                    current_match = Some(group);
-                    win.enq(*b);
-                    continue;
-                }
-                Err((offset, stream)) => {
-                    if stream.len() < MIN_MATCH_SIZE {
-                        for phrase in stream.iter() {
-                            ret.push(Token::Phrase(*phrase));
-                        }
-                    } else {
-                        ret.push(Token::Offset(offset));
-                        ret.push(Token::Offset(stream.len().try_into().unwrap()));
+        'compress_byte: {
+            if let Some(mut group) = current_match.take() {
+                let mut new_matches = Vec::new();
+                for offset in group.offsets.iter() {
+                    if win.buf[(win.front + (win.size - (*offset as usize))) % WINDOW_SIZE] == *b {
+                        new_matches.push(*offset);
                     }
                 }
+
+                // If anything matched and we can continue matching, move on to the next byte.
+                if new_matches.len() > 0 && group.stream.len() < MAX_MATCH_SIZE {
+                    group.stream.push(*b);
+                    current_match = Some(MatchGroup { offsets: new_matches, stream: group.stream });
+                    break 'compress_byte;
+                }
+
+                // Otherwise, add the bytes to the compressed output. Only streams which reach the
+                // minimum size will be emited as compressed data.
+                if group.stream.len() < MIN_MATCH_SIZE {
+                    for phrase in group.stream.iter() {
+                        ret.push(Token::Phrase(*phrase));
+                    }
+                } else {
+                    ret.push(Token::Offset(group.offsets[0]));
+                    ret.push(Token::Offset(group.stream.len().try_into().unwrap()));
+                }
+            }
+
+            // Searches the window buffer for a copy of the current byte. We only reach here if
+            // this is the first byte or matching couldn't find this byte in the current run.
+            //
+            // Any offsets found are pushed into a vector which is transformed into a new match
+            // group object. If none are found, the byte is added as raw output.
+            let mut offsets: Vec<u16> = Vec::new();
+            for i in 0..win.size {
+                if win.buf[(win.front + i) % WINDOW_SIZE] == *b {
+                    offsets.push((win.size - i).try_into().unwrap());
+                }
+            }
+
+            if offsets.len() > 0 {
+                current_match = Some(MatchGroup { offsets, stream: vec![*b] });
+            } else {
+                ret.push(Token::Phrase(*b));
             }
         }
 
-        match win.match_first(*b) {
-            Ok(group) => current_match = Some(group),
-            Err(_) => ret.push(Token::Phrase(*b))
-        }
+        // Update the window with the newly processed input byte.
+        win.buf[win.back] = *b;
+        win.back = (win.back + 1) % WINDOW_SIZE;
+        win.size += 1;
 
-        win.enq(*b);
+        if win.size > WINDOW_SIZE {
+            assert!(win.size == WINDOW_SIZE + 1);
+            win.size = WINDOW_SIZE;
+            win.front = (win.front + 1) % WINDOW_SIZE;
+            assert!(win.front == win.back);
+        }
     }
 
     if let Some(group) = current_match {
