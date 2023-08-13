@@ -200,28 +200,28 @@ impl PlayerCharacter {
 macro_rules! attr_name {
     ( $pre:literal, $attr:expr ) => {
         match $attr {
-            ActorAttribute::OneHanded   => ::std::concat!($pre, "OneHanded"),
-            ActorAttribute::TwoHanded   => ::std::concat!($pre, "TwoHanded"),
-            ActorAttribute::Marksman    => ::std::concat!($pre, "Marksman"),
-            ActorAttribute::Block       => ::std::concat!($pre, "Block"),
-            ActorAttribute::Smithing    => ::std::concat!($pre, "Smithing"),
-            ActorAttribute::HeavyArmor  => ::std::concat!($pre, "HeavyArmor"),
-            ActorAttribute::LightArmor  => ::std::concat!($pre, "LightArmor"),
-            ActorAttribute::Pickpocket  => ::std::concat!($pre, "Pickpocket"),
-            ActorAttribute::LockPicking => ::std::concat!($pre, "LockPicking"),
-            ActorAttribute::Sneak       => ::std::concat!($pre, "Sneak"),
-            ActorAttribute::Alchemy     => ::std::concat!($pre, "Alchemy"),
-            ActorAttribute::Speechcraft => ::std::concat!($pre, "SpeechCraft"), // Legacy: case.
-            ActorAttribute::Alteration  => ::std::concat!($pre, "Alteration"),
-            ActorAttribute::Conjuration => ::std::concat!($pre, "Conjuration"),
-            ActorAttribute::Destruction => ::std::concat!($pre, "Destruction"),
-            ActorAttribute::Illusion    => ::std::concat!($pre, "Illusion"),
-            ActorAttribute::Restoration => ::std::concat!($pre, "Restoration"),
-            ActorAttribute::Enchanting  => ::std::concat!($pre, "Enchanting"),
-            ActorAttribute::Health      => ::std::concat!($pre, "Health"),
-            ActorAttribute::Magicka     => ::std::concat!($pre, "Magicka"),
-            ActorAttribute::Stamina     => ::std::concat!($pre, "Stamina"),
-            ActorAttribute::CarryWeight => ::std::concat!($pre, "CarryWeight")
+            ActorAttribute::OneHanded   => $crate::core::concat!($pre, "OneHanded"),
+            ActorAttribute::TwoHanded   => $crate::core::concat!($pre, "TwoHanded"),
+            ActorAttribute::Marksman    => $crate::core::concat!($pre, "Marksman"),
+            ActorAttribute::Block       => $crate::core::concat!($pre, "Block"),
+            ActorAttribute::Smithing    => $crate::core::concat!($pre, "Smithing"),
+            ActorAttribute::HeavyArmor  => $crate::core::concat!($pre, "HeavyArmor"),
+            ActorAttribute::LightArmor  => $crate::core::concat!($pre, "LightArmor"),
+            ActorAttribute::Pickpocket  => $crate::core::concat!($pre, "Pickpocket"),
+            ActorAttribute::LockPicking => $crate::core::concat!($pre, "LockPicking"),
+            ActorAttribute::Sneak       => $crate::core::concat!($pre, "Sneak"),
+            ActorAttribute::Alchemy     => $crate::core::concat!($pre, "Alchemy"),
+            ActorAttribute::Speechcraft => $crate::core::concat!($pre, "SpeechCraft"), // Legacy: case.
+            ActorAttribute::Alteration  => $crate::core::concat!($pre, "Alteration"),
+            ActorAttribute::Conjuration => $crate::core::concat!($pre, "Conjuration"),
+            ActorAttribute::Destruction => $crate::core::concat!($pre, "Destruction"),
+            ActorAttribute::Illusion    => $crate::core::concat!($pre, "Illusion"),
+            ActorAttribute::Restoration => $crate::core::concat!($pre, "Restoration"),
+            ActorAttribute::Enchanting  => $crate::core::concat!($pre, "Enchanting"),
+            ActorAttribute::Health      => $crate::core::concat!($pre, "Health"),
+            ActorAttribute::Magicka     => $crate::core::concat!($pre, "Magicka"),
+            ActorAttribute::Stamina     => $crate::core::concat!($pre, "Stamina"),
+            ActorAttribute::CarryWeight => $crate::core::concat!($pre, "CarryWeight")
         }
     };
 }
@@ -248,7 +248,7 @@ impl ActorAttribute {
                 (attr == (ActorAttribute::CarryWeight as c_int)) {
             Ok(unsafe {
                 // SAFETY: We confirmed this is a valid actor attribute.
-                std::mem::transmute::<c_int, ActorAttribute>(attr)
+                core::mem::transmute::<c_int, ActorAttribute>(attr)
             })
         } else {
             Err(())
@@ -518,6 +518,6 @@ unsafe extern "system" fn handle_ffi_exception(
     // Note that this function is only given ASCII text, so we can do an unchecked conversion.
     panic!(
         "An exception occured while executing a native game function: {}",
-        std::str::from_utf8_unchecked(std::slice::from_raw_parts(s, len))
+        core::str::from_utf8_unchecked(core::slice::from_raw_parts(s, len))
     );
 }

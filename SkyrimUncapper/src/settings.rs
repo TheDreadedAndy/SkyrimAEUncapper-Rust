@@ -6,10 +6,11 @@
 //! @bug No known bugs.
 //!
 
-use std::vec::Vec;
-use std::path::Path;
 use core::fmt::Debug;
 use core::str::FromStr;
+use core::ffi::CStr;
+use alloc::vec::Vec;
+use alloc::string::String;
 
 use core_util::Later;
 use plugin_ini::Ini;
@@ -127,7 +128,7 @@ impl<T: Copy + FromStr + Default> IniReadableField for IniField<T>
 }
 
 impl<T: Copy + FromStr + Default + HungarianAttribute> IniReadableSkill for IniField<T>
-    where <T as FromStr>::Err: std::fmt::Debug
+    where <T as FromStr>::Err: core::fmt::Debug
 {
     type Value = T;
     fn read_ini_skill(
@@ -229,7 +230,7 @@ impl LeveledIniSection<f32> {
         while (i < self.0.len()) && (self.0[i].level <= level) {
             // Update the accumulation. Note the exclusize upper bound on level.
             let bound = if (i + 1) < self.0.len() { self.0[i + 1].level } else { level + 1 };
-            let this_level = std::cmp::min(level + 1, bound);
+            let this_level = core::cmp::min(level + 1, bound);
             acc += ((this_level - self.0[i].level) as f32) * self.0[i].item;
             pacc = acc - self.0[i].item;
             i += 1;
@@ -240,7 +241,7 @@ impl LeveledIniSection<f32> {
 }
 
 impl<T: Copy + FromStr> IniReadableSection for LeveledIniSection<T>
-    where <T as FromStr>::Err: std::fmt::Debug
+    where <T as FromStr>::Err: core::fmt::Debug
 {
     type Value = T;
     fn read_ini_section(
@@ -285,7 +286,7 @@ impl<T: Copy + FromStr> IniReadableSection for LeveledIniSection<T>
 }
 
 impl<T: Copy + FromStr> IniReadableSkill for LeveledIniSection<T>
-    where <T as FromStr>::Err: std::fmt::Debug
+    where <T as FromStr>::Err: core::fmt::Debug
 {
     type Value = T;
     fn read_ini_skill(
@@ -546,9 +547,9 @@ impl Settings {
 
 /// Attempts to load the settings structure from the given INI file.
 pub fn init(
-    path: &Path
+    path: &CStr
 ) {
-    skse_message!("Loading config file: {}", path.display());
+    skse_message!("Loading config file: {}", String::from_utf8_lossy(path.to_bytes()));
 
     let default_ini = Ini::from_str(unsafe {
         // SAFETY: We know this file was given as UTF8 text when it was compressed.

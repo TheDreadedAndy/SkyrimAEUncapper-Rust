@@ -6,6 +6,7 @@
 //!
 
 use core::ffi::c_char;
+use alloc::vec::Vec;
 
 use core_util::RacyCell;
 

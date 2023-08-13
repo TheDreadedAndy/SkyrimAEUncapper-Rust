@@ -4,6 +4,9 @@
 //! @brief Top level module for externel Skyrim RE headers.
 //!
 
+#![no_std]
+extern crate alloc;
+
 pub mod versiondb;
 pub mod skse64 {
     pub mod version;

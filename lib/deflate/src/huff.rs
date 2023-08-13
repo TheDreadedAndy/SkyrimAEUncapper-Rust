@@ -5,7 +5,9 @@
 //! @bug No known bugs.
 //!
 
-use std::cmp::{Ordering, max};
+use core::cmp::{Ordering, max};
+use alloc::vec::Vec;
+use alloc::boxed::Box;
 
 use crate::bits::*;
 use crate::lz::Token;
@@ -353,7 +355,7 @@ impl HTree {
         let mut num_matches: usize = 0;
         let mut matches = [(0, 0); NUM_CODES];
         for b in table.iter() {
-            max_len = std::cmp::max(max_len, bit_width(*b));
+            max_len = core::cmp::max(max_len, bit_width(*b));
 
             if cur_run == 0 {
                 // First iteration.
@@ -362,7 +364,7 @@ impl HTree {
             } else if *b == cur_match {
                 cur_run += 1;
             } else {
-                max_run = std::cmp::max(max_run, bit_width(cur_run));
+                max_run = core::cmp::max(max_run, bit_width(cur_run));
                 matches[num_matches] = (cur_match, cur_run);
                 num_matches += 1;
 
@@ -371,7 +373,7 @@ impl HTree {
             }
         }
 
-        max_run = std::cmp::max(max_run, bit_width(cur_run));
+        max_run = core::cmp::max(max_run, bit_width(cur_run));
         matches[num_matches] = (cur_match, cur_run);
 
         assert!(max_len as usize <= NUM_CODES);

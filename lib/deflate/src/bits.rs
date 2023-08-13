@@ -4,6 +4,8 @@
 //! @brief Structures for managing a stream of bits.
 //!
 
+use alloc::vec::Vec;
+
 const VEC_BITS: usize = u8::BITS as usize;
 
 /// Type-safe enum of a bit. Can be cast to u8 safely.
@@ -153,12 +155,12 @@ impl<'a> BitStream<'a> {
         assert!(self.len - self.index >= len as usize);
         assert!(len <= u16::BITS);
 
-        let mut ret = [0; std::mem::size_of::<u16>()];
+        let mut ret = [0; core::mem::size_of::<u16>()];
         let mut b = 0;
         let shift = self.index % VEC_BITS;
         let limit = self.index + len as usize;
         while self.index < limit {
-            let byte_len = std::cmp::min(VEC_BITS, limit - self.index);
+            let byte_len = core::cmp::min(VEC_BITS, limit - self.index);
             let i = self.index / VEC_BITS;
 
             ret[b] = if shift == 0 {

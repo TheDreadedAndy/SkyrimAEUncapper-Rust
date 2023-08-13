@@ -5,6 +5,9 @@
 //! @bug No known bugs.
 //!
 
+#![no_std]
+extern crate alloc;
+
 pub use sre_common::skse64::reloc;
 
 mod errors;
@@ -71,12 +74,16 @@ pub mod plugin_api {
             $crate::plugin_api::SksePluginVersionData {
                 data_version: $crate::plugin_api::SksePluginVersionData::VERSION,
                 plugin_version: SkseVersion::new(
-                    $crate::plugin_api::unsigned_from_str(::std::env!("CARGO_PKG_VERSION_MAJOR")),
-                    $crate::plugin_api::unsigned_from_str(::std::env!("CARGO_PKG_VERSION_MINOR")),
-                    $crate::plugin_api::unsigned_from_str(::std::env!("CARGO_PKG_VERSION_PATCH")),
-                    $crate::plugin_api::unsigned_from_str(::std::env!("CARGO_PKG_VERSION_PRE"))
+                    $crate::plugin_api::unsigned_from_str(
+                        $crate::core::env!("CARGO_PKG_VERSION_MAJOR")),
+                    $crate::plugin_api::unsigned_from_str(
+                        $crate::core::env!("CARGO_PKG_VERSION_MINOR")),
+                    $crate::plugin_api::unsigned_from_str(
+                        $crate::core::env!("CARGO_PKG_VERSION_PATCH")),
+                    $crate::plugin_api::unsigned_from_str(
+                        $crate::core::env!("CARGO_PKG_VERSION_PRE"))
                 ),
-                name: $crate::plugin_api::make_str(::std::env!("CARGO_CRATE_NAME")),
+                name: $crate::plugin_api::make_str($crate::core::env!("CARGO_CRATE_NAME")),
                 author: $crate::plugin_api::make_str($author),
                 support_email: $crate::plugin_api::make_str($email),
                 version_indep_ex: $vix,

@@ -7,9 +7,14 @@
 //! both huffman and lz77 compression on top of each other.
 //!
 
+#![no_std]
+extern crate alloc;
+
 mod lz;
 mod bits;
 mod huff;
+
+use alloc::vec::Vec;
 
 /// Compresses data using lz77 + huffman.
 pub fn compress(

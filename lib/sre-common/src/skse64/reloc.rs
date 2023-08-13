@@ -20,7 +20,7 @@ static BASE_ADDR: Later<usize> = Later::new();
 impl RelocAddr {
     #[doc(hidden)]
     pub fn init_manager() {
-        BASE_ADDR.init(unsafe { GetModuleHandleA(std::ptr::null_mut()) as usize });
+        BASE_ADDR.init(unsafe { GetModuleHandleA(core::ptr::null_mut()) as usize });
     }
 
     /// Gets the base address of the skyrim binary.
@@ -58,7 +58,7 @@ impl RelocAddr {
     }
 }
 
-impl std::ops::Add<usize> for RelocAddr {
+impl core::ops::Add<usize> for RelocAddr {
     type Output = Self;
     fn add(
         self,

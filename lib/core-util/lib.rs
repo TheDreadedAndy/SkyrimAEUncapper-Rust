@@ -19,6 +19,9 @@
 
 #![no_std]
 
+// For macros.
+pub use core;
+
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::cell::UnsafeCell;
 use core::mem::MaybeUninit;
@@ -44,7 +47,7 @@ macro_rules! attempt {
     };
 
     ( $try:block catch($arg:ident) $catch:block ) => {
-        ::core::result::Result::map_err((|| $try)(), |$arg| $catch)
+        $crate::core::result::Result::map_err((|| $try)(), |$arg| $catch)
     };
 }
 
@@ -92,8 +95,22 @@ macro_rules! abstract_type {
             _private: [u8; 0],
 
             // Prevent the compiler from marking as Send, Sync, or Unpin.
-            _marker: ::std::marker::PhantomData<(*mut u8, ::std::marker::PhantomPinned)>
+            _marker: $crate::core::marker::PhantomData<
+                (*mut u8, $crate::core::marker::PhantomPinned)
+            >
         })*
+    };
+}
+
+///
+/// Creates a CStr literal from a string literal.
+///
+#[macro_export]
+macro_rules! cstr {
+    ( $str:literal ) => {
+        $crate::core::ffi::CStr::from_bytes_until_nul(
+            $crate::core::concat!($str, "\0").as_bytes()
+        ).unwrap()
     };
 }
 

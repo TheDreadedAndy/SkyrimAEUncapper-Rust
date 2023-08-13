@@ -6,11 +6,16 @@
 //!
 
 fn main() {
-    let args: std::vec::Vec<std::ffi::OsString> = std::env::args_os().collect();
+    let mut args: Vec<String> = std::env::args().collect();
     assert!(args.len() == 2);
 
+    // Terminate the arg string.
+    args[1] += "\0";
+
     println!("|----ID----|--OFFSET--|");
-    let db = sre_common::versiondb::VersionDb::new_from_path(std::path::Path::new(&args[1]));
+    let db = sre_common::versiondb::VersionDb::new_from_path(
+        std::ffi::CStr::from_bytes_until_nul(args[1].as_bytes()).unwrap()
+    );
     for sre_common::versiondb::DatabaseItem { id, addr } in db.as_vec().iter() {
         println!("| {:08} | {:08x} |", id, addr.offset());
     }

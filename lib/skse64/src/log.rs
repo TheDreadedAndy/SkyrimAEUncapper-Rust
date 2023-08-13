@@ -6,13 +6,13 @@
 //! @bug No known bugs.
 //!
 
-use std::fmt;
-use std::fmt::Arguments;
-use std::fs::File;
-use std::io::Write;
-use std::ffi::{CStr, OsString};
-use std::os::windows::ffi::{OsStrExt, OsStringExt};
+use core::fmt;
+use core::fmt::{Arguments, Write};
+use core::ffi::CStr;
+use alloc::vec::Vec;
+use alloc::string::String;
 
+use cstdio::File;
 use core_util::Later;
 use core_util::RacyCell;
 use windows_sys::Win32::UI::WindowsAndMessaging::MessageBoxW;
@@ -84,9 +84,9 @@ impl LogBuf {
     fn formatln(
         &mut self,
         args: Arguments<'_>
-    ) -> Result<(), std::fmt::Error> {
+    ) -> Result<(), fmt::Error> {
         fmt::write(self, args)?;
-        <dyn fmt::Write>::write_str(self, "\n")?;
+        self.write_str("\n")?;
         Ok(())
     }
 
@@ -169,9 +169,9 @@ impl LogType {
         let log_res = match self {
             Self::File | Self::Both(_) => {
                 let msg = msg.split_at(msg.len() - 1).0;
-                let msg: &[u8] = std::slice::from_raw_parts(
+                let msg: &[u8] = core::slice::from_raw_parts(
                     msg.as_ptr().cast(),
-                    msg.len() * std::mem::size_of::<u16>()
+                    msg.len() * core::mem::size_of::<u16>()
                 );
                 if LOG_FILE.is_init() &&
                         (*LOG_FILE.get()).write(msg).is_ok() {
@@ -205,16 +205,21 @@ pub (in crate) fn open() {
         });
 
         let plugin_name = CStr::from_ptr(SKSEPlugin_Version.name.as_ptr()).to_str().unwrap();
-        OS_PLUGIN_NAME.init(OsString::from(plugin_name.to_string()).encode_wide().collect());
+        let mut utf16_name: Vec<u16> = plugin_name.encode_utf16().collect();
+        utf16_name.push(0); // encode_wide() doesn't terminate the string. RIP.
+        OS_PLUGIN_NAME.init(utf16_name);
 
-        <dyn fmt::Write>::write_fmt(&mut *LOG_BUFFER.get(), format_args!(
+        (&mut *LOG_BUFFER.get()).write_fmt(format_args!(
             "\\My Games\\Skyrim Special Edition\\SKSE\\{}.log",
             plugin_name
         )).unwrap();
 
-        LOG_FILE.init(RacyCell::new(
-            File::create(&OsString::from_wide((*LOG_BUFFER.get()).as_bytes())).unwrap()
-        ));
+        let mut file_name = String::from_utf16((*LOG_BUFFER.get()).as_bytes()).unwrap();
+        file_name += "\0";
+        LOG_FILE.init(RacyCell::new(File::open(
+            CStr::from_bytes_until_nul(file_name.as_bytes()).unwrap(),
+            core_util::cstr!("w+")
+        ).unwrap()));
 
         // Clear our file path.
         (*LOG_BUFFER.get()).clear();
@@ -252,8 +257,7 @@ pub fn fatal(
         // SAFETY: This library is single threaded.
         if let Err(_) = (*LOG_BUFFER.get()).formatln(args) {
             (*LOG_BUFFER.get()).clear();
-            <dyn fmt::Write>::write_str(
-                &mut *LOG_BUFFER.get(),
+            (&mut *LOG_BUFFER.get()).write_str(
                 "The plugin encountered an unknown fatal error.\n"
             ).unwrap_unchecked();
         }
@@ -266,7 +270,7 @@ pub fn fatal(
 #[macro_export]
 macro_rules! skse_message {
     ( $($fmt:expr),* ) => {
-        $crate::log::write($crate::log::LogType::File, ::std::format_args!($($fmt),*));
+        $crate::log::write($crate::log::LogType::File, $crate::core::format_args!($($fmt),*));
     };
 }
 
@@ -275,19 +279,19 @@ macro_rules! skse_warning {
     ( $($fmt:expr),* => window ) => {
         $crate::log::write(
             $crate::log::LogType::Window($crate::log::MB_ICONWARNING),
-            ::std::format_args!($($fmt),*)
+            $crate::core::format_args!($($fmt),*)
         );
     };
     ( $($fmt:expr),* => log ) => {
         $crate::log::write(
             $crate::log::LogType::File,
-            ::std::format_args!($($fmt),*)
+            $crate::core::format_args!($($fmt),*)
         );
     };
     ( $($fmt:expr),* ) => {
         $crate::log::write(
             $crate::log::LogType::Both($crate::log::MB_ICONWARNING),
-            ::std::format_args!($($fmt),*)
+            $crate::core::format_args!($($fmt),*)
         );
     };
 }
@@ -297,19 +301,19 @@ macro_rules! skse_fatal {
     ( $($fmt:expr),* => window ) => {
         $crate::log::fatal(
             $crate::log::LogType::Window($crate::log::MB_ICONERROR),
-            ::std::format_args!($($fmt),*)
+            $crate::core::format_args!($($fmt),*)
         );
     };
     ( $($fmt:expr),* => log ) => {
         $crate::log::fatal(
             $crate::log::LogType::File,
-            ::std::format_args!($($fmt),*)
+            $crate::core::format_args!($($fmt),*)
         );
     };
     ( $($fmt:expr),* ) => {
         $crate::log::fatal(
             $crate::log::LogType::Both($crate::log::MB_ICONERROR),
-            ::std::format_args!($($fmt),*)
+            $crate::core::format_args!($($fmt),*)
         );
     };
 }

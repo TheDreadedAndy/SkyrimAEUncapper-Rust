@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 core-util = { path = "../core-util" }
+cstdio    = { path = "../cstdio"    }
 
 [dependencies.windows-sys]
 version = "0.45.0"

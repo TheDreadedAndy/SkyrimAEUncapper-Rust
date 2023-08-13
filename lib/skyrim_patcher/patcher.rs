@@ -13,12 +13,18 @@
 //! mod is doing the intended modification on every version.
 //!
 
-use std::cell::UnsafeCell;
-use std::ptr::NonNull;
-use std::vec::Vec;
-use std::slice;
-use std::ffi::c_void;
-use std::mem::size_of;
+#![no_std]
+extern crate alloc;
+
+// For macros.
+pub use core;
+
+use core::cell::UnsafeCell;
+use core::ptr::NonNull;
+use core::slice;
+use core::ffi::c_void;
+use core::mem::size_of;
+use alloc::vec::Vec;
 
 use windows_sys::Win32::System::Memory::{VirtualProtect, PAGE_EXECUTE_READWRITE};
 
@@ -102,7 +108,7 @@ pub struct Signature(&'static [Opcode]);
 macro_rules! signature {
     ( $($sig:tt),+; $size:literal ) => {{
         let psize = [ $($crate::signature!(@munch $sig)),* ].len();
-        ::std::assert!($size == psize, "Patch size is incorrect.");
+        $crate::core::assert!($size == psize, "Patch size is incorrect.");
         $crate::Signature::new(&[ $($crate::signature!(@munch $sig)),* ])
     }};
 
@@ -185,7 +191,7 @@ pub enum Descriptor {
 /// This structure is a transparent usize, as some results may be visible to ASM code.
 ///
 #[repr(transparent)]
-pub struct GameRef<T>(UnsafeCell<usize>, std::marker::PhantomData<T>);
+pub struct GameRef<T>(UnsafeCell<usize>, core::marker::PhantomData<T>);
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -280,11 +286,11 @@ pub fn apply<const NUM_PATCHES: usize>(
                     // SAFETY: We have matched signatures to ensure our patch is valid.
                     use_region(res_addrs[i], sig.len(), || {
                         if let Some(asm_hook) = hook.get_install_asm(res_addrs[i]).unwrap() {
-                                std::ptr::copy(asm_hook.buf.as_ptr(), asm_hook.addr as *mut u8,
-                                               asm_hook.len);
+                                core::ptr::copy(asm_hook.buf.as_ptr(), asm_hook.addr as *mut u8,
+                                                asm_hook.len);
                         }
-                        std::ptr::write_bytes::<u8>(ret_addr as *mut u8, 0x90 /* NOP */,
-                                                    sig.len() - hook_size);
+                        core::ptr::write_bytes::<u8>(ret_addr as *mut u8, 0x90 /* NOP */,
+                                                     sig.len() - hook_size);
                     });
                 },
 
@@ -333,7 +339,7 @@ pub fn apply<const NUM_PATCHES: usize>(
 pub fn flatten_patch_groups<const N: usize>(
     groups: &[&'static [Descriptor]]
 ) -> [&'static Descriptor; N] {
-    let mut res = std::mem::MaybeUninit::<[&Descriptor; N]>::uninit();
+    let mut res = core::mem::MaybeUninit::<[&Descriptor; N]>::uninit();
 
     let mut i = 0;
     for g in groups.iter() {
@@ -382,11 +388,11 @@ impl GameLocation {
     }
 }
 
-impl std::fmt::Display for GameLocation {
+impl core::fmt::Display for GameLocation {
     fn fmt(
         &self,
-        f: &mut std::fmt::Formatter<'_>
-    ) -> Result<(), std::fmt::Error> {
+        f: &mut core::fmt::Formatter<'_>
+    ) -> Result<(), core::fmt::Error> {
         let (id, offset) = self.get().unwrap();
         if offset == 0 {
             write!(f, "[ID: {}]", id)
@@ -421,7 +427,7 @@ impl Hook {
             let mut ret = Err(());
             use_region(asm_hook.addr, asm_hook.len, || {
                 let patch = asm_hook.buf.split_at(asm_hook.len).0;
-                let code = std::slice::from_raw_parts(asm_hook.addr as *mut u8, asm_hook.len);
+                let code = core::slice::from_raw_parts(asm_hook.addr as *mut u8, asm_hook.len);
                 ret = if code == patch { Ok(()) } else { Err(()) };
             });
             return ret;
@@ -548,11 +554,11 @@ impl Descriptor {
     }
 }
 
-impl std::fmt::Display for Descriptor {
+impl core::fmt::Display for Descriptor {
     fn fmt(
         &self,
-        f: &mut std::fmt::Formatter<'_>
-    ) -> Result<(), std::fmt::Error> {
+        f: &mut core::fmt::Formatter<'_>
+    ) -> Result<(), core::fmt::Error> {
         match self {
             Self::Object { name, loc, .. }   => write!(f, "Object {} {}", name, loc),
             Self::Function { name, loc, .. } => write!(f, "Function {} {}", name, loc),
@@ -564,8 +570,8 @@ impl std::fmt::Display for Descriptor {
 impl<T> GameRef<T> {
     /// Creates a new game reference structure.
     pub const fn new() -> Self {
-        assert!(std::mem::size_of::<T>() == std::mem::size_of::<usize>());
-        Self(UnsafeCell::new(0), std::marker::PhantomData)
+        assert!(core::mem::size_of::<T>() == core::mem::size_of::<usize>());
+        Self(UnsafeCell::new(0), core::marker::PhantomData)
     }
 
     ///
@@ -584,13 +590,13 @@ impl<T> GameRef<T> {
     pub fn get(
         &self
     ) -> T {
-        assert!(std::mem::size_of::<T>() == std::mem::size_of::<usize>());
+        assert!(core::mem::size_of::<T>() == core::mem::size_of::<usize>());
 
         // SAFETY: We know that T is of the correct size for this transmute.
         unsafe {
             let addr = *self.0.get();
             assert!(addr != 0);
-            ::std::mem::transmute_copy::<usize, T>(&addr)
+            core::mem::transmute_copy::<usize, T>(&addr)
         }
     }
 }
@@ -690,11 +696,11 @@ impl Signature {
     }
 }
 
-impl std::fmt::Display for Signature {
+impl core::fmt::Display for Signature {
     fn fmt(
         &self,
-        f: &mut std::fmt::Formatter<'_>
-    ) -> Result<(), std::fmt::Error> {
+        f: &mut core::fmt::Formatter<'_>
+    ) -> Result<(), core::fmt::Error> {
         write!(f, "{{ ")?;
         for op in self.0.iter() {
             if let Opcode::Code(b) = op {
@@ -707,17 +713,17 @@ impl std::fmt::Display for Signature {
     }
 }
 
-impl std::fmt::Display for BinarySig {
+impl core::fmt::Display for BinarySig {
     fn fmt(
         &self,
-        f: &mut std::fmt::Formatter<'_>
-    ) -> Result<(), std::fmt::Error> {
+        f: &mut core::fmt::Formatter<'_>
+    ) -> Result<(), core::fmt::Error> {
         let mut res = Ok(());
 
         unsafe {
             // SAFETY: The caller of the diff function ensures this is a valid sig.
             use_region(self.addr.addr(), self.len, || {
-                let sig = std::slice::from_raw_parts(self.addr.addr() as *const u8, self.len);
+                let sig = core::slice::from_raw_parts(self.addr.addr() as *const u8, self.len);
                 res = attempt! {{
                     write!(f, "{{ ")?;
                     for b in sig.iter() { write!(f, "{:02x} ", b)?; }

@@ -3,5 +3,6 @@ name = "plugin_ini"
 version = "1.0.0"
 edition = "2021"
 
-[features]
-unicode_keys = []
+[dependencies]
+core-util = { path = "../core-util" }
+cstdio    = { path = "../cstdio"    }

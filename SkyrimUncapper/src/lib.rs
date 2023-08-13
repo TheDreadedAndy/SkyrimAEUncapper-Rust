@@ -10,12 +10,18 @@
 // Our crate name is stupid, for historical reasons.
 #![allow(non_snake_case)]
 
+#![no_std]
+extern crate alloc;
+
 mod skyrim;
 mod hooks;
 mod settings;
 
-use std::ffi::CStr;
-use std::path::Path;
+// For macros.
+pub use core;
+
+use core::ffi::CStr;
+use alloc::alloc::{GlobalAlloc, Layout};
 
 use skse64::log::{skse_message, skse_fatal};
 use skse64::version::{SkseVersion, PACKED_SKSE_VERSION, CURRENT_RELEASE_RUNTIME};
@@ -24,6 +30,40 @@ use skyrim_patcher::flatten_patch_groups;
 
 use skyrim::{GAME_SIGNATURES, NUM_GAME_SIGNATURES};
 use hooks::{HOOK_SIGNATURES, NUM_HOOK_SIGNATURES};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Since we're in a no_std environment, we need to define a memory allocator for the alloc crate to
+// use.
+struct SystemAlloc;
+
+// These are defined in CRT, but not in libc.
+extern "C" {
+    fn _aligned_malloc(size: usize, align: usize) -> *mut u8;
+    fn _aligned_free(ptr: *mut u8);
+}
+
+unsafe impl GlobalAlloc for SystemAlloc {
+    unsafe fn alloc(
+        &self,
+        layout: Layout
+    ) -> *mut u8 {
+        _aligned_malloc(layout.size(), layout.align())
+    }
+
+    unsafe fn dealloc(
+        &self,
+        ptr: *mut u8,
+        _layout: Layout
+    ) {
+        _aligned_free(ptr);
+    }
+}
+
+#[global_allocator]
+static A: SystemAlloc = SystemAlloc;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 
 const NUM_PATCHES: usize = NUM_GAME_SIGNATURES + NUM_HOOK_SIGNATURES;
 
@@ -60,7 +100,7 @@ pub fn skse_plugin_rust_entry(
         skse64::reloc::RelocAddr::base()
     );
 
-    settings::init(Path::new("Data\\SKSE\\Plugins\\SkyrimUncapper.ini"));
+    settings::init(core_util::cstr!("Data\\SKSE\\Plugins\\SkyrimUncapper.ini"));
 
     let patches = flatten_patch_groups::<NUM_PATCHES>(&[&GAME_SIGNATURES, &HOOK_SIGNATURES]);
     if let Err(_) = skyrim_patcher::apply(patches) {

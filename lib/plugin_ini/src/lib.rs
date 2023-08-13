@@ -5,16 +5,20 @@
 //! @bug No known bugs.
 //!
 
-use std::path::Path;
-use std::fs::File;
-use std::io::{Read, Write};
-use std::str::FromStr;
-use std::cmp::Ordering;
-use std::rc::Rc;
-use std::borrow::Borrow;
-use std::mem::size_of;
-use std::fmt;
-use std::vec::Vec;
+#![no_std]
+extern crate alloc;
+
+use core::str::FromStr;
+use core::ffi::CStr;
+use core::cmp::Ordering;
+use core::borrow::Borrow;
+use core::mem::size_of;
+use core::fmt::Write;
+use alloc::rc::Rc;
+use alloc::vec::Vec;
+use alloc::string::String;
+
+use cstdio::File;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // INI Implementation
@@ -79,9 +83,9 @@ struct FieldMeta {
 impl Ini {
     /// Loads in an INI file from the given path.
     pub fn from_path(
-        path: &Path
+        path: &CStr
     ) -> Result<Self, ()> {
-        let mut ret = Self::new();
+        let mut ret = Ini { sections: IniMap { order: Vec::new(), map: Vec::new() }, suffix: None };
         ret.load_path(path)?;
         Ok(ret)
     }
@@ -90,7 +94,7 @@ impl Ini {
     pub fn from_str(
         s: &str
     ) -> Result<Self, ()> {
-        let mut ret = Self::new();
+        let mut ret = Ini { sections: IniMap { order: Vec::new(), map: Vec::new() }, suffix: None };
         ret.load_str(s)?;
         Ok(ret)
     }
@@ -169,9 +173,9 @@ impl Ini {
     /// Writes the contents of the INI object to the given file.
     pub fn write_file(
         &self,
-        path: &Path
-    ) -> Result<(), std::io::Error> {
-        let mut f = File::create(path)?;
+        path: &CStr
+    ) -> Result<(), core::fmt::Error> {
+        let mut f = File::open(path, core_util::cstr!("w+")).map_err(|_| core::fmt::Error)?;
 
         for section in self.sections() {
             if let Some(ref pre) = section.meta.prefix { write!(&mut f, "{}", pre)?; }
@@ -197,23 +201,12 @@ impl Ini {
         Ok(())
     }
 
-    /// Creates a new, empty, INI object.
-    fn new() -> Self {
-        Self {
-            sections: IniMap::new(),
-            suffix: None
-        }
-    }
-
     /// Loads a configuration in from the given file.
     fn load_path(
         &mut self,
-        path: &Path
+        path: &CStr
     ) -> Result<(), ()> {
-        let mut f = File::open(path).map_err(|_| ())?;
-        let mut s = String::new();
-        f.read_to_string(&mut s).map_err(|_| ())?;
-        self.load_str(&s)
+        self.load_str(&File::open(path, core_util::cstr!("r"))?.into_string()?)
     }
 
     /// Loads a configuration in from the given string.
@@ -272,7 +265,7 @@ impl Ini {
             let meta = SectionMeta {
                 prefix,
                 inline_comment: comment.map(|s| String::from_str(s).unwrap()),
-                fields: IniMap::new()
+                fields: IniMap { order: Vec::new(), map: Vec::new() }
             };
             self.sections.insert(section, meta);
         }
@@ -398,13 +391,13 @@ impl<'a> Iterator for FieldIter<'a> {
 
 /// A map which maintains a strict ordering on the keys it contains.
 #[derive(Clone)]
-pub struct IniMap<V> {
+struct IniMap<V> {
     order: Vec<(KeyString, V)>,
     map: Vec<(KeyString, usize)>,
 }
 
 /// Iterates over the elements in an ordered map, in order.
-pub struct IniMapIter<'a, V> {
+struct IniMapIter<'a, V> {
     order: &'a Vec<(KeyString, V)>,
     index: usize
 }
@@ -412,16 +405,8 @@ pub struct IniMapIter<'a, V> {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 impl<V> IniMap<V> {
-    /// Creates a new ordered map.
-    pub fn new() -> Self {
-        Self {
-            order: Vec::new(),
-            map: Vec::new()
-        }
-    }
-
     /// Gets the element with the given key.
-    pub fn get<'a>(
+    fn get<'a>(
         &'a self,
         key: &str
     ) -> Option<&'a V> {
@@ -429,7 +414,7 @@ impl<V> IniMap<V> {
     }
 
     /// Gets a mutable reference to the element with the given key.
-    pub fn get_mut<'a>(
+    fn get_mut<'a>(
         &'a mut self,
         key: &str
     ) -> Option<&'a mut V> {
@@ -437,7 +422,7 @@ impl<V> IniMap<V> {
     }
 
     /// Gets the (key, value) associated with the given key.
-    pub fn get_key_value(
+    fn get_key_value(
         &self,
         key: &str
     ) -> Option<(&KeyString, &V)> {
@@ -449,7 +434,7 @@ impl<V> IniMap<V> {
     }
 
     /// Inserts a new (key, val) into the map. Values are ordered based on their insertion order.
-    pub fn insert(
+    fn insert(
         &mut self,
         key: String,
         val: V
@@ -469,7 +454,7 @@ impl<V> IniMap<V> {
     /// Renames a key in the invoking map based on the given substitution tuples.
     ///
     /// Returns true if any key was renamed, and false otherwise.
-    pub fn rename(
+    fn rename(
         &mut self,
         sub: &[(&str, &str)]
     ) -> bool {
@@ -491,7 +476,7 @@ impl<V> IniMap<V> {
     }
 
     /// Gets an iterator for this map.
-    pub fn iter(
+    fn iter(
         &self
     ) -> IniMapIter<'_, V> {
         IniMapIter {
@@ -536,18 +521,18 @@ impl<'a, V> Iterator for IniMapIter<'a, V> {
 
 /// Borrowed version of a key string.
 #[repr(transparent)]
-pub struct KeyStr(str);
+struct KeyStr(str);
 
 /// An INI key string. Comparison is case insensitive.
 #[derive(Clone)]
 #[repr(transparent)]
-pub struct KeyString(Rc<String>);
+struct KeyString(Rc<String>);
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 impl KeyStr {
     /// Creates a KeyStr from a string.
-    pub const fn new<'a>(
+    const fn new<'a>(
         s: &'a str
     ) -> &'a Self {
         assert!(size_of::<&Self>() == size_of::<&str>());
@@ -559,21 +544,20 @@ impl KeyStr {
     }
 
     /// Gets the underlying str, preserving the original case.
-    pub const fn get(
+    const fn get(
         &self
     ) -> &str {
         &self.0
     }
 
     /// Compares two key strs.
-    #[cfg(not(feature = "unicode_keys"))]
     fn compare(
         &self,
         rhs: &Self
     ) -> Ordering {
         let lhs = self.get().as_bytes();
         let rhs = rhs.get().as_bytes();
-        for i in 0..std::cmp::min(lhs.len(), rhs.len()) {
+        for i in 0..core::cmp::min(lhs.len(), rhs.len()) {
             let res = lhs[i].to_ascii_lowercase().cmp(&rhs[i].to_ascii_lowercase());
             if let Ordering::Equal = res {
                 continue;
@@ -583,55 +567,6 @@ impl KeyStr {
         }
 
         lhs.len().cmp(&rhs.len())
-    }
-    #[cfg(feature = "unicode_keys")]
-    fn compare(
-        &self,
-        rhs: &KeyStr
-    ) -> Ordering {
-        let lhs = self.get();
-        let rhs = rhs.get();
-
-        let (mut lhs_chars, mut rhs_chars) = (lhs.chars(), rhs.chars());
-        while let Some(l) = lhs_chars.next() {
-            let r = rhs_chars.next();
-            if r.is_none() {
-                return Ordering::Greater;
-            }
-            let r = r.unwrap();
-
-            let (mut llc, mut lrc) = (l.to_lowercase(), r.to_lowercase());
-            while let Some(ll) = llc.next() {
-                let lr = lrc.next();
-                if lr.is_none() {
-                    return Ordering::Greater;
-                }
-                let lr = lr.unwrap();
-
-                if ll != lr {
-                    return ll.cmp(lr);
-                }
-            }
-
-            if lrc.next().is_some() {
-                return Ordering::Less;
-            }
-        }
-
-        if rhs_chars.next().is_none() {
-            Ordering::Equal
-        } else {
-            Ordering::Less
-        }
-    }
-}
-
-impl fmt::Display for KeyStr {
-    fn fmt(
-        &self,
-        f: &mut fmt::Formatter<'_>
-    ) -> Result<(), fmt::Error> {
-        write!(f, "{}", self.get())
     }
 }
 
@@ -669,14 +604,14 @@ impl Ord for KeyStr {
 
 impl KeyString {
     /// Creates a new key string.
-    pub fn new(
+    fn new(
         s: String
     ) -> Self {
         Self(Rc::new(s))
     }
 
     /// Borrows the key string as a KeyStr.
-    pub fn as_key_str(
+    fn as_key_str(
         &self
     ) -> &KeyStr {
         KeyStr::new(<Rc<String> as Borrow<String>>::borrow(&self.0).as_str())
@@ -688,15 +623,6 @@ impl Borrow<KeyStr> for KeyString {
         &self
     ) -> &KeyStr {
         self.as_key_str()
-    }
-}
-
-impl fmt::Display for KeyString {
-    fn fmt(
-        &self,
-        f: &mut fmt::Formatter<'_>
-    ) -> Result<(), fmt::Error> {
-        write!(f, "{}", self.as_key_str())
     }
 }
 

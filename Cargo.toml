@@ -2,6 +2,7 @@
 
 members = [
     "lib/core-util",
+    "lib/cstdio",
     "lib/deflate",
     "lib/plugin_ini",
     "lib/sre-common",

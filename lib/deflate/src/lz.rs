@@ -5,6 +5,8 @@
 //! @bug No known bugs.
 //!
 
+use alloc::vec::Vec;
+
 /// The minimum length for a match to be compressed.
 const MIN_MATCH_SIZE: usize = 4;
 
@@ -87,7 +89,7 @@ pub fn compress(
             }
 
             if offsets.len() > 0 {
-                current_match = Some(MatchGroup { offsets, stream: vec![*b] });
+                current_match = Some(MatchGroup { offsets, stream: alloc::vec![*b] });
             } else {
                 ret.push(Token::Phrase(*b));
             }

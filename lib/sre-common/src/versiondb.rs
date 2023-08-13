@@ -5,10 +5,11 @@
 //! @bug No known bugs.
 //!
 
-use std::vec::Vec;
-use std::fs::File;
-use std::io::{Read, Seek, SeekFrom};
-use std::mem::size_of;
+use core::ffi::CStr;
+use core::mem::size_of;
+use alloc::vec::Vec;
+
+use cstdio::{File, Seek};
 
 use crate::skse64::version::{SkseVersion, RUNTIME_VERSION_1_6_317};
 use crate::skse64::reloc::RelocAddr;
@@ -66,20 +67,20 @@ impl VersionDb {
         // The SKSE64 team uses it to denote which store the game was obtained from, so
         // we can't just pull it from our version structure.
         //
-        Self::new_from_path(&std::path::PathBuf::from(format!(
-            "Data\\SKSE\\Plugins\\{}-{}-{}-{}-0.bin",
+        Self::new_from_path(&alloc::ffi::CString::new(alloc::format!(
+            "Data\\SKSE\\Plugins\\{}-{}-{}-{}-0.bin\0",
             if version < RUNTIME_VERSION_1_6_317 { "version" } else { "versionlib" },
             version.major(),
             version.minor(),
             version.build()
-        )))
+        )).unwrap())
     }
 
     /// Creates a version database from the given path, setting the version based on the file.
     pub fn new_from_path(
-        path: &std::path::Path
+        path: &CStr
     ) -> Self {
-        let     f     = &mut std::fs::File::open(path).unwrap();
+        let     f     = &mut File::open(path, core_util::cstr!("r")).unwrap();
         let mut by_id = Vec::new();
 
         //
@@ -103,8 +104,7 @@ impl VersionDb {
             Self::read::<u32>(f)  // sub
         );
         let mod_len = Self::read::<u32>(f); // Module name length
-        let pos = f.seek(SeekFrom::Current(0)).unwrap();
-        assert!(f.seek(SeekFrom::Current(mod_len as i64)).unwrap() == pos + (mod_len as u64));
+        f.seek(Seek::Current(mod_len as i64)).unwrap();
         let (ptr_size, addr_count) = (Self::read::<u32>(f) as usize, Self::read::<u32>(f));
 
         // The previous ID/offset are necessary to parse the database, and are initialized to zero.
@@ -129,8 +129,8 @@ impl VersionDb {
             // SAFETY: This is the defined encoding of the control byte.
             //         The enum is sized to always be in range.
             let (id_enc, offset_enc) = unsafe {(
-                std::mem::transmute::<u8, AddrEncoding>(control & 0x07),
-                std::mem::transmute::<u8, AddrEncoding>((control >> 4) & 0x07)
+                core::mem::transmute::<u8, AddrEncoding>(control & 0x07),
+                core::mem::transmute::<u8, AddrEncoding>((control >> 4) & 0x07)
             )};
 
             let id     = id_enc.read(f, pid);
@@ -185,7 +185,7 @@ impl VersionDb {
         let mut b: [u8; size_of::<u64>()] = [0; size_of::<u64>()];
         assert!(f.read(b.split_at_mut(size_of::<T>()).0).unwrap() == size_of::<T>());
         // SAFETY: We only read integer types, and ensure that the buffer is the right size.
-        unsafe { std::ptr::read_unaligned(b.as_ptr() as *mut T) }
+        unsafe { core::ptr::read_unaligned(b.as_ptr() as *mut T) }
     }
 }
 
