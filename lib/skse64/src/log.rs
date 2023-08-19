@@ -10,11 +10,9 @@ use core::fmt;
 use core::fmt::{Arguments, Write};
 use core::ffi::CStr;
 use alloc::vec::Vec;
-use alloc::string::String;
 
 use cstdio::File;
-use core_util::Later;
-use core_util::RacyCell;
+use core_util::{Later, RacyCell, WideStr};
 use windows_sys::Win32::UI::WindowsAndMessaging::MessageBoxW;
 use windows_sys::Win32::UI::Shell::{SHGetFolderPathW, CSIDL_MYDOCUMENTS, SHGFP_TYPE_CURRENT};
 use windows_sys::Win32::Foundation::MAX_PATH;
@@ -102,11 +100,7 @@ impl LogBuf {
     ) {
         func(self.buf.split_at_mut(self.len).1);
 
-        for c in self.buf.split_at(self.len).1.iter() {
-            if *c == 0 {
-                return;
-            }
-
+        while self.buf[self.len] != 0 {
             self.len += 1;
         }
     }
@@ -169,10 +163,6 @@ impl LogType {
         let log_res = match self {
             Self::File | Self::Both(_) => {
                 let msg = msg.split_at(msg.len() - 1).0;
-                let msg: &[u8] = core::slice::from_raw_parts(
-                    msg.as_ptr().cast(),
-                    msg.len() * core::mem::size_of::<u16>()
-                );
                 if LOG_FILE.is_init() &&
                         (*LOG_FILE.get()).write(msg).is_ok() {
                     Ok(())
@@ -214,18 +204,13 @@ pub (in crate) fn open() {
             plugin_name
         )).unwrap();
 
-        let mut file_name = String::from_utf16((*LOG_BUFFER.get()).as_bytes()).unwrap();
-        file_name += "\0";
-        LOG_FILE.init(RacyCell::new(File::open(
-            CStr::from_bytes_until_nul(file_name.as_bytes()).unwrap(),
-            core_util::cstr!("w+")
+        LOG_FILE.init(RacyCell::new(File::openw(
+            WideStr::new((*LOG_BUFFER.get()).as_bytes_nul()),
+            core_util::wcstr!("w+, ccs=UTF-8")
         ).unwrap()));
 
         // Clear our file path.
         (*LOG_BUFFER.get()).clear();
-
-        // Write the byte-order mark, so text editors know the file is UTF-16.
-        (*LOG_FILE.get()).write(&[0xFF, 0xFE]).unwrap();
     }
 }
 
@@ -257,9 +242,9 @@ pub fn fatal(
         // SAFETY: This library is single threaded.
         if let Err(_) = (*LOG_BUFFER.get()).formatln(args) {
             (*LOG_BUFFER.get()).clear();
-            (&mut *LOG_BUFFER.get()).write_str(
-                "The plugin encountered an unknown fatal error.\n"
-            ).unwrap_unchecked();
+            let _ = (*LOG_BUFFER.get()).write_fmt(
+                format_args!("The plugin encountered an unknown fatal error.\n")
+            );
         }
 
         let _ = log_type.log((*LOG_BUFFER.get()).as_bytes_nul());

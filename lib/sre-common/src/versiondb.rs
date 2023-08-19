@@ -68,7 +68,7 @@ impl VersionDb {
         // we can't just pull it from our version structure.
         //
         Self::new_from_path(&alloc::ffi::CString::new(alloc::format!(
-            "Data\\SKSE\\Plugins\\{}-{}-{}-{}-0.bin\0",
+            "Data\\SKSE\\Plugins\\{}-{}-{}-{}-0.bin",
             if version < RUNTIME_VERSION_1_6_317 { "version" } else { "versionlib" },
             version.major(),
             version.minor(),
@@ -80,7 +80,7 @@ impl VersionDb {
     pub fn new_from_path(
         path: &CStr
     ) -> Self {
-        let     f     = &mut File::open(path, core_util::cstr!("r")).unwrap();
+        let     f     = &mut File::open(path, core_util::cstr!("rb")).unwrap();
         let mut by_id = Vec::new();
 
         //

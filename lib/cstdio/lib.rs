@@ -27,6 +27,11 @@ pub struct File(NonNull<FILE>);
 /// A wrapper for the seek values used by fseek.
 pub enum Seek { Set(i64), Current(i64), End(i64) }
 
+extern "C" {
+    /// MSVC specific wide-char open function.
+    
+}
+
 impl File {
     /// Attempts to open the file at the specified path for reading/writing.
     pub fn open(
@@ -37,6 +42,13 @@ impl File {
             // SAFETY: The user has passed us valid CStr types.
             Ok(Self(NonNull::new(fopen(path.as_ptr(), mode.as_ptr())).ok_or(())?))
         }
+    }
+
+    /// Attempts to open the file at the specified path (wide string version).
+    pub fn openw(
+        path: &WideStr,
+        mode: &WideStr
+    ) -> Result<File, ()> {
     }
 
     /// Reads in data from the invoking file stream.

@@ -175,7 +175,7 @@ impl Ini {
         &self,
         path: &CStr
     ) -> Result<(), core::fmt::Error> {
-        let mut f = File::open(path, core_util::cstr!("w+")).map_err(|_| core::fmt::Error)?;
+        let mut f = File::open(path, core_util::cstr!("w+b")).map_err(|_| core::fmt::Error)?;
 
         for section in self.sections() {
             if let Some(ref pre) = section.meta.prefix { write!(&mut f, "{}", pre)?; }
@@ -206,7 +206,7 @@ impl Ini {
         &mut self,
         path: &CStr
     ) -> Result<(), ()> {
-        self.load_str(&File::open(path, core_util::cstr!("r"))?.into_string()?)
+        self.load_str(&File::open(path, core_util::cstr!("rb"))?.into_string()?)
     }
 
     /// Loads a configuration in from the given string.
