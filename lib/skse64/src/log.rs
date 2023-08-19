@@ -9,13 +9,14 @@
 use core::fmt;
 use core::fmt::{Arguments, Write};
 use core::ffi::CStr;
-use alloc::vec::Vec;
 
 use cstdio::File;
-use core_util::{Later, RacyCell, WideStr};
-use windows_sys::Win32::UI::WindowsAndMessaging::MessageBoxW;
-use windows_sys::Win32::UI::Shell::{SHGetFolderPathW, CSIDL_MYDOCUMENTS, SHGFP_TYPE_CURRENT};
-use windows_sys::Win32::Foundation::MAX_PATH;
+use core_util::{Later, RacyCell};
+use windows_sys::Win32::UI::WindowsAndMessaging::MessageBoxA;
+use windows_sys::Win32::Globalization::{WC_ERR_INVALID_CHARS, CP_UTF8, WideCharToMultiByte};
+use windows_sys::Win32::System::Com::CoTaskMemFree;
+use windows_sys::Win32::UI::Shell::{SHGetKnownFolderPath, FOLDERID_Documents};
+use windows_sys::Win32::Foundation::{MAX_PATH, S_OK};
 
 #[doc(hidden)]
 pub use windows_sys::Win32::UI::WindowsAndMessaging::{MB_ICONERROR, MB_ICONWARNING};
@@ -26,12 +27,10 @@ use crate::loader::SKSEPlugin_Version;
 /// The structure used to format information before writing it to the log file.
 /// We use this to avoid an allocation for each message.
 ///
-/// The buffer is always ended with a null terminator. Note that the buffer is
-/// encoded in UTF-16, as this is the format that windows actually uses for its
-/// OS strings.
+/// The buffer is always ended with a null terminator.
 ///
 struct LogBuf {
-    buf: [u16; Self::BUF_SIZE],
+    buf: [u8; Self::BUF_SIZE],
     len: usize
 }
 
@@ -49,11 +48,8 @@ static LOG_FILE: Later<RacyCell<File>> = Later::new();
 /// The global log buffer used to print our output.
 static LOG_BUFFER: RacyCell<LogBuf> = RacyCell::new(LogBuf::new());
 
-/// The OS-encoded name of our plugin.
-static OS_PLUGIN_NAME: Later<Vec<u16>> = Later::new();
-
 impl LogBuf {
-    /// Large enough to contain any reasonably size line in a log file.
+    /// Large enough to contain any reasonably sized line in a log file.
     const BUF_SIZE: usize = 8192;
 
     /// Creates a new, empty, log buffer.
@@ -64,17 +60,10 @@ impl LogBuf {
         }
     }
 
-    /// Gets the underlying &[u16] in the buffer, excluding the null.
-    fn as_bytes(
-        &self
-    ) -> &[u16] {
-        self.buf.split_at(self.len).0
-    }
-
     /// Gets the underlying &[u16] in the buffer, with the null.
     fn as_bytes_nul(
         &self
-    ) -> &[u16] {
+    ) -> &[u8] {
         self.buf.split_at(self.len + 1).0
     }
 
@@ -96,7 +85,7 @@ impl LogBuf {
     ///
     unsafe fn write_ffi(
         &mut self,
-        func: impl FnOnce(&mut [u16])
+        func: impl FnOnce(&mut [u8])
     ) {
         func(self.buf.split_at_mut(self.len).1);
 
@@ -119,12 +108,12 @@ impl fmt::Write for LogBuf {
         &mut self,
         s: &str
     ) -> Result<(), fmt::Error> {
-        for c in s.encode_utf16() {
-            self.buf[self.len] = c;
-            if self.len < Self::BUF_SIZE - 1 {
-                self.len += 1;
-            }
+        if s.len() + self.len > Self::BUF_SIZE - 1 {
+            return Err(fmt::Error);
         }
+
+        self.buf.split_at_mut(self.len).1.split_at_mut(s.len()).0.copy_from_slice(s.as_bytes());
+        self.len += s.len();
         self.buf[self.len] = 0; // Always null terminate.
         Ok(())
     }
@@ -140,7 +129,7 @@ impl LogType {
     //
     unsafe fn log(
         &self,
-        msg: &[u16]
+        msg: &[u8]
     ) -> Result<(), ()> {
         if msg[msg.len() - 1] != 0 {
             return Err(());
@@ -148,10 +137,10 @@ impl LogType {
 
         let win_res = match self {
             Self::Window(ico) | Self::Both(ico) => {
-                let res = MessageBoxW(
+                let res = MessageBoxA(
                     0,
                     msg.as_ptr(),
-                    OS_PLUGIN_NAME.as_ptr().cast(),
+                    SKSEPlugin_Version.name.as_ptr().cast(),
                     *ico
                 );
 
@@ -164,7 +153,7 @@ impl LogType {
             Self::File | Self::Both(_) => {
                 let msg = msg.split_at(msg.len() - 1).0;
                 if LOG_FILE.is_init() &&
-                        (*LOG_FILE.get()).write(msg).is_ok() {
+                        (*LOG_FILE.get()).write(msg).is_ok() && (*LOG_FILE.get()).flush().is_ok() {
                     Ok(())
                 } else {
                     Err(())
@@ -177,7 +166,7 @@ impl LogType {
     }
 }
 
-/// Opens a log file with the given name in the SKSE log directory.
+/// Opens a log file under the plugins name in the SKSE log directory.
 pub (in crate) fn open() {
     unsafe {
         // SAFETY: Single threaded library, protected from double init by skse.
@@ -185,28 +174,30 @@ pub (in crate) fn open() {
         (*LOG_BUFFER.get()).clear();
         (*LOG_BUFFER.get()).write_ffi(|buf| {
             assert!(buf.len() > MAX_PATH as usize);
-            SHGetFolderPathW(
-                0,
-                CSIDL_MYDOCUMENTS as i32,
-                0,
-                SHGFP_TYPE_CURRENT as u32,
-                buf.as_mut_ptr()
-            );
-        });
+            let mut path: windows_sys::core::PWSTR = core::ptr::null_mut();
 
-        let plugin_name = CStr::from_ptr(SKSEPlugin_Version.name.as_ptr()).to_str().unwrap();
-        let mut utf16_name: Vec<u16> = plugin_name.encode_utf16().collect();
-        utf16_name.push(0); // encode_wide() doesn't terminate the string. RIP.
-        OS_PLUGIN_NAME.init(utf16_name);
+            assert!(SHGetKnownFolderPath(&FOLDERID_Documents, 0, 0, &mut path) == S_OK);
+            assert!(WideCharToMultiByte(
+                CP_UTF8,
+                WC_ERR_INVALID_CHARS,
+                path,
+                libc::wcslen(path.cast()).try_into().unwrap(), // Size in WCHARS
+                buf.as_mut_ptr(),
+                buf.len().try_into().unwrap(), // Size in BYTES
+                core::ptr::null_mut(),
+                core::ptr::null_mut()
+            ) > 0);
+            CoTaskMemFree(path.cast());
+        });
 
         (&mut *LOG_BUFFER.get()).write_fmt(format_args!(
             "\\My Games\\Skyrim Special Edition\\SKSE\\{}.log",
-            plugin_name
+            CStr::from_ptr(SKSEPlugin_Version.name.as_ptr()).to_str().unwrap()
         )).unwrap();
 
-        LOG_FILE.init(RacyCell::new(File::openw(
-            WideStr::new((*LOG_BUFFER.get()).as_bytes_nul()),
-            core_util::wcstr!("w+, ccs=UTF-8")
+        LOG_FILE.init(RacyCell::new(File::open(
+            CStr::from_bytes_until_nul((*LOG_BUFFER.get()).as_bytes_nul()).unwrap(),
+            core_util::cstr!("w+b")
         ).unwrap()));
 
         // Clear our file path.
