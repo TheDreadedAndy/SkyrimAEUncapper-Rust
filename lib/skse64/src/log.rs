@@ -202,6 +202,9 @@ pub (in crate) fn open() {
 
         // Clear our file path.
         (*LOG_BUFFER.get()).clear();
+
+        // Add the BOM to the file to mark it as UTF-8.
+        (*LOG_FILE.get()).write(&cstdio::UTF8_BOM).unwrap();
     }
 }
 

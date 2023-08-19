@@ -27,6 +27,12 @@ pub struct File(NonNull<FILE>);
 /// A wrapper for the seek values used by fseek.
 pub enum Seek { Set(i64), Current(i64), End(i64) }
 
+/// The byte order mark for UTF-16
+pub const UTF16LE_BOM : [u8; 2] = [0xff, 0xfe];
+
+/// The byte order mark for UTF-8
+pub const UTF8_BOM    : [u8; 3] = [0xef, 0xbb, 0xbf];
+
 impl File {
     /// Attempts to open the file at the specified path for reading/writing.
     pub fn open(
@@ -123,9 +129,6 @@ impl File {
     pub fn into_string(
         self
     ) -> Result<String, ()> {
-        const UTF16LE_BOM : [u8; 2] = [0xff, 0xfe];
-        const UTF8_BOM    : [u8; 3] = [0xef, 0xbb, 0xbf];
-
         let bytes = self.into_vec()?;
         if bytes[0..UTF16LE_BOM.len()] == UTF16LE_BOM {
             Ok(String::from_utf16_lossy(
