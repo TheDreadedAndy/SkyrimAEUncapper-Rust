@@ -22,10 +22,6 @@
 //! values of the structure to our internal representation unless it is known that those integers
 //! will always be of values that we can encode, as in many of the players leveling functions.
 //! Otherwise, it is necessary to treat the actor attribute as an opaque integer.
-//!
-//! Note that the game functions this file hooks into are wrapped by exception handlers defined in
-//! C++ code to ensure that they cannot unwrap into this mods code and cause U.B. This extra layer
-//! of goop will be unnecessary once the "system-unwind" ABI becomes stablized.
 
 use core::cell::Cell;
 use core::ffi::c_int;
@@ -100,7 +96,7 @@ pub struct SkillIterator(Option<ActorAttribute>);
 impl PlayerCharacter {
     /// Gets the current level of the player.
     pub fn get_level() -> u32 {
-        unsafe { get_level_net(*(PLAYER_OBJECT.get())) as u32 }
+        unsafe { (get_level_entry.get())(*(PLAYER_OBJECT.get())) as u32 }
     }
 
     /// Gets a reference to the players perk pool.
@@ -138,7 +134,7 @@ impl PlayerCharacter {
         attr: ActorAttribute,
         val: f32
     ) {
-        unsafe { player_avo_mod_base_net(Self::get_avo(), attr as c_int, val) }
+        unsafe { (player_avo_mod_base_entry.get())(Self::get_avo(), attr as c_int, val) }
     }
 
     /// Modifies the current value of a player attribute.
@@ -147,7 +143,7 @@ impl PlayerCharacter {
         val: f32
     ) {
         // No idea what second arg does; just match game calls.
-        unsafe { player_avo_mod_current_net(Self::get_avo(), 0, attr as c_int, val) }
+        unsafe { (player_avo_mod_current_entry.get())(Self::get_avo(), 0, attr as c_int, val) }
     }
 
     ///
@@ -160,7 +156,7 @@ impl PlayerCharacter {
     pub unsafe extern "system" fn get_base_unchecked(
         attr: c_int
     ) -> f32 {
-        player_avo_get_base_net(Self::get_avo(), attr)
+        (player_avo_get_base_entry.get())(Self::get_avo(), attr)
     }
 
     ///
@@ -362,24 +358,29 @@ pub static ENCHANTING_SKILL_COST_MULT: GameRef<&'static f32> = GameRef::new();
 pub static XP_PER_SKILL_RANK: GameRef<&'static f32> = GameRef::new();
 pub static LEGENDARY_SKILL_RESET_VALUE: GameRef<&'static f32> = GameRef::new();
 
-// Game functions. These are wrapped by C++ catchers and then safe implementations later.
+// Game functions. These are later wrapped by safe implementations.
+//
+// Note that we must declare these as "system-unwind" to avoid U.B. when Skyrim CTDs, since Skyrim
+// is compiled with exceptions enabled.
 #[no_mangle]
-static get_level_entry: GameRef<fn(*mut PlayerCharacter) -> u16> = GameRef::new();
+static get_level_entry: GameRef<
+    unsafe extern "system-unwind" fn(*mut PlayerCharacter) -> u16
+> = GameRef::new();
 #[no_mangle]
 static player_avo_get_base_entry: GameRef<
-    unsafe extern "system" fn(*mut ActorValueOwner, ActorAttribute) -> f32
+    unsafe extern "system-unwind" fn(*mut ActorValueOwner, c_int) -> f32
 > = GameRef::new();
 #[no_mangle]
 static player_avo_get_current_entry: GameRef<
-    unsafe extern "system" fn(*mut ActorValueOwner, c_int) -> f32
+    unsafe extern "system-unwind" fn(*mut ActorValueOwner, c_int) -> f32
 > = GameRef::new();
 #[no_mangle]
 static player_avo_mod_base_entry: GameRef<
-    unsafe extern "system" fn(*mut ActorValueOwner, ActorAttribute, f32)
+    unsafe extern "system-unwind" fn(*mut ActorValueOwner, c_int, f32)
 > = GameRef::new();
 #[no_mangle]
 static player_avo_mod_current_entry: GameRef<
-    unsafe extern "system" fn(*mut ActorValueOwner, u32, ActorAttribute, f32)
+    unsafe extern "system-unwind" fn(*mut ActorValueOwner, u32, c_int, f32)
 > = GameRef::new();
 
 core_util::disarray! {
@@ -464,36 +465,15 @@ core_util::disarray! {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// Unwind nets for native game functions
+// Native game functions
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-//
-// It is undefined behavior for a C++ function to unwind the stack into Rust code. In the current
-// implementation of Rust, this just so happens to be fine, as Rust uses the same unwinding
-// convention as C++. This may not always be the case, however, and so we define these wrappers to
-// prevent undefined behavior from occuring.
-//
-// Eventually, the "system-unwind" ABI will be stablized and these wrappers will become
-// unnecessary, as the game functions can simply be declared as "system-unwind" and the compiler
-// will automatically abort when an unwind occurs within Rust code (since we use aborting panics).
 
-// C++ wrappers, which catch any exceptions and redirect to us in a defined way.
-extern "system" {
-    fn get_level_net(player: *mut PlayerCharacter) -> u16;
-    fn player_avo_get_base_net(av: *mut ActorValueOwner, attr: c_int) -> f32;
-    fn player_avo_get_current_net(
-        av: *mut ActorValueOwner,
-        attr: c_int,
-        is_se: bool,
-        patch_en: bool
-    ) -> f32;
-    fn player_avo_mod_base_net(av: *mut ActorValueOwner, attr: c_int, delta: f32);
-    fn player_avo_mod_current_net(
-        av: *mut ActorValueOwner,
-        unk1: u32,
-        attr: c_int,
-        delta: f32
-    );
-    pub (in crate) fn update_skill_list_unchecked(unk: *mut ());
+// Asm wrappers for native game functions. Unwinding still seems to work for these, since it is
+// scan-forward in implementation.
+extern "system-unwind" {
+    pub (in crate) fn update_skill_list_original_wrapper(unk: *mut ());
+    fn player_avo_get_current_original_wrapper_se(av: *mut ActorValueOwner, attr: c_int) -> f32;
+    fn player_avo_get_current_original_wrapper_ae(av: *mut ActorValueOwner, attr: c_int) -> f32;
 }
 
 /// Gets the current actor value by passing through to the original function.
@@ -501,23 +481,11 @@ pub unsafe fn avo_get_current_unchecked(
     av: *mut ActorValueOwner,
     attr: c_int
 ) -> f32 {
-    player_avo_get_current_net(
-        av,
-        attr,
-        skse64::version::current_runtime() <= skse64::version::RUNTIME_VERSION_1_5_97,
-        SETTINGS.general.skill_formula_caps_en.get()
-    )
-}
-
-/// Handles a C++ exception by just panicking.
-#[no_mangle]
-unsafe extern "system" fn handle_ffi_exception(
-    s: *const u8,
-    len: usize
-) -> ! {
-    // Note that this function is only given ASCII text, so we can do an unchecked conversion.
-    panic!(
-        "An exception occured while executing a native game function: {}",
-        core::str::from_utf8_unchecked(core::slice::from_raw_parts(s, len))
-    );
+    if !SETTINGS.general.skill_formula_caps_en.get() {
+        (player_avo_get_current_entry.get())(av, attr)
+    } else if skse64::version::current_runtime() <= skse64::version::RUNTIME_VERSION_1_5_97 {
+        player_avo_get_current_original_wrapper_se(av, attr)
+    } else {
+        player_avo_get_current_original_wrapper_ae(av, attr)
+    }
 }

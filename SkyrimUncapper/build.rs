@@ -9,8 +9,6 @@ use std::path::PathBuf;
 use std::fs::File;
 use std::io::Write;
 
-const NATIVE_WRAPPERS: &str = "src/native_wrappers.cpp";
-
 const RC_AUTHOR  : &str = "Kasplat";
 const RC_NAME    : &str = "Skyrim Uncapper AE";
 const RC_VERSION : &str = env!("CARGO_PKG_VERSION");
@@ -19,10 +17,6 @@ const RC_FILE    : &str = "SkyrimUncapper.dll";
 fn main() {
     // Always rerun this build script.
     println!("cargo:rerun-if-changed=../");
-
-    // Build C++ exception nets.
-    println!("cargo:rerun-if-changed={}", NATIVE_WRAPPERS);
-    cc::Build::new().cpp(true).file(NATIVE_WRAPPERS).compile("nets");
 
     // Embed resource information.
     let mut res = winres::WindowsResource::new();

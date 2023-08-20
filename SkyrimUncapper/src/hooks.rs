@@ -803,7 +803,7 @@ extern "system" fn update_skill_list_hook(
     unk: *mut ()
 ) {
     assert!(!IS_FORMULA_CAP_DISABLED_FOR_UI.swap(true, Ordering::Relaxed));
-    unsafe { update_skill_list_unchecked(unk); }
+    unsafe { update_skill_list_original_wrapper(unk); }
     assert!(IS_FORMULA_CAP_DISABLED_FOR_UI.swap(false, Ordering::Relaxed));
 }
 

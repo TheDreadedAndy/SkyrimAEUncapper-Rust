@@ -20,6 +20,10 @@ use alloc::string::String;
 use libc::{fopen, fread, fwrite, fseek, ferror, ftell, fflush, fclose, FILE};
 use libc::{SEEK_SET, SEEK_CUR, SEEK_END};
 
+// Oddly, libc doesn't link in msvcrt. Only the std crate does.
+#[link(name = "msvcrt")]
+extern "C" {}
+
 /// A wrapper around a cstdio FILE pointer. Guaranteed to never be NULL.
 #[repr(transparent)]
 pub struct File(NonNull<FILE>);
