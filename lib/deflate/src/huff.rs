@@ -70,15 +70,29 @@ impl Codeword {
     const STOP_CODE: u16 = Self::OFFSET_CODE_LIMIT + 1;
 
     /// Converts a codeword to an Codeword.
-    fn from_raw(
+    const fn from_raw(
         code: u16
     ) -> Self {
         assert!(Self::BYTE_CODE_BASE <= code && code <= Self::STOP_CODE);
         Self(code)
     }
 
+    /// Creates a new Codeword from an LZ77 token.
+    const fn from_token(
+        token: &Token
+    ) -> Self {
+        match token {
+            Token::Phrase(b) => Self(*b as u16),
+            Token::Stop => Self(Self::STOP_CODE),
+            Token::Offset(offset) => {
+                assert!(*offset < (1 << OFFSET_MAX_BITS));
+                Self(Self::BYTE_CODE_LIMIT + bit_width(*offset - 1) as u16)
+            }
+        }
+    }
+
     /// Converts a leaf into a huffman codeword.
-    fn as_raw(
+    const fn as_raw(
         self
     ) -> u16 {
         self.0
@@ -94,20 +108,6 @@ impl Codeword {
             let bits = max(bit_width(offset) - 1, 1);
             assert!(offset <= 1 || offset == (offset & ((1 << bits) - 1)) | (1 << bits));
             vec.putw(offset, bits);
-        }
-    }
-
-    /// Creates a new Codeword from an LZ77 token.
-    fn from_token(
-        token: &Token
-    ) -> Self {
-        match token {
-            Token::Phrase(b) => Self(*b as u16),
-            Token::Stop => Self(Self::STOP_CODE),
-            Token::Offset(offset) => {
-                assert!(*offset < (1 << OFFSET_MAX_BITS));
-                Self(Self::BYTE_CODE_LIMIT + bit_width(*offset - 1) as u16)
-            }
         }
     }
 
@@ -193,18 +193,18 @@ impl HTreeData {
 }
 
 impl HQueue {
-    fn new() -> Self {
+    const fn new() -> Self {
         const INIT_ELEM: Option<(usize, HTreeData)> = None;
         Self { buf: [INIT_ELEM; NUM_CODES], front: 0, back: 0 }
     }
 
-    fn len(
+    const fn len(
         &self
     ) -> usize {
         self.back - self.front
     }
 
-    fn peek(
+    const fn peek(
         &self
     ) -> Option<&(usize, HTreeData)> {
         self.buf[self.front].as_ref()
@@ -240,7 +240,10 @@ impl HTree {
     fn new(
         data: &[Token]
     ) -> Self {
-        // Gets a minimum weighted element from the two queues.
+        // Gets a minimum weighted element from the two queues. At least one of the queues must 
+        // have an element in it.
+        //
+        // Returns the element and its current frequency/weight.
         let qmin = |lhs: &mut HQueue, rhs: &mut HQueue| -> (usize, HTreeData) {
             if lhs.peek().is_some() && rhs.peek().is_some() {
                 if lhs.peek().unwrap().0 <= rhs.peek().unwrap().0 {
@@ -255,19 +258,73 @@ impl HTree {
             }
         };
 
-        let mut base_q = Self::create_base_queue(data);
+        // Next, we construct a queue of codewords sorted by the frequency of their appearance in
+        // the input data stream. This queue will not contain codewords which never appear in the
+        // stream.
+
+        // Create a table that converts codeword values into their frequency in the data.
+        assert!(data.len() > 0);
+        let mut freq = [0; NUM_CODES];
+        for token in data.iter() {
+            freq[Codeword::from_token(token).as_raw() as usize] += 1;
+        }
+
+        // Create a table of code words sorted by their frequency, from least to greatest.
+        let mut index_freq = [(0, 0); NUM_CODES];
+        for (i, f) in freq.iter().enumerate() { index_freq[i] = (i, *f); }
+        index_freq.sort_by(|lhs, rhs| lhs.1.cmp(&rhs.1));
+
+        // Finally, convert that codeword table into a queue.
+        let mut base_q = HQueue::new();
+        for (b, f) in index_freq.iter() {
+            if *f > 0 {
+                base_q.enq((*f, HTreeData::Leaf(Codeword::from_raw(*b as u16))));
+            }
+        }
+
+        // Construct a huffman tree from the bottom up using the queue we just created. We do this
+        // by repeatedly creating a node with the lowest possible weight, which will be the bottom
+        // of the tree. Note that when we do this we don't actual care about what the encoding is,
+        // just what the position in the tree is.
+        //
+        // We can use induction to show that this process creates a proper huffman tree.
+        //
+        // Base case:
+        //   1) We'll start with an empty work queue and a full base queue.
+        //   2) We'll grab the two least elements, and then create a node containing them in sorted
+        //      order.
+        //   3) That node will then be pushed on to the back of the work queue. Since there were no
+        //      elements previously on the work queue, it is still sorted. Since we only removed
+        //      elements from the front of the base queue, it is still sorted.
+        //
+        // Iterative step:
+        //   1) Now we have a sorted work queue and a sorted base queue with some number of
+        //      elements.
+        //   2) We take two elements from between the two queues, taking the lowest one at each
+        //      step.
+        //   3) We enqueue it to the back of the work queue. The work queue is still sorted because
+        //      in previous steps the element pushed to the back of the work queue was the sum of
+        //      two values less than or equal to the two values we just summed.
+        //
+        // And so, the queues remain sorted, and we are able to construct a proper encoding of a
+        // huffman tree from the bottom up, ensuring that the frequency requirement of the table is
+        // always met.
         let mut work_q = HQueue::new();
         while base_q.len() + work_q.len() > 1 {
-            let left = qmin(&mut base_q, &mut work_q);
-            let right = qmin(&mut base_q, &mut work_q);
-            work_q.enq((left.0 + right.0, HTreeData::Link(Box::new(HTreeNode {
-                left: left.1,
-                right: right.1
+            let (left_freq,  left_node)  = qmin(&mut base_q, &mut work_q);
+            let (right_freq, right_node) = qmin(&mut base_q, &mut work_q);
+            work_q.enq((left_freq + right_freq, HTreeData::Link(Box::new(HTreeNode {
+                left: left_node,
+                right: right_node
             }))));
         }
 
-        // Make the tree into a canonical encoding.
+        // At this point, only one element remains within the tree. It could technically be in
+        // either one, in the case where the base tree only had one element to begin with.
+        // We collect that one element, and use it as our root node.
         let tree = Self(qmin(&mut base_q, &mut work_q).1);
+
+        // We use the length table encoding process to ensure the returned tree is canonical.
         Self::from_length_table(tree.into_length_table())
     }
 
@@ -423,30 +480,6 @@ impl HTree {
 
         return ret;
     }
-
-    /// Creates a queue of huffman nodes from a base data stream.
-    fn create_base_queue(
-        data: &[Token]
-    ) -> HQueue {
-        assert!(data.len() > 0);
-        let mut freq = [0; NUM_CODES];
-        for token in data.iter() {
-            freq[Codeword::from_token(token).as_raw() as usize] += 1;
-        }
-
-        let mut index_freq = [(0, 0); NUM_CODES];
-        for (i, f) in freq.iter().enumerate() { index_freq[i] = (i, *f); }
-        index_freq.sort_by(|lhs, rhs| lhs.1.cmp(&rhs.1));
-
-        let mut q = HQueue::new();
-        for (b, f) in index_freq.iter() {
-            if *f > 0 {
-                q.enq((*f, HTreeData::Leaf(Codeword::from_raw(*b as u16))));
-            }
-        }
-
-        return q;
-    }
 }
 
 /// Compresses a byte slice using the huffman algorithm.
@@ -483,7 +516,7 @@ pub fn decompress(
     return ret;
 }
 
-fn bit_width(
+const fn bit_width(
     n: u16
 ) -> u32 {
     if n == 0 { 1 } else { n.ilog2() + 1 }
