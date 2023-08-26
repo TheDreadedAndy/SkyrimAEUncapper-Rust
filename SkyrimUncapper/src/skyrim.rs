@@ -26,8 +26,8 @@
 use core::cell::Cell;
 use core::ffi::c_int;
 
-use skyrim_patcher::{GameRef, Descriptor, GameLocation};
-use skse64::version::RUNTIME_VERSION_1_6_629;
+use libskyrim::patcher::{GameRef, Descriptor, GameLocation};
+use libskyrim::version::{RUNTIME_VERSION_1_6_629, RUNTIME_VERSION_1_5_97};
 
 use crate::settings::SkillMult;
 use crate::settings::SETTINGS;
@@ -181,7 +181,7 @@ impl PlayerCharacter {
         compat: usize
     ) -> *mut T {
         // SAFETY: We know the player pointer is valid, as GameRef ensures this.
-        let version = skse64::version::current_runtime();
+        let version = libskyrim::version::current_runtime();
         let offset: usize = if version >= RUNTIME_VERSION_1_6_629 { current } else { compat };
         let player = *(PLAYER_OBJECT.get());
         player.cast::<u8>().add(offset).cast()
@@ -483,7 +483,7 @@ pub unsafe fn avo_get_current_unchecked(
 ) -> f32 {
     if !SETTINGS.general.skill_formula_caps_en.get() {
         (player_avo_get_current_entry.get())(av, attr)
-    } else if skse64::version::current_runtime() <= skse64::version::RUNTIME_VERSION_1_5_97 {
+    } else if libskyrim::version::current_runtime() <= RUNTIME_VERSION_1_5_97 {
         player_avo_get_current_original_wrapper_se(av, attr)
     } else {
         player_avo_get_current_original_wrapper_ae(av, attr)

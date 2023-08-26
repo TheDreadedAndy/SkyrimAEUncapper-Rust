@@ -13,8 +13,8 @@ use alloc::vec::Vec;
 use alloc::string::String;
 
 use core_util::Later;
-use plugin_ini::Ini;
-use skse64::log::{skse_message, skse_warning};
+use libskyrim::ini::Ini;
+use libskyrim::log::{skse_message, skse_warning};
 
 use crate::skyrim::{ActorAttribute, SkillIterator, HungarianAttribute, SKILL_COUNT};
 

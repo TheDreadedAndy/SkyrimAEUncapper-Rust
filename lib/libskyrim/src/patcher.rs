@@ -13,12 +13,6 @@
 //! mod is doing the intended modification on every version.
 //!
 
-#![no_std]
-extern crate alloc;
-
-// For macros.
-pub use core;
-
 use core::cell::UnsafeCell;
 use core::ptr::NonNull;
 use core::slice;
@@ -26,14 +20,17 @@ use core::ffi::c_void;
 use core::mem::size_of;
 use alloc::vec::Vec;
 
-use windows_sys::Win32::System::Memory::{VirtualProtect, PAGE_EXECUTE_READWRITE};
-
-use skse64::log::{skse_message, skse_fatal};
-use skse64::reloc::RelocAddr;
-use skse64::plugin_api::Message;
 use sre_common::versiondb::VersionDb;
 use core_util::RacyCell;
 use core_util::attempt;
+
+use windows_sys::Win32::System::Memory::{VirtualProtect, PAGE_EXECUTE_READWRITE};
+
+use crate::version;
+use crate::plugin_api;
+use crate::log::{skse_message, skse_fatal};
+use crate::reloc::RelocAddr;
+use crate::plugin_api::Message;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Code injection definitions
@@ -109,12 +106,13 @@ macro_rules! signature {
     ( $($sig:tt),+; $size:literal ) => {{
         let psize = [ $($crate::signature!(@munch $sig)),* ].len();
         $crate::core::assert!($size == psize, "Patch size is incorrect.");
-        $crate::Signature::new(&[ $($crate::signature!(@munch $sig)),* ])
+        $crate::patcher::Signature::new(&[ $($crate::signature!(@munch $sig)),* ])
     }};
 
-    ( @munch $op:literal ) => { $crate::Opcode::Code($op) };
-    ( @munch ? )           => { $crate::Opcode::Any       };
+    ( @munch $op:literal ) => { $crate::patcher::Opcode::Code($op) };
+    ( @munch ? )           => { $crate::patcher::Opcode::Any       };
 }
+pub use signature;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -235,7 +233,7 @@ pub fn apply<const NUM_PATCHES: usize>(
     // Find patches
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
-    let db = VersionDb::new(skse64::version::current_runtime());
+    let db = VersionDb::new(version::current_runtime());
     let mut res_addrs: [usize; NUM_PATCHES] = [0; NUM_PATCHES];
     let mut installed_patches: PatchSet = PatchSet(Vec::new());
 
@@ -322,7 +320,7 @@ pub fn apply<const NUM_PATCHES: usize>(
             // Some plugins (e.g. Experience, I think) will apply patches during the post-load
             // phase, so we can't actually panic there.
             //
-            skse64::event::register_listener(Message::SKSE_POST_POST_LOAD, |_| {
+            plugin_api::register_listener(Message::SKSE_POST_POST_LOAD, |_| {
                 for set in (*INSTALLED_PATCHES.get()).drain(0..) {
                     set.verify();
                 }
@@ -373,7 +371,7 @@ impl GameLocation {
     fn get(
         &self
     ) -> Result<(usize, usize), DescriptorError> {
-        let is_se = skse64::version::current_runtime() <= skse64::version::RUNTIME_VERSION_1_5_97;
+        let is_se = version::current_runtime() <= version::RUNTIME_VERSION_1_5_97;
         let id = match self {
             Self::Base { se, ae } => if is_se { Some((*se, 0)) } else { Some((*ae, 0)) },
             Self::Se { id, offset } => if is_se { Some((*id, *offset)) } else { None },

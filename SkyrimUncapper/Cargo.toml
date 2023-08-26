@@ -1,21 +1,19 @@
 [package]
-name = "SkyrimUncapper"
+name    = "SkyrimUncapper"
 version = "2.2.1"
 edition = "2021"
 
 [lib]
-name = "SkyrimUncapper"
+name       = "SkyrimUncapper"
 crate-type = ["cdylib"]
 
 [dependencies]
 core-util = { path = "../lib/core-util" }
-deflate = { path = "../lib/deflate" }
-plugin_ini = { path = "../lib/plugin_ini" }
-skse64 = { path = "../lib/skse64" }
-skyrim_patcher = { path = "../lib/skyrim_patcher" }
-libm = "0.2.7"
+deflate   = { path = "../lib/deflate"   }
+libskyrim = { path = "../lib/libskyrim" }
+libm      = "0.2.7"
 
 [build-dependencies]
-winres = "0.1.12"
+winres         = "0.1.12"
 embed-resource = "1.8.0"
-deflate = { path = "../lib/deflate" }
+deflate        = { path = "../lib/deflate" }

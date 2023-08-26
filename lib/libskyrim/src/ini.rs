@@ -1,12 +1,9 @@
 //!
-//! @file lib.rs
+//! @file ini.rs
 //! @author Andrew Spaulding (Kasplat)
 //! @brief Ini file loader and updating interface implementation.
 //! @bug No known bugs.
 //!
-
-#![no_std]
-extern crate alloc;
 
 use core::str::FromStr;
 use core::ffi::CStr;

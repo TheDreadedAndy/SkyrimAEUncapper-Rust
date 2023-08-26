@@ -13,7 +13,7 @@
 use core::ffi::c_int;
 use core::sync::atomic::{AtomicBool, Ordering};
 
-use skyrim_patcher::{Descriptor, Hook, Register, GameLocation, GameRef, signature};
+use libskyrim::patcher::{Descriptor, Hook, Register, GameLocation, GameRef, signature};
 
 use crate::settings::SETTINGS;
 use crate::skyrim::*;

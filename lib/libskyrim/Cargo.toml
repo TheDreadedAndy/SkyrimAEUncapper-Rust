@@ -1,6 +1,6 @@
 [package]
-name = "skse64"
-version = "2.2.3"
+name = "libskyrim"
+version = "1.1.0"
 edition = "2021"
 
 [dependencies]
@@ -10,11 +10,12 @@ sre-common = { path = "../sre-common" }
 libc = "0.2"
 
 [dependencies.windows-sys]
-version = "0.45.0"
+version = "0.45"
 features = [
     "Win32_Foundation",
     "Win32_Globalization",
     "Win32_System_LibraryLoader",
+    "Win32_System_Memory",
     "Win32_System_ProcessStatus",
     "Win32_System_Threading",
     "Win32_System_Com",

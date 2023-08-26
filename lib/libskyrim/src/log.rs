@@ -21,7 +21,7 @@ use windows_sys::Win32::Foundation::{MAX_PATH, S_OK};
 #[doc(hidden)]
 pub use windows_sys::Win32::UI::WindowsAndMessaging::{MB_ICONERROR, MB_ICONWARNING};
 
-use crate::loader::SKSEPlugin_Version;
+use crate::SKSEPlugin_Version;
 
 ///
 /// The structure used to format information before writing it to the log file.

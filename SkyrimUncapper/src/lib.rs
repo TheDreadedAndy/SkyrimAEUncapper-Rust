@@ -23,10 +23,10 @@ pub use core;
 use core::ffi::CStr;
 use alloc::alloc::{GlobalAlloc, Layout};
 
-use skse64::log::{skse_message, skse_fatal};
-use skse64::version::{SkseVersion, PACKED_SKSE_VERSION, CURRENT_RELEASE_RUNTIME};
-use skse64::plugin_api::{SksePluginVersionData, SkseInterface};
-use skyrim_patcher::flatten_patch_groups;
+use libskyrim::log::{skse_message, skse_fatal};
+use libskyrim::version::{SkseVersion, PACKED_SKSE_VERSION, CURRENT_RELEASE_RUNTIME};
+use libskyrim::plugin_api::{SksePluginVersionData, SkseInterface};
+use libskyrim::patcher::flatten_patch_groups;
 
 use skyrim::{GAME_SIGNATURES, NUM_GAME_SIGNATURES};
 use hooks::{HOOK_SIGNATURES, NUM_HOOK_SIGNATURES};
@@ -67,7 +67,7 @@ static A: SystemAlloc = SystemAlloc;
 
 const NUM_PATCHES: usize = NUM_GAME_SIGNATURES + NUM_HOOK_SIGNATURES;
 
-skse64::plugin_api::plugin_version_data! {
+libskyrim::plugin_api::plugin_version_data! {
     author: "Andrew Spaulding (Kasplat)",
     email: "andyespaulding@gmail.com",
     version_indep_ex: SksePluginVersionData::VINDEPEX_NO_STRUCT_USE,
@@ -97,13 +97,13 @@ pub fn skse_plugin_rust_entry(
         CURRENT_RELEASE_RUNTIME,
         (*skse).skse_version.unwrap(),
         (*skse).runtime_version.unwrap(),
-        skse64::reloc::RelocAddr::base()
+        libskyrim::reloc::RelocAddr::base()
     );
 
     settings::init(core_util::cstr!("Data\\SKSE\\Plugins\\SkyrimUncapper.ini"));
 
     let patches = flatten_patch_groups::<NUM_PATCHES>(&[&GAME_SIGNATURES, &HOOK_SIGNATURES]);
-    if let Err(_) = skyrim_patcher::apply(patches) {
+    if let Err(_) = libskyrim::patcher::apply(patches) {
         skse_fatal!(
             "Failed to install the requested set of game patches. See log for details.\n\
              It is safe to continue playing; none of this mods changes have been applied."

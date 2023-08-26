@@ -4,10 +4,8 @@ members = [
     "lib/core-util",
     "lib/cstdio",
     "lib/deflate",
-    "lib/plugin_ini",
     "lib/sre-common",
-    "lib/skse64",
-    "lib/skyrim_patcher",
+    "lib/libskyrim",
     "vdb-dump",
     "SkyrimUncapper"
 ]
