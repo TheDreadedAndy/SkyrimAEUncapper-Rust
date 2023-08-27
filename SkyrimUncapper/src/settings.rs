@@ -19,6 +19,264 @@ use libskyrim::log::{skse_message, skse_warning};
 use crate::skyrim::{ActorAttribute, SkillIterator, HungarianAttribute, SKILL_COUNT};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+const DEFAULT_INI_LZ: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/SkyrimUncapper.ini.lz"));
+
+/// Manages the loading of a skill multiplier, which contains both a base and offset multiplier.
+#[derive(Default, Copy, Clone)]
+pub struct SkillMult {
+    pub base: f32,
+    pub offset: f32
+}
+
+#[derive(Default)]
+pub struct GeneralSettings {
+    pub skill_caps_en           : IniField<bool>,
+    pub skill_formula_caps_en   : IniField<bool>,
+    pub skill_formula_ui_fix_en : IniField<bool>,
+    pub enchanting_patch_en     : IniField<bool>,
+    pub skill_exp_mults_en      : IniField<bool>,
+    pub level_exp_mults_en      : IniField<bool>,
+    pub perk_points_en          : IniField<bool>,
+    pub attr_points_en          : IniField<bool>,
+    pub legendary_en            : IniField<bool>
+}
+
+#[derive(Default)]
+pub struct EnchantSettings {
+    pub magnitude_cap     : IniField<u32>,
+    pub charge_cap        : IniField<u32>,
+    pub use_linear_charge : IniField<bool>
+}
+
+#[derive(Default)]
+pub struct LegendarySettings {
+    pub keep_skill_level  : IniField<bool>,
+    pub hide_button       : IniField<bool>,
+    pub skill_level_en    : IniField<u32>,
+    pub skill_level_after : IniField<u32>
+}
+
+/// Contains all the configuration settings loaded in from the INI file.
+#[derive(Default)]
+pub struct Settings {
+    pub general                     : GeneralSettings,
+    pub enchant                     : EnchantSettings,
+    pub legendary                   : LegendarySettings,
+    pub skill_caps                  : IniSkillManager<IniField<u32>>,
+    pub skill_formula_caps          : IniSkillManager<IniField<u32>>,
+    pub skill_exp_mults             : IniSkillManager<IniField<SkillMult>>,
+    pub skill_exp_mults_with_skills : IniSkillManager<LeveledIniSection<SkillMult>>,
+    pub skill_exp_mults_with_pc_lvl : IniSkillManager<LeveledIniSection<SkillMult>>,
+    pub level_exp_mults             : IniSkillManager<IniField<f32>>,
+    pub level_exp_mults_with_skills : IniSkillManager<LeveledIniSection<f32>>,
+    pub level_exp_mults_with_pc_lvl : IniSkillManager<LeveledIniSection<f32>>,
+    pub perks_at_lvl_up             : LeveledIniSection<f32>,
+    pub hp_at_lvl_up                : LeveledIniSection<u32>,
+    pub hp_at_mp_lvl_up             : LeveledIniSection<u32>,
+    pub hp_at_sp_lvl_up             : LeveledIniSection<u32>,
+    pub mp_at_lvl_up                : LeveledIniSection<u32>,
+    pub mp_at_hp_lvl_up             : LeveledIniSection<u32>,
+    pub mp_at_sp_lvl_up             : LeveledIniSection<u32>,
+    pub sp_at_lvl_up                : LeveledIniSection<u32>,
+    pub sp_at_hp_lvl_up             : LeveledIniSection<u32>,
+    pub sp_at_mp_lvl_up             : LeveledIniSection<u32>,
+    pub cw_at_hp_lvl_up             : LeveledIniSection<u32>,
+    pub cw_at_mp_lvl_up             : LeveledIniSection<u32>,
+    pub cw_at_sp_lvl_up             : LeveledIniSection<u32>
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Holds the global settings configuration, which is created when init() is called.
+pub static SETTINGS: Later<Settings> = Later::new();
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Attempts to load the settings structure from the given INI file.
+pub fn init(
+    path: &CStr
+) {
+    skse_message!("Loading config file: {}", String::from_utf8_lossy(path.to_bytes()));
+
+    let default_ini = Ini::from_str(unsafe {
+        // SAFETY: We know this file was given as UTF8 text when it was compressed.
+        &String::from_utf8_unchecked(deflate::decompress(DEFAULT_INI_LZ))
+    }).unwrap();
+
+    // Read the configuration from the file.
+    let ini = Ini::from_path(path);
+    if let Ok(mut ini) = ini {
+        // Update the file with missing fields, if necessary.
+        if ini.update(&default_ini) {
+            // If missing fields were added, update the INI file.
+            assert!(
+                ini.write_file(path).is_ok(),
+                "[ERROR] Failed to write to INI file. Please ensure Skyrim has \
+                         permission to use the plugin directory."
+            );
+
+            skse_warning!("The INI file has been updated.");
+        }
+
+        SETTINGS.init(Settings::new(&ini));
+    } else {
+        skse_warning!("Could not load INI file. Defaults will be used.");
+        SETTINGS.init(Settings::new(&default_ini));
+    }
+
+    skse_message!("Done initializing settings!");
+}
+
+impl Settings {
+    /// Creates a new settings structure from the given INI.
+    ///
+    /// If a field/section is missing in the given INI, a default value is used.
+    fn new(
+        ini: &Ini
+    ) -> Self {
+        const GEN_SEC : &'static str = "General";
+        const EN_SEC  : &'static str = "Enchanting";
+        const LEG_SEC : &'static str = "LegendarySkill";
+
+        const DEFAULT_SKILL_EXP_MULT : SkillMult = SkillMult { base: 1.0, offset: 1.0 };
+        const DEFAULT_LEVEL_EXP_MULT : f32       = 1.0;
+
+        let mut ret = Self::default();
+
+        ////////////////////////////////////////////////////////////////////////////////////////////
+        // General settings
+        ////////////////////////////////////////////////////////////////////////////////////////////
+
+        ret.general.skill_caps_en.read_ini_field(ini, GEN_SEC, "bUseSkillCaps", true);
+        ret.general.skill_formula_caps_en.read_ini_field(
+            ini,
+            GEN_SEC,
+            "bUseSkillFormulaCaps",
+            true
+        );
+        ret.general.skill_formula_ui_fix_en.read_ini_field(
+            ini,
+            GEN_SEC,
+            "bUseSkillFormulaCapsUIFix",
+            true
+        );
+        ret.general.enchanting_patch_en.read_ini_field(ini, GEN_SEC, "bUseEnchanterCaps", true);
+        ret.general.skill_exp_mults_en.read_ini_field(ini, GEN_SEC, "bUseSkillExpGainMults", true);
+        ret.general.level_exp_mults_en.read_ini_field(
+            ini,
+            GEN_SEC,
+            "bUsePCLevelSkillExpMults",
+            true
+        );
+        ret.general.perk_points_en.read_ini_field(ini, GEN_SEC, "bUsePerksAtLevelUp", true);
+        ret.general.attr_points_en.read_ini_field(ini, GEN_SEC, "bUseAttributesAtLevelUp", true);
+        ret.general.legendary_en.read_ini_field(ini, GEN_SEC, "bUseLegendarySettings", true);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////
+        // Enchanting settings
+        ////////////////////////////////////////////////////////////////////////////////////////////
+
+        ret.enchant.magnitude_cap.read_ini_field(ini, EN_SEC, "iMagnitudeLevelCap", 100);
+        ret.enchant.charge_cap.read_ini_field(ini, EN_SEC, "iChargeLevelCap", 199);
+        ret.enchant.use_linear_charge.read_ini_field(ini, EN_SEC, "bUseLinearChargeFormula", false);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////
+        // Legendary settings
+        ////////////////////////////////////////////////////////////////////////////////////////////
+
+        ret.legendary.keep_skill_level.read_ini_field(
+            ini,
+            LEG_SEC,
+            "bLegendaryKeepSkillLevel",
+            false
+        );
+        ret.legendary.hide_button.read_ini_field(ini, LEG_SEC, "bHideLegendaryButton", false);
+        ret.legendary.skill_level_en.read_ini_field(
+            ini,
+            LEG_SEC,
+            "iSkillLevelEnableLegendary",
+            100
+        );
+        ret.legendary.skill_level_after.read_ini_field(
+            ini,
+            LEG_SEC,
+            "iSkillLevelAfterLegendary",
+            0
+        );
+
+        ////////////////////////////////////////////////////////////////////////////////////////////
+        // Grouped sections
+        ////////////////////////////////////////////////////////////////////////////////////////////
+
+        ret.skill_caps.read_ini_section(ini, "SkillCaps", 100);
+        ret.skill_formula_caps.read_ini_section(ini, "SkillFormulaCaps", 100);
+        ret.skill_exp_mults.read_ini_section(ini, "SkillExpGainMults", DEFAULT_SKILL_EXP_MULT);
+        ret.skill_exp_mults_with_skills.read_ini_section(
+            ini,
+            "SkillExpGainMults\\BaseSkillLevel",
+            DEFAULT_SKILL_EXP_MULT
+        );
+        ret.skill_exp_mults_with_pc_lvl.read_ini_section(
+            ini,
+            "SkillExpGainMults\\CharacterLevel",
+            DEFAULT_SKILL_EXP_MULT
+        );
+        ret.level_exp_mults.read_ini_section(ini, "LevelSkillExpMults", DEFAULT_LEVEL_EXP_MULT);
+        ret.level_exp_mults_with_skills.read_ini_section(
+            ini,
+            "LevelSkillExpMults\\BaseSkillLevel",
+            DEFAULT_LEVEL_EXP_MULT
+        );
+        ret.level_exp_mults_with_pc_lvl.read_ini_section(
+            ini,
+            "LevelSkillExpMults\\CharacterLevel",
+            DEFAULT_LEVEL_EXP_MULT
+        );
+        ret.perks_at_lvl_up.read_ini_section(ini, "PerksAtLevelUp", 1.00);
+        ret.hp_at_lvl_up.read_ini_section(ini, "HealthAtLevelUp", 10);
+        ret.hp_at_mp_lvl_up.read_ini_section(ini, "HealthAtMagickaLevelUp", 0);
+        ret.hp_at_sp_lvl_up.read_ini_section(ini, "HealthAtStaminaLevelUp", 0);
+        ret.mp_at_lvl_up.read_ini_section(ini, "MagickaAtLevelUp", 10);
+        ret.mp_at_hp_lvl_up.read_ini_section(ini, "MagickaAtHealthLevelUp", 0);
+        ret.mp_at_sp_lvl_up.read_ini_section(ini, "MagickaAtStaminaLevelUp", 0);
+        ret.sp_at_lvl_up.read_ini_section(ini, "StaminaAtLevelUp", 10);
+        ret.sp_at_hp_lvl_up.read_ini_section(ini, "StaminaAtHealthLevelUp", 0);
+        ret.sp_at_mp_lvl_up.read_ini_section(ini, "StaminaAtMagickaLevelUp", 0);
+        ret.cw_at_hp_lvl_up.read_ini_section(ini, "CarryWeightAtHealthLevelUp", 0);
+        ret.cw_at_mp_lvl_up.read_ini_section(ini, "CarryWeightAtMagickaLevelUp", 0);
+        ret.cw_at_sp_lvl_up.read_ini_section(ini, "CarryWeightAtStaminaLevelUp", 5);
+
+        return ret;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Allows for the optional loading of an offset multiplier.
+impl FromStr for SkillMult {
+    type Err = <f32 as FromStr>::Err;
+
+    fn from_str(
+        s: &str
+    ) -> Result<Self, Self::Err> {
+        if let Some(s) = s.split_once('/') {
+            // Since there is a mode symbol, the offset has been specified in some way.
+            if s.1.trim().is_empty() {
+                // We have been asked to duplicate the first number for both.
+                Ok(Self { base: f32::from_str(s.0)?, offset: f32::from_str(s.0)? })
+            } else {
+                // Both values were given.
+                Ok(Self { base: f32::from_str(s.0)?, offset: f32::from_str(s.1)? })
+            }
+        } else {
+            // Compat mode: Assume offset mult is 1.0 and parse as single float.
+            Ok(Self { base: f32::from_str(s)?, offset: 1.0 })
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 // Ini reading traits
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -328,254 +586,3 @@ impl<T: IniReadableSkill + Default> IniReadableSection for IniSkillManager<T> {
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-const DEFAULT_INI_LZ: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/SkyrimUncapper.ini.lz"));
-
-/// Manages the loading of a skill multiplier, which contains both a base and offset multiplier.
-#[derive(Default, Copy, Clone)]
-pub struct SkillMult {
-    pub base: f32,
-    pub offset: f32
-}
-
-#[derive(Default)]
-pub struct GeneralSettings {
-    pub skill_caps_en           : IniField<bool>,
-    pub skill_formula_caps_en   : IniField<bool>,
-    pub skill_formula_ui_fix_en : IniField<bool>,
-    pub enchanting_patch_en     : IniField<bool>,
-    pub skill_exp_mults_en      : IniField<bool>,
-    pub level_exp_mults_en      : IniField<bool>,
-    pub perk_points_en          : IniField<bool>,
-    pub attr_points_en          : IniField<bool>,
-    pub legendary_en            : IniField<bool>
-}
-
-#[derive(Default)]
-pub struct EnchantSettings {
-    pub magnitude_cap     : IniField<u32>,
-    pub charge_cap        : IniField<u32>,
-    pub use_linear_charge : IniField<bool>
-}
-
-#[derive(Default)]
-pub struct LegendarySettings {
-    pub keep_skill_level  : IniField<bool>,
-    pub hide_button       : IniField<bool>,
-    pub skill_level_en    : IniField<u32>,
-    pub skill_level_after : IniField<u32>
-}
-
-/// Contains all the configuration settings loaded in from the INI file.
-#[derive(Default)]
-pub struct Settings {
-    pub general                     : GeneralSettings,
-    pub enchant                     : EnchantSettings,
-    pub legendary                   : LegendarySettings,
-    pub skill_caps                  : IniSkillManager<IniField<u32>>,
-    pub skill_formula_caps          : IniSkillManager<IniField<u32>>,
-    pub skill_exp_mults             : IniSkillManager<IniField<SkillMult>>,
-    pub skill_exp_mults_with_skills : IniSkillManager<LeveledIniSection<SkillMult>>,
-    pub skill_exp_mults_with_pc_lvl : IniSkillManager<LeveledIniSection<SkillMult>>,
-    pub level_exp_mults             : IniSkillManager<IniField<f32>>,
-    pub level_exp_mults_with_skills : IniSkillManager<LeveledIniSection<f32>>,
-    pub level_exp_mults_with_pc_lvl : IniSkillManager<LeveledIniSection<f32>>,
-    pub perks_at_lvl_up             : LeveledIniSection<f32>,
-    pub hp_at_lvl_up                : LeveledIniSection<u32>,
-    pub hp_at_mp_lvl_up             : LeveledIniSection<u32>,
-    pub hp_at_sp_lvl_up             : LeveledIniSection<u32>,
-    pub mp_at_lvl_up                : LeveledIniSection<u32>,
-    pub mp_at_hp_lvl_up             : LeveledIniSection<u32>,
-    pub mp_at_sp_lvl_up             : LeveledIniSection<u32>,
-    pub sp_at_lvl_up                : LeveledIniSection<u32>,
-    pub sp_at_hp_lvl_up             : LeveledIniSection<u32>,
-    pub sp_at_mp_lvl_up             : LeveledIniSection<u32>,
-    pub cw_at_hp_lvl_up             : LeveledIniSection<u32>,
-    pub cw_at_mp_lvl_up             : LeveledIniSection<u32>,
-    pub cw_at_sp_lvl_up             : LeveledIniSection<u32>
-}
-
-/// Allows for the optional loading of an offset multiplier.
-impl FromStr for SkillMult {
-    type Err = <f32 as FromStr>::Err;
-
-    fn from_str(
-        s: &str
-    ) -> Result<Self, Self::Err> {
-        if let Some(s) = s.split_once('/') {
-            // Since there is a mode symbol, the offset has been specified in some way.
-            if s.1.trim().is_empty() {
-                // We have been asked to duplicate the first number for both.
-                Ok(Self { base: f32::from_str(s.0)?, offset: f32::from_str(s.0)? })
-            } else {
-                // Both values were given.
-                Ok(Self { base: f32::from_str(s.0)?, offset: f32::from_str(s.1)? })
-            }
-        } else {
-            // Compat mode: Assume offset mult is 1.0 and parse as single float.
-            Ok(Self { base: f32::from_str(s)?, offset: 1.0 })
-        }
-    }
-}
-
-/// Holds the global settings configuration, which is created when init() is called.
-pub static SETTINGS: Later<Settings> = Later::new();
-
-impl Settings {
-    /// Creates a new settings structure from the given INI.
-    ///
-    /// If a field/section is missing in the given INI, a default value is used.
-    fn new(
-        ini: &Ini
-    ) -> Self {
-        const GEN_SEC : &'static str = "General";
-        const EN_SEC  : &'static str = "Enchanting";
-        const LEG_SEC : &'static str = "LegendarySkill";
-
-        const DEFAULT_SKILL_EXP_MULT : SkillMult = SkillMult { base: 1.0, offset: 1.0 };
-        const DEFAULT_LEVEL_EXP_MULT : f32       = 1.0;
-
-        let mut ret = Self::default();
-
-        ////////////////////////////////////////////////////////////////////////////////////////////
-        // General settings
-        ////////////////////////////////////////////////////////////////////////////////////////////
-
-        ret.general.skill_caps_en.read_ini_field(ini, GEN_SEC, "bUseSkillCaps", true);
-        ret.general.skill_formula_caps_en.read_ini_field(
-            ini,
-            GEN_SEC,
-            "bUseSkillFormulaCaps",
-            true
-        );
-        ret.general.skill_formula_ui_fix_en.read_ini_field(
-            ini,
-            GEN_SEC,
-            "bUseSkillFormulaCapsUIFix",
-            true
-        );
-        ret.general.enchanting_patch_en.read_ini_field(ini, GEN_SEC, "bUseEnchanterCaps", true);
-        ret.general.skill_exp_mults_en.read_ini_field(ini, GEN_SEC, "bUseSkillExpGainMults", true);
-        ret.general.level_exp_mults_en.read_ini_field(
-            ini,
-            GEN_SEC,
-            "bUsePCLevelSkillExpMults",
-            true
-        );
-        ret.general.perk_points_en.read_ini_field(ini, GEN_SEC, "bUsePerksAtLevelUp", true);
-        ret.general.attr_points_en.read_ini_field(ini, GEN_SEC, "bUseAttributesAtLevelUp", true);
-        ret.general.legendary_en.read_ini_field(ini, GEN_SEC, "bUseLegendarySettings", true);
-
-        ////////////////////////////////////////////////////////////////////////////////////////////
-        // Enchanting settings
-        ////////////////////////////////////////////////////////////////////////////////////////////
-
-        ret.enchant.magnitude_cap.read_ini_field(ini, EN_SEC, "iMagnitudeLevelCap", 100);
-        ret.enchant.charge_cap.read_ini_field(ini, EN_SEC, "iChargeLevelCap", 199);
-        ret.enchant.use_linear_charge.read_ini_field(ini, EN_SEC, "bUseLinearChargeFormula", false);
-
-        ////////////////////////////////////////////////////////////////////////////////////////////
-        // Legendary settings
-        ////////////////////////////////////////////////////////////////////////////////////////////
-
-        ret.legendary.keep_skill_level.read_ini_field(
-            ini,
-            LEG_SEC,
-            "bLegendaryKeepSkillLevel",
-            false
-        );
-        ret.legendary.hide_button.read_ini_field(ini, LEG_SEC, "bHideLegendaryButton", false);
-        ret.legendary.skill_level_en.read_ini_field(
-            ini,
-            LEG_SEC,
-            "iSkillLevelEnableLegendary",
-            100
-        );
-        ret.legendary.skill_level_after.read_ini_field(
-            ini,
-            LEG_SEC,
-            "iSkillLevelAfterLegendary",
-            0
-        );
-
-        ////////////////////////////////////////////////////////////////////////////////////////////
-        // Grouped sections
-        ////////////////////////////////////////////////////////////////////////////////////////////
-
-        ret.skill_caps.read_ini_section(ini, "SkillCaps", 100);
-        ret.skill_formula_caps.read_ini_section(ini, "SkillFormulaCaps", 100);
-        ret.skill_exp_mults.read_ini_section(ini, "SkillExpGainMults", DEFAULT_SKILL_EXP_MULT);
-        ret.skill_exp_mults_with_skills.read_ini_section(
-            ini,
-            "SkillExpGainMults\\BaseSkillLevel",
-            DEFAULT_SKILL_EXP_MULT
-        );
-        ret.skill_exp_mults_with_pc_lvl.read_ini_section(
-            ini,
-            "SkillExpGainMults\\CharacterLevel",
-            DEFAULT_SKILL_EXP_MULT
-        );
-        ret.level_exp_mults.read_ini_section(ini, "LevelSkillExpMults", DEFAULT_LEVEL_EXP_MULT);
-        ret.level_exp_mults_with_skills.read_ini_section(
-            ini,
-            "LevelSkillExpMults\\BaseSkillLevel",
-            DEFAULT_LEVEL_EXP_MULT
-        );
-        ret.level_exp_mults_with_pc_lvl.read_ini_section(
-            ini,
-            "LevelSkillExpMults\\CharacterLevel",
-            DEFAULT_LEVEL_EXP_MULT
-        );
-        ret.perks_at_lvl_up.read_ini_section(ini, "PerksAtLevelUp", 1.00);
-        ret.hp_at_lvl_up.read_ini_section(ini, "HealthAtLevelUp", 10);
-        ret.hp_at_mp_lvl_up.read_ini_section(ini, "HealthAtMagickaLevelUp", 0);
-        ret.hp_at_sp_lvl_up.read_ini_section(ini, "HealthAtStaminaLevelUp", 0);
-        ret.mp_at_lvl_up.read_ini_section(ini, "MagickaAtLevelUp", 10);
-        ret.mp_at_hp_lvl_up.read_ini_section(ini, "MagickaAtHealthLevelUp", 0);
-        ret.mp_at_sp_lvl_up.read_ini_section(ini, "MagickaAtStaminaLevelUp", 0);
-        ret.sp_at_lvl_up.read_ini_section(ini, "StaminaAtLevelUp", 10);
-        ret.sp_at_hp_lvl_up.read_ini_section(ini, "StaminaAtHealthLevelUp", 0);
-        ret.sp_at_mp_lvl_up.read_ini_section(ini, "StaminaAtMagickaLevelUp", 0);
-        ret.cw_at_hp_lvl_up.read_ini_section(ini, "CarryWeightAtHealthLevelUp", 0);
-        ret.cw_at_mp_lvl_up.read_ini_section(ini, "CarryWeightAtMagickaLevelUp", 0);
-        ret.cw_at_sp_lvl_up.read_ini_section(ini, "CarryWeightAtStaminaLevelUp", 5);
-
-        return ret;
-    }
-}
-
-/// Attempts to load the settings structure from the given INI file.
-pub fn init(
-    path: &CStr
-) {
-    skse_message!("Loading config file: {}", String::from_utf8_lossy(path.to_bytes()));
-
-    let default_ini = Ini::from_str(unsafe {
-        // SAFETY: We know this file was given as UTF8 text when it was compressed.
-        &String::from_utf8_unchecked(deflate::decompress(DEFAULT_INI_LZ))
-    }).unwrap();
-
-    // Read the configuration from the file.
-    let ini = Ini::from_path(path);
-    if let Ok(mut ini) = ini {
-        // Update the file with missing fields, if necessary.
-        if ini.update(&default_ini) {
-            // If missing fields were added, update the INI file.
-            assert!(
-                ini.write_file(path).is_ok(),
-                "[ERROR] Failed to write to INI file. Please ensure Skyrim has \
-                         permission to use the plugin directory."
-            );
-
-            skse_warning!("The INI file has been updated.");
-        }
-
-        SETTINGS.init(Settings::new(&ini));
-    } else {
-        skse_warning!("Could not load INI file. Defaults will be used.");
-        SETTINGS.init(Settings::new(&default_ini));
-    }
-
-    skse_message!("Done initializing settings!");
-}

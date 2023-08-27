@@ -153,20 +153,6 @@ impl Ini {
         return changed;
     }
 
-    /// Renames any fields/sections found within the first element of a tuple to the second element.
-    ///
-    /// Returns true if any substitutions were made, and false otherwise.
-    pub fn rename(
-        &mut self,
-        sub: &[(&str, &str)]
-    ) -> bool {
-        let mut changed = self.sections.rename(sub);
-        for section in self.sections.order.iter_mut() {
-            changed = changed || section.1.fields.rename(sub);
-        }
-        return changed;
-    }
-
     /// Writes the contents of the INI object to the given file.
     pub fn write_file(
         &self,
@@ -448,30 +434,6 @@ impl<V> IniMap<V> {
         }
     }
 
-    /// Renames a key in the invoking map based on the given substitution tuples.
-    ///
-    /// Returns true if any key was renamed, and false otherwise.
-    fn rename(
-        &mut self,
-        sub: &[(&str, &str)]
-    ) -> bool {
-        let mut changed = false;
-        for group in sub.iter() {
-            let group = (KeyStr::new(group.0), KeyStr::new(group.1));
-            if let Ok(i) = self.map.binary_search_by(|lhs| lhs.0.as_key_str().cmp(group.0)) {
-                changed = true;
-                let new_key = KeyString::new(String::from_str(group.1.get()).unwrap());
-                let order_index = self.map[i].1;
-
-                self.map.remove(i);
-                self.map.insert(i, (new_key.clone(), order_index));
-                self.order[order_index].0 = new_key;
-            }
-        }
-
-        return changed;
-    }
-
     /// Gets an iterator for this map.
     fn iter(
         &self
@@ -556,9 +518,7 @@ impl KeyStr {
         let rhs = rhs.get().as_bytes();
         for i in 0..core::cmp::min(lhs.len(), rhs.len()) {
             let res = lhs[i].to_ascii_lowercase().cmp(&rhs[i].to_ascii_lowercase());
-            if let Ordering::Equal = res {
-                continue;
-            } else {
+            if res != Ordering::Equal {
                 return res;
             }
         }
