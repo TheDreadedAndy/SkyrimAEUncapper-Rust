@@ -5,7 +5,6 @@
 //!
 
 #![no_std]
-extern crate alloc;
 
 pub mod versiondb;
 pub mod skse64 {

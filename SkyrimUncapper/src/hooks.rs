@@ -13,7 +13,8 @@
 use core::ffi::c_int;
 use core::sync::atomic::{AtomicBool, Ordering};
 
-use libskyrim::patcher::{Descriptor, Hook, Register, GameLocation, GameRef, signature};
+use libskyrim::patcher::{Descriptor, DescriptorObject, Hook, Register};
+use libskyrim::patcher::{GameLocation, GameRef, signature};
 
 use crate::settings::SETTINGS;
 use crate::skyrim::*;
@@ -130,35 +131,39 @@ core_util::disarray! {
         // and returned to, at the request of the author of the eXPerience mod (17751).
         // This is handled by the patcher, we need only make our signature long enough.
         //
-        Descriptor::Patch {
+        Descriptor {
             name: "GetSkillCap",
-            enabled: || SETTINGS.general.skill_caps_en.get(),
-            conflicts: None,
-            hook: Hook::Call12 {
-                entry: skill_cap_patch_wrapper_ae as *const u8,
-                clobber: Register::Rax
-            },
             loc: GameLocation::Ae { id: 41561, offset: 0x6f },
-            sig: signature![
-                0xff, 0x50, 0x18,
-                0x44, 0x0f, 0x28, 0xc0,
-                0xf3, 0x44, 0x0f, 0x10, 0x15, ?, ?, ?, ?; 16
-            ]
+            object: DescriptorObject::Patch {
+                enabled: || SETTINGS.general.skill_caps_en.get(),
+                conflicts: None,
+                hook: Hook::Call12 {
+                    entry: skill_cap_patch_wrapper_ae as *const u8,
+                    clobber: Register::Rax
+                },
+                sig: signature![
+                    0xff, 0x50, 0x18,
+                    0x44, 0x0f, 0x28, 0xc0,
+                    0xf3, 0x44, 0x0f, 0x10, 0x15, ?, ?, ?, ?; 16
+                ]
+            }
         },
-        Descriptor::Patch {
+        Descriptor {
             name: "GetSkillCap",
-            enabled: || SETTINGS.general.skill_caps_en.get(),
-            conflicts: None,
-            hook: Hook::Call12 {
-                entry: skill_cap_patch_wrapper_se as *const u8,
-                clobber: Register::Rax
-            },
             loc: GameLocation::Se { id: 40554, offset: 0x45 },
-            sig: signature![
-                0xff, 0x50, 0x18,
-                0xf3, 0x44, 0x0f, 0x10, 0x05, ?, ?, ?, ?,
-                0x0f, 0x28, 0xf0; 15
-            ]
+            object: DescriptorObject::Patch {
+                enabled: || SETTINGS.general.skill_caps_en.get(),
+                conflicts: None,
+                hook: Hook::Call12 {
+                    entry: skill_cap_patch_wrapper_se as *const u8,
+                    clobber: Register::Rax
+                },
+                sig: signature![
+                    0xff, 0x50, 0x18,
+                    0xf3, 0x44, 0x0f, 0x10, 0x05, ?, ?, ?, ?,
+                    0x0f, 0x28, 0xf0; 15
+                ]
+            }
         },
 
         //
@@ -167,63 +172,71 @@ core_util::disarray! {
         // This allows us to ensure that the charge cap is used within this region,
         // thus ensuring that the charge and magnitude cap can be configured independently.
         //
-        Descriptor::Patch {
+        Descriptor {
             name: "BeginMaxChargeCalculation",
-            enabled: || SETTINGS.general.enchanting_patch_en.get(),
-            conflicts: None,
-            hook: Hook::Call12 {
-                entry: max_charge_begin_wrapper_ae as *const u8,
-                clobber: Register::Rax // Tmp from earlier cmove. Not used again.
-            },
             loc: GameLocation::Ae { id: 51449, offset: 0xe9 },
-            sig: signature![
-                0xf3, 0x0f, 0x11, 0x84, 0x24, 0xa0, 0x00, 0x00, 0x00,
-                0x48, 0x85, 0xc9; 12
-            ]
+            object: DescriptorObject::Patch {
+                enabled: || SETTINGS.general.enchanting_patch_en.get(),
+                conflicts: None,
+                hook: Hook::Call12 {
+                    entry: max_charge_begin_wrapper_ae as *const u8,
+                    clobber: Register::Rax // Tmp from earlier cmove. Not used again.
+                },
+                sig: signature![
+                    0xf3, 0x0f, 0x11, 0x84, 0x24, 0xa0, 0x00, 0x00, 0x00,
+                    0x48, 0x85, 0xc9; 12
+                ]
+            }
         },
-        Descriptor::Patch {
+        Descriptor {
             name: "BeginMaxChargeCalculation",
-            enabled: || SETTINGS.general.enchanting_patch_en.get(),
-            conflicts: None,
-            hook: Hook::Call12 {
-                entry: max_charge_begin_wrapper_se as *const u8,
-                clobber: Register::Rax // Tmp from earlier cmove. Not used again.
-            },
             loc: GameLocation::Se { id: 50557, offset: 0xe8 },
-            sig: signature![
-                0xf3, 0x0f, 0x11, 0x84, 0x24, 0xc0, 0x00, 0x00, 0x00,
-                0x48, 0x85, 0xc9; 12
-            ]
+            object: DescriptorObject::Patch {
+                enabled: || SETTINGS.general.enchanting_patch_en.get(),
+                conflicts: None,
+                hook: Hook::Call12 {
+                    entry: max_charge_begin_wrapper_se as *const u8,
+                    clobber: Register::Rax // Tmp from earlier cmove. Not used again.
+                },
+                sig: signature![
+                    0xf3, 0x0f, 0x11, 0x84, 0x24, 0xc0, 0x00, 0x00, 0x00,
+                    0x48, 0x85, 0xc9; 12
+                ]
+            }
         },
-        Descriptor::Patch {
+        Descriptor {
             name: "EndMaxChargeCalculation",
-            enabled: || SETTINGS.general.enchanting_patch_en.get(),
-            conflicts: None,
-            hook: Hook::Call12 {
-                entry: max_charge_end_wrapper_ae as *const u8,
-                clobber: Register::Rcx // Patch follows a function call.
-            },
             loc: GameLocation::Ae { id: 51449, offset: 0x179 },
-            sig: signature![
-                0xf3, 0x0f, 0x10, 0x84, 0x24, 0xa0, 0x00, 0x00, 0x00,
-                0xf3, 0x41, 0x0f, 0x5f, 0xc1; 14
-            ]
+            object: DescriptorObject::Patch {
+                enabled: || SETTINGS.general.enchanting_patch_en.get(),
+                conflicts: None,
+                hook: Hook::Call12 {
+                    entry: max_charge_end_wrapper_ae as *const u8,
+                    clobber: Register::Rcx // Patch follows a function call.
+                },
+                sig: signature![
+                    0xf3, 0x0f, 0x10, 0x84, 0x24, 0xa0, 0x00, 0x00, 0x00,
+                    0xf3, 0x41, 0x0f, 0x5f, 0xc1; 14
+                ]
+            }
         },
-        Descriptor::Patch {
+        Descriptor {
             name: "EndMaxChargeCalculation",
-            enabled: || SETTINGS.general.enchanting_patch_en.get(),
-            conflicts: None,
-            hook: Hook::Call12 {
-                entry: max_charge_end_wrapper_se as *const u8,
-                clobber: Register::Rcx // Patch follows a function call.
-            },
             loc: GameLocation::Se { id: 50557, offset: 0x207 },
-            sig: signature![
-                0xf3, 0x0f, 0x10, 0x84, 0x24, 0xc0, 0x00, 0x00, 0x00,
-                0x41, 0x0f, 0x2f, 0xc0,
-                0x77, 0x04,
-                0x41, 0x0f, 0x28, 0xc0; 19
-            ]
+            object: DescriptorObject::Patch {
+                enabled: || SETTINGS.general.enchanting_patch_en.get(),
+                conflicts: None,
+                hook: Hook::Call12 {
+                    entry: max_charge_end_wrapper_se as *const u8,
+                    clobber: Register::Rcx // Patch follows a function call.
+                },
+                sig: signature![
+                    0xf3, 0x0f, 0x10, 0x84, 0x24, 0xc0, 0x00, 0x00, 0x00,
+                    0x41, 0x0f, 0x2f, 0xc0,
+                    0x77, 0x04,
+                    0x41, 0x0f, 0x28, 0xc0; 19
+                ]
+            }
         },
 
         //
@@ -235,100 +248,112 @@ core_util::disarray! {
         // Note that we also replace the player_avo_get_current() call, so that we
         // can enforce a different formula cap for enchanting charge and magnitude.
         //
-        Descriptor::Patch {
+        Descriptor {
             name: "CalculateChargePointsPerUse",
-            enabled: || SETTINGS.general.enchanting_patch_en.get(),
-            conflicts: None,
-            hook: Hook::Call12 {
-                entry: calculate_charge_points_per_use_wrapper_ae as *const u8,
-                clobber: Register::Rax
-            },
             loc: GameLocation::Ae { id: 51449, offset: 0x314 },
-            sig: signature![
-                0x48, 0x8b, 0x0d, ?, ?, ?, ?,
-                0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
-                0x48, 0x8b, 0x01,
-                0xba, 0x17, 0x00, 0x00, 0x00,
-                0xff, 0x50, 0x08,
-                0x0f, 0x28, 0xc8,
-                0x0f, 0x28, 0xc7,
-                0xe8, ?, ?, ?, ?; 36
-            ]
+            object: DescriptorObject::Patch {
+                enabled: || SETTINGS.general.enchanting_patch_en.get(),
+                conflicts: None,
+                hook: Hook::Call12 {
+                    entry: calculate_charge_points_per_use_wrapper_ae as *const u8,
+                    clobber: Register::Rax
+                },
+                sig: signature![
+                    0x48, 0x8b, 0x0d, ?, ?, ?, ?,
+                    0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
+                    0x48, 0x8b, 0x01,
+                    0xba, 0x17, 0x00, 0x00, 0x00,
+                    0xff, 0x50, 0x08,
+                    0x0f, 0x28, 0xc8,
+                    0x0f, 0x28, 0xc7,
+                    0xe8, ?, ?, ?, ?; 36
+                ]
+            }
         },
-        Descriptor::Patch {
+        Descriptor {
             name: "CalculateChargePointsPerUse",
-            enabled: || SETTINGS.general.enchanting_patch_en.get(),
-            conflicts: None,
-            hook: Hook::Call12 {
-                entry: calculate_charge_points_per_use_wrapper_se as *const u8,
-                clobber: Register::Rax
-            },
             loc: GameLocation::Se { id: 50557, offset: 0x344, },
-            sig: signature![
-                0x48, 0x8b, 0x0d, ?, ?, ?, ?,
-                0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
-                0x48, 0x8b, 0x01,
-                0xba, 0x17, 0x00, 0x00, 0x00,
-                0xff, 0x50, 0x08,
-                0x0f, 0x28, 0xc8,
-                0x0f, 0x28, 0xc7,
-                0xe8, ?, ?, ?, ?; 36
-            ]
+            object: DescriptorObject::Patch {
+                enabled: || SETTINGS.general.enchanting_patch_en.get(),
+                conflicts: None,
+                hook: Hook::Call12 {
+                    entry: calculate_charge_points_per_use_wrapper_se as *const u8,
+                    clobber: Register::Rax
+                },
+                sig: signature![
+                    0x48, 0x8b, 0x0d, ?, ?, ?, ?,
+                    0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
+                    0x48, 0x8b, 0x01,
+                    0xba, 0x17, 0x00, 0x00, 0x00,
+                    0xff, 0x50, 0x08,
+                    0x0f, 0x28, 0xc8,
+                    0x0f, 0x28, 0xc7,
+                    0xe8, ?, ?, ?, ?; 36
+                ]
+            }
         },
 
         //
         // Caps the effective skill level in calculations by always returning a damaged result.
         //
-        Descriptor::Patch {
+        Descriptor {
             name: "PlayerAVOGetCurrent",
-            enabled: || SETTINGS.general.skill_formula_caps_en.get(),
-            conflicts: None,
-            hook: Hook::Jump12 {
-                entry: player_avo_get_current_wrapper as *const u8,
-                clobber: Register::Rax,
-                trampoline: PLAYER_AVO_GET_CURRENT_RETURN_TRAMPOLINE.inner()
-            },
             loc: GameLocation::Ae { id: 38462, offset: 0 },
-            sig: signature![
-                0x4c, 0x8b, 0xdc, 0x55, 0x56, 0x57, 0x41, 0x56,
-                0x41, 0x57, 0x48, 0x83, 0xec, 0x50; 14
-            ]
+            object: DescriptorObject::Patch {
+                enabled: || SETTINGS.general.skill_formula_caps_en.get(),
+                conflicts: None,
+                hook: Hook::Jump12 {
+                    entry: player_avo_get_current_wrapper as *const u8,
+                    clobber: Register::Rax,
+                    trampoline: PLAYER_AVO_GET_CURRENT_RETURN_TRAMPOLINE.inner()
+                },
+                sig: signature![
+                    0x4c, 0x8b, 0xdc, 0x55, 0x56, 0x57, 0x41, 0x56,
+                    0x41, 0x57, 0x48, 0x83, 0xec, 0x50; 14
+                ]
+            }
         },
-        Descriptor::Patch {
+        Descriptor {
             name: "PlayerAVOGetCurrent",
-            enabled: || SETTINGS.general.skill_formula_caps_en.get(),
-            conflicts: None,
-            hook: Hook::Jump12 {
-                entry: player_avo_get_current_wrapper as *const u8,
-                clobber: Register::Rax,
-                trampoline: PLAYER_AVO_GET_CURRENT_RETURN_TRAMPOLINE.inner()
-            },
             loc: GameLocation::Se { id: 37517, offset: 0 },
-            sig: signature![
-                0x40, 0x55, 0x56, 0x57, 0x41, 0x56, 0x41, 0x57,
-                0x48, 0x83, 0xec, 0x40; 12
-            ]
+            object: DescriptorObject::Patch {
+                enabled: || SETTINGS.general.skill_formula_caps_en.get(),
+                conflicts: None,
+                hook: Hook::Jump12 {
+                    entry: player_avo_get_current_wrapper as *const u8,
+                    clobber: Register::Rax,
+                    trampoline: PLAYER_AVO_GET_CURRENT_RETURN_TRAMPOLINE.inner()
+                },
+                sig: signature![
+                    0x40, 0x55, 0x56, 0x57, 0x41, 0x56, 0x41, 0x57,
+                    0x48, 0x83, 0xec, 0x40; 12
+                ]
+            }
         },
 
         //
         // Uncaps the formula for magic CDR, which is now capped by PlayerAVOGetCurrent(). Without
         // these patches, magic CDR cannot use skill levels above 100.
         //
-        Descriptor::Patch {
+        Descriptor {
             name: "CapMagickaCDR",
-            enabled: || SETTINGS.general.skill_formula_caps_en.get(),
-            conflicts: None,
-            hook: Hook::None,
             loc: GameLocation::Ae { id: 27284, offset: 0x2c },
-            sig: signature![0xf3, 0x0f, 0x5d, 0x0d, ?, ?, ?, ?; 8] // minss <100.0>, %xmm1
+            object: DescriptorObject::Patch {
+                enabled: || SETTINGS.general.skill_formula_caps_en.get(),
+                conflicts: None,
+                hook: Hook::None,
+                sig: signature![0xf3, 0x0f, 0x5d, 0x0d, ?, ?, ?, ?; 8] // minss <100.0>, %xmm1
+            }
         },
-        Descriptor::Patch {
+        Descriptor {
             name: "CapMagickaCDR",
-            enabled: || SETTINGS.general.skill_formula_caps_en.get(),
-            conflicts: None,
-            hook: Hook::None,
             loc: GameLocation::Se { id: 26616, offset: 0x34 },
-            sig: signature![0x73, 0x44; 2] // jae <end of function>
+            object: DescriptorObject::Patch {
+                enabled: || SETTINGS.general.skill_formula_caps_en.get(),
+                conflicts: None,
+                hook: Hook::None,
+                sig: signature![0x73, 0x44; 2] // jae <end of function>
+            }
         },
 
         //
@@ -340,140 +365,154 @@ core_util::disarray! {
         //
         // This patch doesn't serve a real purpose other than to avoid confusing players.
         //
-        Descriptor::Patch {
+        Descriptor {
             name: "UpdateSkillList",
-            enabled: || SETTINGS.general.skill_formula_caps_en.get() &&
-                        SETTINGS.general.skill_formula_ui_fix_en.get(),
-            conflicts: None,
-            hook: Hook::Jump12 {
-                entry: update_skill_list_wrapper as *const u8,
-                clobber: Register::Rax, // Start of a function call.
-                trampoline: UPDATE_SKILL_LIST_RETURN_TRAMPOLINE.inner()
-            },
             loc: GameLocation::All {
                 id_ae: 52525,
                 id_se: 51652,
                 offset_ae: 0,
                 offset_se: 0
             },
-            sig: signature![
-                0x48, 0x8b, 0xc4, // mov %rsp, %rax
-                0x55,             // push %rbp
-                0x53,             // push %rbx
-                0x56,             // push %rsi
-                0x57,             // push %rdi
-                0x41, 0x54,       // push %r12
-                0x41, 0x55,       // push %r13
-                0x41, 0x56; 13    // push %r14
-            ]
+            object: DescriptorObject::Patch {
+                enabled: || SETTINGS.general.skill_formula_caps_en.get() &&
+                            SETTINGS.general.skill_formula_ui_fix_en.get(),
+                conflicts: None,
+                hook: Hook::Jump12 {
+                    entry: update_skill_list_wrapper as *const u8,
+                    clobber: Register::Rax, // Start of a function call.
+                    trampoline: UPDATE_SKILL_LIST_RETURN_TRAMPOLINE.inner()
+                },
+                sig: signature![
+                    0x48, 0x8b, 0xc4, // mov %rsp, %rax
+                    0x55,             // push %rbp
+                    0x53,             // push %rbx
+                    0x56,             // push %rsi
+                    0x57,             // push %rdi
+                    0x41, 0x54,       // push %r12
+                    0x41, 0x55,       // push %r13
+                    0x41, 0x56; 13    // push %r14
+                ]
+            }
         },
 
         // Applies the multipliers from the INI file to skill experience.
-        Descriptor::Patch {
+        Descriptor {
             name: "ImprovePlayerSkillPoints",
-            enabled: || SETTINGS.general.skill_exp_mults_en.get(),
-            conflicts: None,
-            hook: Hook::Call12 {
-                entry: improve_player_skill_points_wrapper_ae as *const u8,
-                clobber: Register::Rcx // Written to after this patch.
-            },
             loc: GameLocation::Ae { id: 41561, offset: 0xf1 },
-            sig: signature![
-                0xf3, 0x0f, 0x10, 0x44, 0x24, 0x30,
-                0xf3, 0x0f, 0x59, 0xc6,
-                0xf3, 0x0f, 0x58, 0x44, 0x24, 0x34; 16
-            ]
+            object: DescriptorObject::Patch {
+                enabled: || SETTINGS.general.skill_exp_mults_en.get(),
+                conflicts: None,
+                hook: Hook::Call12 {
+                    entry: improve_player_skill_points_wrapper_ae as *const u8,
+                    clobber: Register::Rcx // Written to after this patch.
+                },
+                sig: signature![
+                    0xf3, 0x0f, 0x10, 0x44, 0x24, 0x30,
+                    0xf3, 0x0f, 0x59, 0xc6,
+                    0xf3, 0x0f, 0x58, 0x44, 0x24, 0x34; 16
+                ]
+            }
         },
-        Descriptor::Patch {
+        Descriptor {
             name: "ImprovePlayerSkillPoints",
-            enabled: || SETTINGS.general.skill_exp_mults_en.get(),
-            conflicts: None,
-            hook: Hook::Call12 {
-                entry: improve_player_skill_points_wrapper_se as *const u8,
-                clobber: Register::Rcx // Written to after this patch, garbage before patch.
-            },
             loc: GameLocation::Se { id: 40554, offset: 0xdc },
-            sig: signature![
-                0xf3, 0x0f, 0x10, 0x44, 0x24, 0x30,
-                0xf3, 0x0f, 0x59, 0xc7,
-                0xf3, 0x0f, 0x58, 0x44, 0x24, 0x34; 16
-            ]
+            object: DescriptorObject::Patch {
+                enabled: || SETTINGS.general.skill_exp_mults_en.get(),
+                conflicts: None,
+                hook: Hook::Call12 {
+                    entry: improve_player_skill_points_wrapper_se as *const u8,
+                    clobber: Register::Rcx // Written to after this patch, garbage before patch.
+                },
+                sig: signature![
+                    0xf3, 0x0f, 0x10, 0x44, 0x24, 0x30,
+                    0xf3, 0x0f, 0x59, 0xc7,
+                    0xf3, 0x0f, 0x58, 0x44, 0x24, 0x34; 16
+                ]
+            }
         },
 
         //
         // Modifies the number of perk points obtained after the game has performed its
         // original calculation.
         //
-        Descriptor::Patch {
+        Descriptor {
             name: "ModifyPerkPool",
-            enabled: || SETTINGS.general.perk_points_en.get(),
-            conflicts: None,
-            hook: Hook::Call12 {
-                entry: modify_perk_pool_wrapper_ae as *const u8,
-                clobber: Register::Rax
-            },
             loc: GameLocation::Ae { id: 52538, offset: 0x62 },
-            sig: signature![
-                0x48, 0x8b, 0x15, ?, ?, ?, ?,
-                0x0f, 0xb6, 0x8a, ?, 0x0b, 0x00, 0x00,
-                0x8b, 0xc1,
-                0x03, 0xc7,
-                0x78, 0x09,
-                0x40, 0x02, 0xcf,
-                0x88, 0x8a, ?, 0x0b, 0x00, 0x00; 29
-            ]
+            object: DescriptorObject::Patch {
+                enabled: || SETTINGS.general.perk_points_en.get(),
+                conflicts: None,
+                hook: Hook::Call12 {
+                    entry: modify_perk_pool_wrapper_ae as *const u8,
+                    clobber: Register::Rax
+                },
+                sig: signature![
+                    0x48, 0x8b, 0x15, ?, ?, ?, ?,
+                    0x0f, 0xb6, 0x8a, ?, 0x0b, 0x00, 0x00,
+                    0x8b, 0xc1,
+                    0x03, 0xc7,
+                    0x78, 0x09,
+                    0x40, 0x02, 0xcf,
+                    0x88, 0x8a, ?, 0x0b, 0x00, 0x00; 29
+                ]
+            }
         },
-        Descriptor::Patch {
+        Descriptor {
             name: "ModifyPerkPool",
-            enabled: || SETTINGS.general.perk_points_en.get(),
-            conflicts: None,
-            hook: Hook::Call12 {
-                entry: modify_perk_pool_wrapper_se as *const u8,
-                clobber: Register::Rax
-            },
             loc: GameLocation::Se { id: 51665, offset: 0x8f },
-            sig: signature![
-                0x48, 0x8b, 0x15, ?, ?, ?, ?,
-                0x0f, 0xb6, 0x8a, ?, 0x0b, 0x00, 0x00,
-                0x8b, 0xc1,
-                0x03, 0xc3,
-                0x78, 0x08,
-                0x02, 0xcb,
-                0x88, 0x8a, ?, 0x0b, 0x00, 0x00; 28
-            ]
+            object: DescriptorObject::Patch {
+                enabled: || SETTINGS.general.perk_points_en.get(),
+                conflicts: None,
+                hook: Hook::Call12 {
+                    entry: modify_perk_pool_wrapper_se as *const u8,
+                    clobber: Register::Rax
+                },
+                sig: signature![
+                    0x48, 0x8b, 0x15, ?, ?, ?, ?,
+                    0x0f, 0xb6, 0x8a, ?, 0x0b, 0x00, 0x00,
+                    0x8b, 0xc1,
+                    0x03, 0xc3,
+                    0x78, 0x08,
+                    0x02, 0xcb,
+                    0x88, 0x8a, ?, 0x0b, 0x00, 0x00; 28
+                ]
+            }
         },
 
         //
         // Passes the EXP gain original calculated by the game to our hook for further
         // modification.
         //
-        Descriptor::Patch {
+        Descriptor {
             name: "ImproveLevelExpBySkillLevel",
-            enabled: || SETTINGS.general.level_exp_mults_en.get(),
-            conflicts: Some(LEVEL_MULT_CONFLICTS),
-            hook: Hook::Call12 {
-                entry: improve_level_exp_by_skill_level_wrapper_ae as *const u8,
-                clobber: Register::Rdx // Will be smashed after this hook anyway.
-            },
             loc: GameLocation::Ae { id: 41561, offset: 0x2cb },
-            sig: signature![
-                0xf3, 0x0f, 0x5c, 0xca,
-                0xf3, 0x0f, 0x59, 0x0d, ?, ?, ?, ?; 12
-            ]
+            object: DescriptorObject::Patch {
+                enabled: || SETTINGS.general.level_exp_mults_en.get(),
+                conflicts: Some(LEVEL_MULT_CONFLICTS),
+                hook: Hook::Call12 {
+                    entry: improve_level_exp_by_skill_level_wrapper_ae as *const u8,
+                    clobber: Register::Rdx // Will be smashed after this hook anyway.
+                },
+                sig: signature![
+                    0xf3, 0x0f, 0x5c, 0xca,
+                    0xf3, 0x0f, 0x59, 0x0d, ?, ?, ?, ?; 12
+                ]
+            }
         },
-        Descriptor::Patch {
+        Descriptor {
             name: "ImproveLevelExpBySkillLevel",
-            enabled: || SETTINGS.general.level_exp_mults_en.get(),
-            conflicts: Some(LEVEL_MULT_CONFLICTS),
-            hook: Hook::Call12 {
-                entry: improve_level_exp_by_skill_level_wrapper_se as *const u8,
-                clobber: Register::Rax // Smashed earlier in the function.
-            },
             loc: GameLocation::Se { id: 40576, offset: 0x70 },
-            sig: signature![
-                0xf3, 0x0f, 0x5c, 0xc1,
-                0xf3, 0x0f, 0x59, 0x05, ?, ?, ?, ?; 12
-            ]
+            object: DescriptorObject::Patch {
+                enabled: || SETTINGS.general.level_exp_mults_en.get(),
+                conflicts: Some(LEVEL_MULT_CONFLICTS),
+                hook: Hook::Call12 {
+                    entry: improve_level_exp_by_skill_level_wrapper_se as *const u8,
+                    clobber: Register::Rax // Smashed earlier in the function.
+                },
+                sig: signature![
+                    0xf3, 0x0f, 0x5c, 0xc1,
+                    0xf3, 0x0f, 0x59, 0x05, ?, ?, ?, ?; 12
+                ]
+            }
         },
 
         //
@@ -489,140 +528,152 @@ core_util::disarray! {
         // It also means the game settings which would usually control these attributes are
         // ignored.
         //
-        Descriptor::Patch {
+        Descriptor {
             name: "ImproveAttributeWhenLevelUp",
-            enabled: || SETTINGS.general.attr_points_en.get(),
-            conflicts: None,
-            hook: Hook::Call12 {
-                entry: improve_attribute_when_level_up_wrapper as *const u8,
-                clobber: Register::Rax
-            },
             loc: GameLocation::All {
                 id_se: 51037,
                 id_ae: 51917,
                 offset_se: 0x93,
                 offset_ae: 0x93
             },
-            sig: signature![
-                0xff, 0x50, 0x28,
-                0x83, 0x7f, 0x18, 0x1a,
-                0x75, 0x22,
-                0x48, 0x8b, 0x0d, ?, ?, ?, ?,
-                0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
-                0x48, 0x8b, 0x01,
-                0xf3, 0x0f, 0x10, 0x1d, ?, ?, ?, ?,
-                0x33, 0xd2,
-                0x44, 0x8d, 0x42, 0x20,
-                0xff, 0x50, 0x30; 0x2b
-            ]
+            object: DescriptorObject::Patch {
+                enabled: || SETTINGS.general.attr_points_en.get(),
+                conflicts: None,
+                hook: Hook::Call12 {
+                    entry: improve_attribute_when_level_up_wrapper as *const u8,
+                    clobber: Register::Rax
+                },
+                sig: signature![
+                    0xff, 0x50, 0x28,
+                    0x83, 0x7f, 0x18, 0x1a,
+                    0x75, 0x22,
+                    0x48, 0x8b, 0x0d, ?, ?, ?, ?,
+                    0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
+                    0x48, 0x8b, 0x01,
+                    0xf3, 0x0f, 0x10, 0x1d, ?, ?, ?, ?,
+                    0x33, 0xd2,
+                    0x44, 0x8d, 0x42, 0x20,
+                    0xff, 0x50, 0x30; 0x2b
+                ]
+            }
         },
 
         //
         // Alters the reset level of legendarying a skill, and overwrites a check
         // which prevents the level from changing if its below 100.
         //
-        Descriptor::Patch {
+        Descriptor {
             name: "LegendaryResetSkillLevel",
-            enabled: || SETTINGS.general.legendary_en.get(),
-            conflicts: Some(LEGENDARY_CONFLICTS),
-            hook: Hook::Call12 {
-                entry: legendary_reset_skill_level_wrapper as *const u8,
-                clobber: Register::Rax
-            },
             loc: GameLocation::All {
                 id_se: 51714,
                 id_ae: 52591,
                 offset_se: 0x236,
                 offset_ae: 0x1d0
             },
-            sig: signature![
-                0x0f, 0x2f, 0x05, ?, ?, ?, ?,
-                0x0f, 0x82, ?, ?, 0x00, 0x00,
-                0x48, 0x8b, 0x0d, ?, ?, ?, ?,
-                0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
-                0x48, 0x8b, 0x01,
-                0xf3, 0x0f, 0x10, 0x15, ?, ?, ?, ?; 38
-            ]
+            object: DescriptorObject::Patch {
+                enabled: || SETTINGS.general.legendary_en.get(),
+                conflicts: Some(LEGENDARY_CONFLICTS),
+                hook: Hook::Call12 {
+                    entry: legendary_reset_skill_level_wrapper as *const u8,
+                    clobber: Register::Rax
+                },
+                sig: signature![
+                    0x0f, 0x2f, 0x05, ?, ?, ?, ?,
+                    0x0f, 0x82, ?, ?, 0x00, 0x00,
+                    0x48, 0x8b, 0x0d, ?, ?, ?, ?,
+                    0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
+                    0x48, 0x8b, 0x01,
+                    0xf3, 0x0f, 0x10, 0x15, ?, ?, ?, ?; 38
+                ]
+            }
         },
 
         // Replaces the call to the legendary condition check function with our own.
-        Descriptor::Patch {
+        Descriptor {
             name: "CheckConditionForLegendarySkill",
-            enabled: || SETTINGS.general.legendary_en.get(),
-            conflicts: Some(LEGENDARY_CONFLICTS),
-            hook: Hook::Call12 {
-                entry: check_condition_for_legendary_skill_wrapper as *const u8,
-                clobber: Register::Rdx
-            },
             loc: GameLocation::All {
                 id_se: 51647,
                 id_ae: 52520,
                 offset_se: 0x155,
                 offset_ae: 0x14e
             },
-            sig: signature![
-                0x8b, 0xd0,
-                0x48, 0x8d, 0x8f, ?, 0x00, 0x00, 0x00,
-                0xff, 0x53, 0x18; 12
-            ]
+            object: DescriptorObject::Patch {
+                enabled: || SETTINGS.general.legendary_en.get(),
+                conflicts: Some(LEGENDARY_CONFLICTS),
+                hook: Hook::Call12 {
+                    entry: check_condition_for_legendary_skill_wrapper as *const u8,
+                    clobber: Register::Rdx
+                },
+                sig: signature![
+                    0x8b, 0xd0,
+                    0x48, 0x8d, 0x8f, ?, 0x00, 0x00, 0x00,
+                    0xff, 0x53, 0x18; 12
+                ]
+            }
         },
 
         // As above, except this is for the function where the jump key is remapped.
-        Descriptor::Patch {
+        Descriptor {
             name: "CheckConditionForLegendarySkillAlt",
-            enabled: || SETTINGS.general.legendary_en.get(),
-            conflicts: Some(LEGENDARY_CONFLICTS),
-            hook: Hook::Call12 {
-                entry: check_condition_for_legendary_skill_wrapper as *const u8,
-                clobber: Register::Rdx
-            },
             loc: GameLocation::All {
                 id_se: 51638,
                 id_ae: 52510,
                 offset_se: 0x4cc,
                 offset_ae: 0x4d5
             },
-            sig: signature![
-                0x8b, 0xd0,
-                0x48, 0x8d, 0x8f, ?, 0x00, 0x00, 0x00,
-                0xff, 0x53, 0x18; 12
-            ]
+            object: DescriptorObject::Patch {
+                enabled: || SETTINGS.general.legendary_en.get(),
+                conflicts: Some(LEGENDARY_CONFLICTS),
+                hook: Hook::Call12 {
+                    entry: check_condition_for_legendary_skill_wrapper as *const u8,
+                    clobber: Register::Rdx
+                },
+                sig: signature![
+                    0x8b, 0xd0,
+                    0x48, 0x8d, 0x8f, ?, 0x00, 0x00, 0x00,
+                    0xff, 0x53, 0x18; 12
+                ]
+            }
         },
 
         // As above, except this is for the UI button display.
-        Descriptor::Patch {
+        Descriptor {
             name: "HideLegendaryButton",
-            enabled: || SETTINGS.general.legendary_en.get(),
-            conflicts: Some(LEGENDARY_CONFLICTS),
-            hook: Hook::Call12 {
-                entry: hide_legendary_button_wrapper_ae as *const u8,
-                clobber: Register::Rax
-            },
             loc: GameLocation::Ae { id: 52527, offset: 0x153 },
-            sig: signature![
-                0x48, 0x8b, 0x0d, ?, ?, ?, ?,
-                0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
-                0x48, 0x8b, 0x01,
-                0x41, 0x8b, 0xd7,
-                0xff, 0x50, 0x18; 23
-            ]
+            object: DescriptorObject::Patch {
+                enabled: || SETTINGS.general.legendary_en.get(),
+                conflicts: Some(LEGENDARY_CONFLICTS),
+                hook: Hook::Call12 {
+                    entry: hide_legendary_button_wrapper_ae as *const u8,
+                    clobber: Register::Rax
+                },
+                sig: signature![
+                    0x48, 0x8b, 0x0d, ?, ?, ?, ?,
+                    0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
+                    0x48, 0x8b, 0x01,
+                    0x41, 0x8b, 0xd7,
+                    0xff, 0x50, 0x18; 23
+                ]
+            }
         },
-        Descriptor::Patch {
+        Descriptor {
             name: "HideLegendaryButton",
-            enabled: || SETTINGS.general.legendary_en.get(),
-            conflicts: Some(LEGENDARY_CONFLICTS),
-            hook: Hook::Call12 {
-                entry: hide_legendary_button_wrapper_se as *const u8,
-                clobber: Register::Rax
-            },
             loc: GameLocation::Se { id: 51654, offset: 0x146 },
-            sig: signature![
-                0x48, 0x8b, 0x0d, ?, ?, ?, ?,
-                0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
-                0x48, 0x8b, 0x01,
-                0x8b, 0xd6,
-                0xff, 0x50, 0x18; 22
-            ]
+            object: DescriptorObject::Patch {
+                enabled: || SETTINGS.general.legendary_en.get(),
+                conflicts: Some(LEGENDARY_CONFLICTS),
+                hook: Hook::Call12 {
+                    entry: hide_legendary_button_wrapper_se as *const u8,
+                    clobber: Register::Rax
+                },
+                sig: signature![
+                    0x48, 0x8b, 0x0d, ?, ?, ?, ?,
+                    0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
+                    0x48, 0x8b, 0x01,
+                    0x8b, 0xd6,
+                    0xff, 0x50, 0x18; 22
+                ]
+            }
         },
 
         //
@@ -642,39 +693,43 @@ core_util::disarray! {
         // Note that we also fix an engine bug where this function got the current skill value
         // instead of the base value.
         //
-        Descriptor::Patch {
+        Descriptor {
             name: "ClearLegendaryButton",
-            enabled: || SETTINGS.general.legendary_en.get(),
-            conflicts: Some(LEGENDARY_CONFLICTS),
-            hook: Hook::Call12 {
-                entry: clear_legendary_button_wrapper_ae as *const u8,
-                clobber: Register::Rax
-            },
             loc: GameLocation::Ae { id: 52527, offset: 0x16dd },
-            sig: signature![
-                0x48, 0x8b, 0x0d, ?, ?, ?, ?,
-                0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
-                0x48, 0x8b, 0x01,
-                0x41, 0x8b, 0xd7,
-                0xff, 0x50, 0x08; 23
-            ]
+            object: DescriptorObject::Patch {
+                enabled: || SETTINGS.general.legendary_en.get(),
+                conflicts: Some(LEGENDARY_CONFLICTS),
+                hook: Hook::Call12 {
+                    entry: clear_legendary_button_wrapper_ae as *const u8,
+                    clobber: Register::Rax
+                },
+                sig: signature![
+                    0x48, 0x8b, 0x0d, ?, ?, ?, ?,
+                    0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
+                    0x48, 0x8b, 0x01,
+                    0x41, 0x8b, 0xd7,
+                    0xff, 0x50, 0x08; 23
+                ]
+            }
         },
-        Descriptor::Patch {
+        Descriptor {
             name: "ClearLegendaryButton",
-            enabled: || SETTINGS.general.legendary_en.get(),
-            conflicts: Some(LEGENDARY_CONFLICTS),
-            hook: Hook::Call12 {
-                entry: clear_legendary_button_wrapper_se as *const u8,
-                clobber: Register::Rax
-            },
             loc: GameLocation::Se { id: 51654, offset: 0x1621 },
-            sig: signature![
-                0x48, 0x8b, 0x0d, ?, ?, ?, ?,
-                0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
-                0x48, 0x8b, 0x01,
-                0x8b, 0xd6,
-                0xff, 0x50, 0x08; 22
-            ]
+            object: DescriptorObject::Patch {
+                enabled: || SETTINGS.general.legendary_en.get(),
+                conflicts: Some(LEGENDARY_CONFLICTS),
+                hook: Hook::Call12 {
+                    entry: clear_legendary_button_wrapper_se as *const u8,
+                    clobber: Register::Rax
+                },
+                sig: signature![
+                    0x48, 0x8b, 0x0d, ?, ?, ?, ?,
+                    0x48, 0x81, 0xc1, ?, 0x00, 0x00, 0x00,
+                    0x48, 0x8b, 0x01,
+                    0x8b, 0xd6,
+                    0xff, 0x50, 0x08; 22
+                ]
+            }
         }
     ];
 }

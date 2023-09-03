@@ -22,6 +22,9 @@
 // For macros.
 pub use core;
 
+use core::fmt;
+use core::fmt::{Arguments, Write};
+use core::ffi::CStr;
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::cell::UnsafeCell;
 use core::mem::MaybeUninit;
@@ -111,6 +114,97 @@ macro_rules! cstr {
         ).unwrap()
     };
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Anti-allocation goop
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+///
+/// A structure for formatting strings into pre-allocated storage, which allows for text to be
+/// calculated at runtime without causing a heap allocation.
+///
+/// The buffer is always ended with a null terminator, to allow for usage with FFI.
+///
+pub struct StringBuffer<const SIZE: usize> {
+    buf: [u8; SIZE],
+    len: usize
+}
+
+impl<const SIZE: usize> StringBuffer<SIZE> {
+    /// Creates a new, empty, string buffer.
+    pub const fn new() -> Self {
+        Self {
+            buf: [0; SIZE],
+            len: 0
+        }
+    }
+
+    /// Attempts to convert the contents of the buffer to a CStr.
+    pub fn as_c_str(
+        &self
+    ) -> Result<&CStr, ()> {
+        CStr::from_bytes_with_nul(self.as_bytes_nul()).map_err(|_| ())
+    }
+
+    /// Gets the underlying &[u8] in the buffer, with the null.
+    pub fn as_bytes_nul(
+        &self
+    ) -> &[u8] {
+        self.buf.split_at(self.len + 1).0
+    }
+
+    /// Formats the given arguments into the buffer, adding a newline.
+    pub fn formatln(
+        &mut self,
+        args: Arguments<'_>
+    ) -> Result<(), fmt::Error> {
+        fmt::write(self, args)?;
+        self.write_str("\n")?;
+        Ok(())
+    }
+
+    ///
+    /// Calls the given function, then updates the length of the buffer based on the null
+    /// terminator.
+    ///
+    /// The given function must null terminate any data it appends.
+    ///
+    pub unsafe fn write_ffi(
+        &mut self,
+        func: impl FnOnce(&mut [u8])
+    ) {
+        func(self.buf.split_at_mut(self.len).1);
+
+        while self.buf[self.len] != 0 {
+            self.len += 1;
+        }
+    }
+
+    /// Erases the contents of the buffer.
+    pub fn clear(
+        &mut self
+    ) {
+        self.buf[0] = 0;
+        self.len = 0;
+    }
+}
+
+impl<const SIZE: usize> fmt::Write for StringBuffer<SIZE> {
+    fn write_str(
+        &mut self,
+        s: &str
+    ) -> Result<(), fmt::Error> {
+        if s.len() + self.len > SIZE - 1 {
+            return Err(fmt::Error);
+        }
+
+        self.buf.split_at_mut(self.len).1.split_at_mut(s.len()).0.copy_from_slice(s.as_bytes());
+        self.len += s.len();
+        self.buf[self.len] = 0; // Always null terminate.
+        Ok(())
+    }
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Cells

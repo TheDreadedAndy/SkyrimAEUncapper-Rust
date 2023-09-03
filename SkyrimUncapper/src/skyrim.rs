@@ -26,7 +26,7 @@
 use core::cell::Cell;
 use core::ffi::c_int;
 
-use libskyrim::patcher::{GameRef, Descriptor, GameLocation};
+use libskyrim::patcher::{GameRef, Descriptor, DescriptorObject, GameLocation};
 use libskyrim::version::{RUNTIME_VERSION_1_6_629, RUNTIME_VERSION_1_5_97};
 
 use crate::settings::SkillMult;
@@ -390,76 +390,76 @@ core_util::disarray! {
     /// Used by the patcher to locate our objects/functions.
     ///
     pub static GAME_SIGNATURES: [Descriptor; NUM_GAME_SIGNATURES] = [
-        Descriptor::Object {
+        Descriptor {
             name: "fEnchantingSkillCostBase",
             loc: GameLocation::Base { se: 506021, ae: 375771 },
-            result: ENCHANTING_SKILL_COST_BASE.inner()
+            object: DescriptorObject::Global(ENCHANTING_SKILL_COST_BASE.inner())
         },
 
-        Descriptor::Object {
+        Descriptor {
             name: "fEnchantingSkillCostMult",
             loc: GameLocation::Base { se: 506023, ae: 375774 },
-            result: ENCHANTING_SKILL_COST_MULT.inner()
+            object: DescriptorObject::Global(ENCHANTING_SKILL_COST_MULT.inner())
         },
 
-        Descriptor::Object {
+        Descriptor {
             name: "fEnchantingSkillCostScale",
             loc: GameLocation::Base { se: 506025, ae: 375777 },
-            result: ENCHANTING_SKILL_COST_SCALE.inner()
+            object: DescriptorObject::Global(ENCHANTING_SKILL_COST_SCALE.inner())
         },
 
-        Descriptor::Object {
+        Descriptor {
             name: "fEnchantingCostExponent",
             loc: GameLocation::Base { se: 506027, ae: 375780 },
-            result: ENCHANTING_COST_EXPONENT.inner()
+            object: DescriptorObject::Global(ENCHANTING_COST_EXPONENT.inner())
         },
 
-        Descriptor::Object {
+        Descriptor {
             name: "fXPPerSkillRank",
             loc: GameLocation::Base { se: 505484, ae: 374914 },
-            result: XP_PER_SKILL_RANK.inner()
+            object: DescriptorObject::Global(XP_PER_SKILL_RANK.inner())
         },
 
-        Descriptor::Object {
+        Descriptor {
             name: "fLegendarySkillResetValue",
             loc: GameLocation::Base { se: 507065, ae: 377771 },
-            result: LEGENDARY_SKILL_RESET_VALUE.inner()
+            object: DescriptorObject::Global(LEGENDARY_SKILL_RESET_VALUE.inner())
         },
 
-        Descriptor::Object {
+        Descriptor {
             name: "g_thePlayer",
             loc: GameLocation::Base { se: 517014, ae: 403521 },
-            result: PLAYER_OBJECT.inner()
+            object: DescriptorObject::Global(PLAYER_OBJECT.inner())
         },
 
-        Descriptor::Function {
+        Descriptor {
             name: "GetLevel",
             loc: GameLocation::Base { se: 36344, ae: 37334 },
-            result: get_level_entry.inner()
+            object: DescriptorObject::Function(get_level_entry.inner())
         },
 
-        Descriptor::Function {
+        Descriptor {
             name: "PlayerAVOGetBase",
             loc: GameLocation::Base { se: 37519, ae: 38464 },
-            result: player_avo_get_base_entry.inner()
+            object: DescriptorObject::Function(player_avo_get_base_entry.inner())
         },
 
-        Descriptor::Function {
+        Descriptor {
             name: "PlayerAVOGetCurrent",
             loc: GameLocation::Base { se: 37517, ae: 38462 },
-            result: player_avo_get_current_entry.inner()
+            object: DescriptorObject::Function(player_avo_get_current_entry.inner())
         },
 
-        Descriptor::Function {
+        Descriptor {
             name: "PlayerAVOModBase",
             loc: GameLocation::Base { se: 37521, ae: 38466 },
-            result: player_avo_mod_base_entry.inner()
+            object: DescriptorObject::Function(player_avo_mod_base_entry.inner())
         },
 
-        Descriptor::Function {
+        Descriptor {
             name: "PlayerAVOModCurrent",
             loc: GameLocation::Base { se: 37522, ae: 38467 },
-            result: player_avo_mod_current_entry.inner()
+            object: DescriptorObject::Function(player_avo_mod_current_entry.inner())
         }
     ];
 }

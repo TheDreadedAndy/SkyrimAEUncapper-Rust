@@ -20,7 +20,7 @@ use core::ffi::c_void;
 use core::mem::size_of;
 use alloc::vec::Vec;
 
-use sre_common::versiondb::VersionDb;
+use sre_common::versiondb::{VersionDbStream, DatabaseItem};
 use core_util::RacyCell;
 use core_util::attempt;
 
@@ -54,29 +54,6 @@ pub enum Register {
     Rbp = 5,
     Rsi = 6,
     Rdi = 7
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-/// The maximum patch size. Chosen as our largest patch size is 16 (call absolute).
-const MAX_ASM_HOOK_SIZE: usize = 12;
-
-/// Represents an assembled x86-64 patch to be written.
-struct AssemblyHook {
-    addr: usize,
-    buf: [u8; MAX_ASM_HOOK_SIZE],
-    len: usize
-}
-
-/// Encodes the addressing mode of an instruction, or its opcode.
-enum Encoding {
-    CallRelative,
-    JumpRelative,
-    CallReg(Register),
-    JumpReg(Register),
-    MoveImmQReg(Register),
-    RelativeD(usize),
-    AbsoluteQ(u64)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -117,7 +94,7 @@ pub use signature;
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Helper to print a signature in the games code.
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 struct BinarySig {
     addr: RelocAddr,
     len: usize
@@ -159,28 +136,23 @@ pub enum Hook {
     },
 }
 
-/// Describes a location in code to be parsed and acted on by the patcher.
-pub enum Descriptor {
-    Function {
-        name: &'static str,
-        loc: GameLocation,
-        result: NonNull<UnsafeCell<usize>>
-    },
-
-    Object {
-        name: &'static str,
-        loc: GameLocation,
-        result: NonNull<UnsafeCell<usize>>
-    },
-
+/// An object in Skyrim's code to be located by the patcher, and modified if necessary.
+pub enum DescriptorObject {
+    Function(NonNull<UnsafeCell<usize>>),
+    Global(NonNull<UnsafeCell<usize>>),
     Patch {
-        name: &'static str,
         enabled: fn() -> bool,
         conflicts: Option<&'static str>,
         hook: Hook,
-        loc: GameLocation,
         sig: Signature,
     }
+}
+
+/// Describes a named location in the games code to be found and used by the patcher.
+pub struct Descriptor {
+    pub name: &'static str,
+    pub loc: GameLocation,
+    pub object: DescriptorObject
 }
 
 ///
@@ -192,18 +164,19 @@ pub enum Descriptor {
 pub struct GameRef<T>(UnsafeCell<usize>, core::marker::PhantomData<T>);
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+// Patcher implementation
+////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// Describes error reasons for why a descriptor result could not be located.
-#[derive(Debug)]
-enum DescriptorError {
-    IncompatibleGameVersion,
+/// Maintains the current state of a patch/object that is in the process of being located/installed.
+#[derive(Copy, Clone)]
+enum DescriptorState {
+    None,
+    Incompatible,
     Disabled,
-    Missing,
-    Mismatch(Signature, BinarySig)
+    Unresolved(usize, usize),
+    Mismatch(Signature, BinarySig),
+    Resolved(RelocAddr)
 }
-
-/// The result of an attempt to locate a descriptor.
-type FindResult = Result<RelocAddr, DescriptorError>;
 
 /// Contains information about a patch necessary to verify its integrity.
 struct PatchResult {
@@ -217,8 +190,6 @@ struct PatchResult {
 struct PatchSet(Vec<PatchResult>);
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// Patcher implementation
-////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Locates any game functions/objects, and applies any code patches.
 pub fn apply<const NUM_PATCHES: usize>(
@@ -230,25 +201,92 @@ pub fn apply<const NUM_PATCHES: usize>(
     );
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
-    // Find patches
+    // Initialize descriptor state
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    // Before we can apply any patches to the game code, we must determine what set of patch
+    // descriptors are valid for us to use for the current game version. We also need to check if
+    // any of the patches in the list have been disabled at runtime.
+
+    let mut desc_state : [DescriptorState; NUM_PATCHES] = [DescriptorState::None; NUM_PATCHES];
+    let mut unresolved : usize                          = 0;
+
+    for (i, descriptor) in patches.iter().enumerate() {
+        desc_state[i] = if let Ok((id, offset)) = descriptor.loc.get() {
+            DescriptorState::Unresolved(id, offset)
+        } else {
+            DescriptorState::Incompatible
+        };
+
+        if let DescriptorObject::Patch { enabled, .. } = descriptor.object {
+            desc_state[i] = if enabled() { desc_state[i] } else { DescriptorState::Disabled };
+        }
+
+        if let DescriptorState::Unresolved(..) = desc_state[i] {
+            unresolved += 1;
+        }
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    // Resolve patches
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
-    let db = VersionDb::new(version::current_runtime());
-    let mut res_addrs: [usize; NUM_PATCHES] = [0; NUM_PATCHES];
-    let mut installed_patches: PatchSet = PatchSet(Vec::new());
+    let mut installed_patches = PatchSet(Vec::new());
 
     // Attempt to locate all of the patch signatures.
-    let mut failed = false;
-    for (i, sig) in patches.iter().enumerate() {
-        match sig.find(&db) {
-            Ok(addr) => {
-                res_addrs[i] = addr.addr();
-                if let Some(patch_result) = sig.patch_result(addr) {
-                    installed_patches.0.push(patch_result);
+    for DatabaseItem { id, addr } in VersionDbStream::new(version::current_runtime()) {
+        for i in 0..desc_state.len() {
+            if let DescriptorState::Unresolved(desc_id, desc_offset) = desc_state[i] {
+                if id != desc_id { continue; }
+                unresolved -= 1;
+
+                if let DescriptorObject::Patch { hook, sig, conflicts, .. } = &patches[i].object {
+                    // SAFETY: We know addr is in the skyrim binary, since it came from the db.
+                    if let Err(mismatch) = unsafe { sig.check(addr.addr()) } {
+                        desc_state[i] = DescriptorState::Mismatch(*sig, mismatch);
+                        continue;
+                    }
+
+                    // Add the patch to the list of successfully installed patches.
+                    installed_patches.0.push(PatchResult {
+                        name: patches[i].name,
+                        hook: hook.clone(),
+                        conflicts: conflicts.unwrap_or("None"),
+                        loc: addr
+                    });
                 }
+                desc_state[i] = DescriptorState::Resolved(addr + desc_offset);
+            }
+        }
+
+        // Stop streaming the database once we've found all we need.
+        if unresolved == 0 { break; }
+    }
+
+    let mut failed = false;
+    for i in 0..NUM_PATCHES {
+        match desc_state[i] {
+            DescriptorState::Resolved(addr) => {
+                skse_message!( "[SUCCESS] {} is at offset {:#x}", patches[i], addr.offset());
             },
-            Err(DescriptorError::Disabled) | Err(DescriptorError::IncompatibleGameVersion) => (),
-            _ => { failed = true; }
+            DescriptorState::Disabled => {
+                failed = true;
+                skse_message!("[SKIPPED] {} is disabled", patches[i]);
+            },
+            DescriptorState::Unresolved(..) => {
+                failed = true;
+                skse_message!("[FAILURE] {} was not in the version database!", patches[i]);
+            },
+            DescriptorState::Mismatch(sig, bsig) => {
+                failed = true;
+                skse_message!(
+                    "[FAILURE] {} at offset {:#x} did not match the expected code signature!",
+                    patches[i],
+                    bsig.addr.offset()
+                );
+                skse_message!("\\------> [EXPECTED] {}", sig);
+                skse_message!(" \\-----> [FOUND...] {}", bsig);
+            },
+            _ => ()
         }
     }
 
@@ -262,14 +300,14 @@ pub fn apply<const NUM_PATCHES: usize>(
     // Install patches
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
-    for (i, descriptor) in patches.iter().enumerate() {
-        if descriptor.disabled() { continue; }
+    for i in 0..NUM_PATCHES {
+        let addr = if let DescriptorState::Resolved(a) = desc_state[i] { a } else { continue; };
 
         unsafe {
-            match descriptor {
-                Descriptor::Patch { hook, sig, .. } => {
+            match &patches[i].object {
+                DescriptorObject::Patch { hook, sig, .. } => {
                     let hook_size = hook.patch_size();
-                    let ret_addr = res_addrs[i] + hook_size;
+                    let ret_addr = addr.addr() + hook_size;
 
                     // SAFETY: We will ensure our return address is valid by writing NOPS to any
                     //         bytes that are part of the patch and after the return address.
@@ -282,8 +320,8 @@ pub fn apply<const NUM_PATCHES: usize>(
                     }
 
                     // SAFETY: We have matched signatures to ensure our patch is valid.
-                    use_region(res_addrs[i], sig.len(), || {
-                        if let Some(asm_hook) = hook.get_install_asm(res_addrs[i]).unwrap() {
+                    use_region(addr.addr(), sig.len(), || {
+                        if let Some(asm_hook) = hook.get_install_asm(addr.addr()).unwrap() {
                                 core::ptr::copy(asm_hook.buf.as_ptr(), asm_hook.addr as *mut u8,
                                                 asm_hook.len);
                         }
@@ -292,13 +330,12 @@ pub fn apply<const NUM_PATCHES: usize>(
                     });
                 },
 
-                Descriptor::Function { result, .. } | Descriptor::Object { result, .. } => {
+                DescriptorObject::Function(result) | DescriptorObject::Global(result) => {
                     // SAFETY: The version DB ensures that we have the write object for
                     //         the requested ID.
-                    *(result.as_ref().get()) = res_addrs[i];
+                    *(result.as_ref().get()) = addr.addr();
                 }
             }
-
         }
     }
 
@@ -354,35 +391,20 @@ pub fn flatten_patch_groups<const N: usize>(
 }
 
 impl GameLocation {
-    /// Finds the game address specified by this location.
-    fn find(
-        &self,
-        db: &VersionDb
-    ) -> FindResult {
-        let (id, offset) = self.get()?;
-        if let Ok(ra) = db.find_addr_by_id(id) {
-            Ok(ra + offset)
-        } else {
-            Err(DescriptorError::Missing)
-        }
-    }
-
-    /// Gets the address independent location, if it is compatible with the running game version.
+    /// Gets the id/offset for the running version of skyrim, if it is available.
     fn get(
         &self
-    ) -> Result<(usize, usize), DescriptorError> {
+    ) -> Result<(usize, usize), ()> {
         let is_se = version::current_runtime() <= version::RUNTIME_VERSION_1_5_97;
-        let id = match self {
-            Self::Base { se, ae } => if is_se { Some((*se, 0)) } else { Some((*ae, 0)) },
-            Self::Se { id, offset } => if is_se { Some((*id, *offset)) } else { None },
-            Self::Ae { id, offset } => if is_se { None } else { Some((*id, *offset)) },
-            Self::All { id_se, offset_se, id_ae, offset_ae } => if is_se {
-                Some((*id_se, *offset_se))
-            } else {
-                Some((*id_ae, *offset_ae))
-            }
-        };
-        id.ok_or(DescriptorError::IncompatibleGameVersion)
+        match *self {
+            Self::Base { se, .. }               if is_se  => Ok((se, 0)),
+            Self::Base { ae, .. }               if !is_se => Ok((ae, 0)),
+            Self::Se   { id, offset }           if is_se  => Ok((id, offset)),
+            Self::Ae   { id, offset }           if !is_se => Ok((id, offset)),
+            Self::All  { id_se, offset_se, .. } if is_se  => Ok((id_se, offset_se)),
+            Self::All  { id_ae, offset_ae, .. } if !is_se => Ok((id_ae, offset_ae)),
+            _                                             => Err(())
+        }
     }
 }
 
@@ -463,104 +485,15 @@ impl Hook {
     }
 }
 
-impl Descriptor {
-    /// Finds the address and verifies its signature, if applicable.
-    fn find(
-        &self,
-        db: &VersionDb
-    ) -> FindResult {
-        let res = attempt! {{
-            match self {
-                Self::Object { loc, .. } => loc.find(db),
-                Self::Function { loc, .. } => loc.find(db),
-                Self::Patch { enabled, loc, sig, hook, .. } => {
-                    assert!(hook.patch_size() <= sig.len());
-
-                    // Incompatible game version needs to take priority, or we'll try to report on
-                    // a patch that should be invisible.
-                    if !loc.get().is_ok() {
-                        return Err(DescriptorError::IncompatibleGameVersion);
-                    }
-
-                    if !enabled() {
-                        return Err(DescriptorError::Disabled);
-                    }
-
-                    let addr = loc.find(db)?;
-                    // SAFETY: We know addr is in the skyrim binary, since it came from the db.
-                    unsafe { sig.check(addr.addr())?; }
-                    Ok(addr)
-                }
-            }
-        }};
-
-        match &res {
-            Ok(addr) => {
-                skse_message!(
-                    "[SUCCESS] {} is at offset {:#x}",
-                    self,
-                    addr.offset()
-                );
-            },
-            Err(DescriptorError::Disabled) => {
-                skse_message!("[SKIPPED] {} is disabled", self);
-            },
-            Err(DescriptorError::Missing) => {
-                skse_message!("[FAILURE] {} was not in the version database!", self);
-            },
-            Err(DescriptorError::Mismatch(sig, bsig)) => {
-                skse_message!(
-                    "[FAILURE] {} at offset {:#x} did not match the expected code signature!",
-                    self,
-                    bsig.addr.offset()
-                );
-                skse_message!("\\------> [EXPECTED] {}", sig);
-                skse_message!(" \\-----> [FOUND...] {}", bsig);
-            },
-            Err(DescriptorError::IncompatibleGameVersion) => (), // Invalid, so we ignore it.
-        }
-
-        return res;
-    }
-
-    /// Creates a patch result for the descriptor, if the descriptor is a patch.
-    fn patch_result(
-        &self,
-        addr: RelocAddr
-    ) -> Option<PatchResult> {
-        match self {
-            Self::Patch { name, hook, conflicts, .. } => {
-                Some(PatchResult {
-                    name: *name,
-                    hook: hook.clone(),
-                    conflicts: conflicts.unwrap_or("None"),
-                    loc: addr
-                })
-            },
-            _ => None
-        }
-    }
-
-    /// Checks if the given patch is disabled.
-    fn disabled(
-        &self
-    ) -> bool {
-        match self {
-            Self::Patch { enabled, loc, .. } => !enabled() || !loc.get().is_ok(),
-            Self::Function { loc, .. } | Self::Object { loc, .. } => !loc.get().is_ok()
-        }
-    }
-}
-
 impl core::fmt::Display for Descriptor {
     fn fmt(
         &self,
         f: &mut core::fmt::Formatter<'_>
     ) -> Result<(), core::fmt::Error> {
-        match self {
-            Self::Object { name, loc, .. }   => write!(f, "Object {} {}", name, loc),
-            Self::Function { name, loc, .. } => write!(f, "Function {} {}", name, loc),
-            Self::Patch { name, loc, .. }    => write!(f, "Patch {} {}", name, loc)
+        match self.object {
+            DescriptorObject::Global { .. }   => write!(f, "Global {} {}", self.name, self.loc),
+            DescriptorObject::Function { .. } => write!(f, "Function {} {}", self.name, self.loc),
+            DescriptorObject::Patch { .. }    => write!(f, "Patch {} {}", self.name, self.loc)
         }
     }
 }
@@ -663,7 +596,7 @@ impl Signature {
     unsafe fn check(
         &self,
         a: usize
-    ) -> Result<(), DescriptorError> {
+    ) -> Result<(), BinarySig> {
         assert!(a != 0);
         if self.len() == 0 { return Ok(()); }
 
@@ -677,10 +610,10 @@ impl Signature {
         });
 
         if diff > 0 {
-            Err(DescriptorError::Mismatch(*self, BinarySig {
+            Err(BinarySig {
                 addr: RelocAddr::from_addr(a),
                 len: self.len()
-            }))
+            })
         } else {
             Ok(())
         }
@@ -736,6 +669,29 @@ impl core::fmt::Display for BinarySig {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Assembly code generation
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// The maximum patch size. Chosen as our largest patch size is 16 (call absolute).
+const MAX_ASM_HOOK_SIZE: usize = 12;
+
+/// Represents an assembled x86-64 patch to be written.
+struct AssemblyHook {
+    addr: usize,
+    buf: [u8; MAX_ASM_HOOK_SIZE],
+    len: usize
+}
+
+/// Encodes the addressing mode of an instruction, or its opcode.
+enum Encoding {
+    CallRelative,
+    JumpRelative,
+    CallReg(Register),
+    JumpReg(Register),
+    MoveImmQReg(Register),
+    RelativeD(usize),
+    AbsoluteQ(u64)
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 impl AssemblyHook {

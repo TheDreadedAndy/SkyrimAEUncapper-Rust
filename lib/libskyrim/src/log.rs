@@ -6,12 +6,11 @@
 //! @bug No known bugs.
 //!
 
-use core::fmt;
 use core::fmt::{Arguments, Write};
 use core::ffi::CStr;
 
 use cstdio::File;
-use core_util::{Later, RacyCell};
+use core_util::{Later, RacyCell, StringBuffer};
 use windows_sys::Win32::UI::WindowsAndMessaging::MessageBoxA;
 use windows_sys::Win32::Globalization::{WC_ERR_INVALID_CHARS, CP_UTF8, WideCharToMultiByte};
 use windows_sys::Win32::System::Com::CoTaskMemFree;
@@ -23,17 +22,6 @@ pub use windows_sys::Win32::UI::WindowsAndMessaging::{MB_ICONERROR, MB_ICONWARNI
 
 use crate::SKSEPlugin_Version;
 
-///
-/// The structure used to format information before writing it to the log file.
-/// We use this to avoid an allocation for each message.
-///
-/// The buffer is always ended with a null terminator.
-///
-struct LogBuf {
-    buf: [u8; Self::BUF_SIZE],
-    len: usize
-}
-
 // Enumeration to determine how an error will be presented to the user.
 #[doc(hidden)]
 pub enum LogType {
@@ -42,82 +30,15 @@ pub enum LogType {
     Both(u32)
 }
 
+/// The size of the string buffer for writing output to files. Sized to be large enough to hold the
+/// max amount of text most text editors can handle on one line.
+const BUF_SIZE: usize = 8192;
+
 /// The global file we log our output to.
 static LOG_FILE: Later<RacyCell<File>> = Later::new();
 
 /// The global log buffer used to print our output.
-static LOG_BUFFER: RacyCell<LogBuf> = RacyCell::new(LogBuf::new());
-
-impl LogBuf {
-    /// Large enough to contain any reasonably sized line in a log file.
-    const BUF_SIZE: usize = 8192;
-
-    /// Creates a new, empty, log buffer.
-    const fn new() -> Self {
-        Self {
-            buf: [0; Self::BUF_SIZE],
-            len: 0
-        }
-    }
-
-    /// Gets the underlying &[u16] in the buffer, with the null.
-    fn as_bytes_nul(
-        &self
-    ) -> &[u8] {
-        self.buf.split_at(self.len + 1).0
-    }
-
-    /// Formats the given arguments into the buffer, adding a newline.
-    fn formatln(
-        &mut self,
-        args: Arguments<'_>
-    ) -> Result<(), fmt::Error> {
-        fmt::write(self, args)?;
-        self.write_str("\n")?;
-        Ok(())
-    }
-
-    ///
-    /// Calls the given function, then updates the length of the buffer based on the null
-    /// terminator.
-    ///
-    /// The given function must null terminate any data it appends.
-    ///
-    unsafe fn write_ffi(
-        &mut self,
-        func: impl FnOnce(&mut [u8])
-    ) {
-        func(self.buf.split_at_mut(self.len).1);
-
-        while self.buf[self.len] != 0 {
-            self.len += 1;
-        }
-    }
-
-    /// Erases the contents of the buffer.
-    fn clear(
-        &mut self
-    ) {
-        self.buf[0] = 0;
-        self.len = 0;
-    }
-}
-
-impl fmt::Write for LogBuf {
-    fn write_str(
-        &mut self,
-        s: &str
-    ) -> Result<(), fmt::Error> {
-        if s.len() + self.len > Self::BUF_SIZE - 1 {
-            return Err(fmt::Error);
-        }
-
-        self.buf.split_at_mut(self.len).1.split_at_mut(s.len()).0.copy_from_slice(s.as_bytes());
-        self.len += s.len();
-        self.buf[self.len] = 0; // Always null terminate.
-        Ok(())
-    }
-}
+static LOG_BUFFER: RacyCell<StringBuffer<BUF_SIZE>> = RacyCell::new(StringBuffer::new());
 
 impl LogType {
     //
@@ -236,8 +157,8 @@ pub fn fatal(
         // SAFETY: This library is single threaded.
         if let Err(_) = (*LOG_BUFFER.get()).formatln(args) {
             (*LOG_BUFFER.get()).clear();
-            let _ = (*LOG_BUFFER.get()).write_fmt(
-                format_args!("The plugin encountered an unknown fatal error.\n")
+            let _ = (*LOG_BUFFER.get()).write_str(
+                "The plugin encountered an unknown fatal error.\n"
             );
         }
 

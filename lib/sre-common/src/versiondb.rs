@@ -6,8 +6,8 @@
 //!
 
 use core::ffi::CStr;
+use core::fmt::Write;
 use core::mem::size_of;
-use alloc::vec::Vec;
 
 use cstdio::{File, Seek};
 
@@ -22,17 +22,21 @@ pub struct DatabaseItem {
     pub addr : RelocAddr
 }
 
-/// A version database, which allows for offsets/ids to be searched for by each other.
-pub struct VersionDb {
-    by_id   : Vec<DatabaseItem>,
-    version : SkseVersion
+/// A file stream for iterating over the items in a version database.
+///
+/// Additionally contains the previous ID/offset and the pointer size of the database, which are
+/// necessary to correctly parse it.
+pub struct VersionDbStream {
+    file              : File,
+    prev_id           : usize,
+    prev_offset       : usize,
+    ptr_size          : usize,
+    remaining_entries : usize,
 }
 
-///
 /// An enumeration used to encode how the data in an address is stored in the database.
 ///
 /// This enumeration will be constructed directly from data read in from the database.
-///
 #[derive(Copy, Clone)]
 #[repr(u8)]
 #[allow(dead_code)] // Transmutes don't count as usage.
@@ -56,32 +60,37 @@ impl Unsigned for u64 {}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-impl VersionDb {
+impl VersionDbStream {
     /// Attempts to create a new version database, loading it with the specified version
     pub fn new(
         version: SkseVersion
     ) -> Self {
+        // Large enough to hold a path for any valid game version.
+        const PATH_SIZE: usize = 256;
+        let mut buf = core_util::StringBuffer::<PATH_SIZE>::new();
+
         //
         // Note that we hard-code the build number to 0, as Bethesda doesn't use it.
         //
         // The SKSE64 team uses it to denote which store the game was obtained from, so
         // we can't just pull it from our version structure.
         //
-        Self::new_from_path(&alloc::ffi::CString::new(alloc::format!(
+        buf.write_fmt(format_args!(
             "Data\\SKSE\\Plugins\\{}-{}-{}-{}-0.bin",
             if version < RUNTIME_VERSION_1_6_317 { "version" } else { "versionlib" },
             version.major(),
             version.minor(),
             version.build()
-        )).unwrap())
+        )).unwrap();
+
+        Self::new_from_path(buf.as_c_str().unwrap())
     }
 
     /// Creates a version database from the given path, setting the version based on the file.
     pub fn new_from_path(
         path: &CStr
     ) -> Self {
-        let     f     = &mut File::open(path, core_util::cstr!("rb")).unwrap();
-        let mut by_id = Vec::new();
+        let mut f = File::open(path, core_util::cstr!("rb")).unwrap();
 
         //
         // Parses the header of a version database file.
@@ -95,87 +104,20 @@ impl VersionDb {
         // - After that, there is a u32 count for the number of addresses in the database.
         // - The remainder of the database is the addresses contained within it.
         //
-        let format = Self::read::<u32>(f); // File format.
+        let format = Self::read::<u32>(&mut f); // File format.
         assert!((format == 1) || (format == 2));
-        let version = SkseVersion::new(
-            Self::read::<u32>(f), // major
-            Self::read::<u32>(f), // minor
-            Self::read::<u32>(f), // build/revision
-            Self::read::<u32>(f)  // sub
-        );
-        let mod_len = Self::read::<u32>(f); // Module name length
+
+        f.seek(Seek::Current((size_of::<u32>() * 4) as i64)).unwrap();
+
+        let mod_len = Self::read::<u32>(&mut f); // Module name length
         f.seek(Seek::Current(mod_len as i64)).unwrap();
-        let (ptr_size, addr_count) = (Self::read::<u32>(f) as usize, Self::read::<u32>(f));
 
-        // The previous ID/offset are necessary to parse the database, and are initialized to zero.
-        let (mut pid, mut poffset) = (0, 0);
-        for _ in 0..addr_count {
-            //
-            // Parses an address in the version database.
-            //
-            // Each address seems to be encoded as follows:
-            // - First, is a control byte encoding two 3-bit values denoting an item type.
-            //   The msb of the control byte determines if offset calculations should use
-            //   the previous offset (0) or the poffset/ptr_size (1). We call this modified
-            //   offset "tpoffset".
-            // - Then, the encoded data. Relative control encoding is applied to pid/tpoffset.
-            //   If the high byte of the control bit was set, the resulting offset is later
-            //   multiplied by pointer size (equiv, each delta is multiplied by pointer size and
-            //   we can just use poffset).
-            //
-            let control = Self::read::<u8>(f);
-            assert!(control & 0x08 == 0);
+        let (ptr_size, addr_count) = (
+            Self::read::<u32>(&mut f) as usize,
+            Self::read::<u32>(&mut f) as usize
+        );
 
-            // SAFETY: This is the defined encoding of the control byte.
-            //         The enum is sized to always be in range.
-            let (id_enc, offset_enc) = unsafe {(
-                core::mem::transmute::<u8, AddrEncoding>(control & 0x07),
-                core::mem::transmute::<u8, AddrEncoding>((control >> 4) & 0x07)
-            )};
-
-            let id     = id_enc.read(f, pid);
-            let offset = if (control & 0x80) != 0 /* is the offset by pointer? */ {
-                offset_enc.read(f, poffset / ptr_size) * ptr_size
-            } else {
-                offset_enc.read(f, poffset)
-            };
-
-            let index = by_id.binary_search_by(|lhs: &DatabaseItem| lhs.id.cmp(&id)).unwrap_err();
-            by_id.insert(index, DatabaseItem {
-                id,
-                addr: RelocAddr::from_offset(offset)
-            });
-
-            pid = id;
-            poffset = offset;
-        }
-
-        Self { by_id, version }
-    }
-
-    /// Gets the version that is currently loaded into the database.
-    pub fn loaded_version(
-        &self
-    ) -> SkseVersion {
-        self.version
-    }
-
-    /// Attempts to find the offset of the given address independent id.
-    pub fn find_addr_by_id(
-        &self,
-        id: usize
-    ) -> Result<RelocAddr, ()> {
-        match self.by_id.binary_search_by(|lhs| lhs.id.cmp(&id)) {
-            Ok(index) => Ok(self.by_id[index].addr),
-            Err(_)    => Err(())
-        }
-    }
-
-    /// Returns a reference to the underlying database.
-    pub fn as_vec(
-        &self
-    ) -> &Vec<DatabaseItem> {
-        &self.by_id
+        Self { file: f, ptr_size, prev_id: 0, prev_offset: 0, remaining_entries: addr_count }
     }
 
     /// Read T from file.
@@ -189,6 +131,51 @@ impl VersionDb {
     }
 }
 
+impl Iterator for VersionDbStream {
+    type Item = DatabaseItem;
+
+    fn next(
+        &mut self
+    ) -> Option<Self::Item> {
+        if self.remaining_entries == 0 {
+            return None;
+        }
+        self.remaining_entries -= 1;
+
+        //
+        // Parses an address in the version database.
+        //
+        // Each address seems to be encoded as follows:
+        // - First, is a control byte encoding two 3-bit values denoting an item type.
+        //   The msb of the control byte determines if offset calculations should use
+        //   the previous offset (0) or the poffset/ptr_size (1). We call this modified
+        //   offset "tpoffset".
+        // - Then, the encoded data. Relative control encoding is applied to pid/tpoffset.
+        //   If the high byte of the control bit was set, the resulting offset is later
+        //   multiplied by pointer size (equiv, each delta is multiplied by pointer size and
+        //   we can just use poffset).
+        //
+        let control = Self::read::<u8>(&mut self.file);
+        assert!(control & 0x08 == 0);
+
+        // SAFETY: This is the defined encoding of the control byte.
+        //         The enum is sized to always be in range.
+        let (id_enc, offset_enc) = unsafe {(
+            core::mem::transmute::<u8, AddrEncoding>(control & 0x07),
+            core::mem::transmute::<u8, AddrEncoding>((control >> 4) & 0x07)
+        )};
+
+        self.prev_id     = id_enc.read(&mut self.file, self.prev_id);
+        self.prev_offset = if (control & 0x80) != 0 /* is the offset by pointer? */ {
+            offset_enc.read(&mut self.file, self.prev_offset / self.ptr_size) * self.ptr_size
+        } else {
+            offset_enc.read(&mut self.file, self.prev_offset)
+        };
+
+        Some(DatabaseItem { id: self.prev_id, addr: RelocAddr::from_offset(self.prev_offset) })
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 impl AddrEncoding {
@@ -199,14 +186,14 @@ impl AddrEncoding {
         prev: usize
     ) -> usize {
         match self {
-            Self::Raw64      => VersionDb::read::<u64>(f) as usize,
-            Self::Raw32      => VersionDb::read::<u32>(f) as usize,
-            Self::Raw16      => VersionDb::read::<u16>(f) as usize,
+            Self::Raw64      => VersionDbStream::read::<u64>(f) as usize,
+            Self::Raw32      => VersionDbStream::read::<u32>(f) as usize,
+            Self::Raw16      => VersionDbStream::read::<u16>(f) as usize,
             Self::Inc        => prev + 1,
-            Self::PosDelta8  => prev + (VersionDb::read::<u8>(f) as usize),
-            Self::NegDelta8  => prev - (VersionDb::read::<u8>(f) as usize),
-            Self::PosDelta16 => prev + (VersionDb::read::<u16>(f) as usize),
-            Self::NegDelta16 => prev - (VersionDb::read::<u16>(f) as usize)
+            Self::PosDelta8  => prev + (VersionDbStream::read::<u8>(f) as usize),
+            Self::NegDelta8  => prev - (VersionDbStream::read::<u8>(f) as usize),
+            Self::PosDelta16 => prev + (VersionDbStream::read::<u16>(f) as usize),
+            Self::NegDelta16 => prev - (VersionDbStream::read::<u16>(f) as usize)
         }
     }
 }

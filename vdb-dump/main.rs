@@ -5,6 +5,8 @@
 //! @bug No known bugs.
 //!
 
+use sre_common::versiondb::{VersionDbStream, DatabaseItem};
+
 fn main() {
     let mut args: Vec<String> = std::env::args().collect();
     assert!(args.len() == 2);
@@ -13,10 +15,12 @@ fn main() {
     args[1] += "\0";
 
     println!("|----ID----|--OFFSET--|");
-    let db = sre_common::versiondb::VersionDb::new_from_path(
+    let mut db: Vec<DatabaseItem> = VersionDbStream::new_from_path(
         std::ffi::CStr::from_bytes_until_nul(args[1].as_bytes()).unwrap()
-    );
-    for sre_common::versiondb::DatabaseItem { id, addr } in db.as_vec().iter() {
+    ).collect();
+    db.sort_by(|lhs, rhs| lhs.id.cmp(&rhs.id));
+
+    for DatabaseItem { id, addr } in db.iter() {
         println!("| {:08} | {:08x} |", id, addr.offset());
     }
     println!("|----------|----------|");
