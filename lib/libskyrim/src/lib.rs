@@ -88,8 +88,14 @@ pub unsafe extern "system" fn SKSEPlugin_Query(
     if !init_skse(skse) { return false; }
     assert!(!info.is_null());
 
+    // Give SKSE our plugin info.
+    *info = PluginInfo {
+        info_version: PluginInfo::VERSION,
+        name: SKSEPlugin_Version.name.as_ptr(),
+        version: Some(SKSEPlugin_Version.plugin_version)
+    };
+
     // If this is ever false, then I will have several questions.
-    *info = PluginInfo::from_ae(&SKSEPlugin_Version);
     if (*skse).runtime_version.unwrap() <= RUNTIME_VERSION_1_5_97 {
         log::skse_message!("Plugin query complete, marking as compatible.");
         return true;

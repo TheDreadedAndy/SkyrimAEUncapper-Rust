@@ -390,6 +390,8 @@ pub fn flatten_patch_groups<const N: usize>(
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 impl GameLocation {
     /// Gets the id/offset for the running version of skyrim, if it is available.
     fn get(
@@ -544,7 +546,7 @@ impl PatchResult {
 
 impl PatchSet {
     /// Verifies that the given patch set has correctly been installed.
-    pub fn verify(
+    fn verify(
         &self
     ) {
         let mut fails = 0;

@@ -7,8 +7,4 @@
 #![no_std]
 
 pub mod versiondb;
-pub mod skse64 {
-    pub mod version;
-    pub mod plugin_api;
-    pub mod reloc;
-}
+pub mod skse64;

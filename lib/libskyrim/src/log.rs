@@ -37,9 +37,6 @@ const BUF_SIZE: usize = 8192;
 /// The global file we log our output to.
 static LOG_FILE: Later<RacyCell<File>> = Later::new();
 
-/// The global log buffer used to print our output.
-static LOG_BUFFER: RacyCell<StringBuffer<BUF_SIZE>> = RacyCell::new(StringBuffer::new());
-
 impl LogType {
     //
     // Attempts to write a message to the requested log types.
@@ -89,11 +86,12 @@ impl LogType {
 
 /// Opens a log file under the plugins name in the SKSE log directory.
 pub (in crate) fn open() {
+    let mut buf = StringBuffer::<BUF_SIZE>::new();
+
     unsafe {
         // SAFETY: Single threaded library, protected from double init by skse.
         // SAFETY: The buffer is empty, and its size is larger than MAX_PATH (260).
-        (*LOG_BUFFER.get()).clear();
-        (*LOG_BUFFER.get()).write_ffi(|buf| {
+        buf.write_ffi(|buf| {
             assert!(buf.len() > MAX_PATH as usize);
             let mut path: windows_sys::core::PWSTR = core::ptr::null_mut();
 
@@ -110,20 +108,20 @@ pub (in crate) fn open() {
             ) > 0);
             CoTaskMemFree(path.cast());
         });
+    }
 
-        (&mut *LOG_BUFFER.get()).write_fmt(format_args!(
-            "\\My Games\\Skyrim Special Edition\\SKSE\\{}.log",
-            CStr::from_ptr(SKSEPlugin_Version.name.as_ptr()).to_str().unwrap()
-        )).unwrap();
+    buf.write_fmt(format_args!(
+        "\\My Games\\Skyrim Special Edition\\SKSE\\{}.log",
+        unsafe { CStr::from_ptr(SKSEPlugin_Version.name.as_ptr()).to_str().unwrap() }
+    )).unwrap();
 
-        LOG_FILE.init(RacyCell::new(File::open(
-            CStr::from_bytes_until_nul((*LOG_BUFFER.get()).as_bytes_nul()).unwrap(),
-            core_util::cstr!("w+b")
-        ).unwrap()));
+    LOG_FILE.init(RacyCell::new(File::open(
+        CStr::from_bytes_with_nul(buf.as_bytes_nul()).unwrap(),
+        core_util::cstr!("w+b")
+    ).unwrap()));
 
-        // Clear our file path.
-        (*LOG_BUFFER.get()).clear();
-
+    unsafe {
+        // SAFETY: Single threaded library, protected from double init by skse.
         // Add the BOM to the file to mark it as UTF-8.
         (*LOG_FILE.get()).write(&cstdio::UTF8_BOM).unwrap();
     }
@@ -135,11 +133,11 @@ pub fn write(
     log_type: LogType,
     args: Arguments<'_>
 ) {
+    let mut buf = StringBuffer::<BUF_SIZE>::new();
+    buf.formatln(args).unwrap();
     unsafe {
         // SAFETY: This library is single threaded.
-        (*LOG_BUFFER.get()).formatln(args).unwrap();
-        log_type.log((*LOG_BUFFER.get()).as_bytes_nul()).unwrap();
-        (*LOG_BUFFER.get()).clear();
+        log_type.log(buf.as_bytes_nul()).unwrap();
     }
 }
 
@@ -153,17 +151,15 @@ pub fn fatal(
     log_type: LogType,
     args: Arguments<'_>
 ) {
+    let mut buf = StringBuffer::<BUF_SIZE>::new();
+    if let Err(_) = buf.formatln(args) {
+        buf.clear();
+        let _ = buf.write_str("The plugin encountered an unknown fatal error.\n");
+    }
+
     unsafe {
         // SAFETY: This library is single threaded.
-        if let Err(_) = (*LOG_BUFFER.get()).formatln(args) {
-            (*LOG_BUFFER.get()).clear();
-            let _ = (*LOG_BUFFER.get()).write_str(
-                "The plugin encountered an unknown fatal error.\n"
-            );
-        }
-
-        let _ = log_type.log((*LOG_BUFFER.get()).as_bytes_nul());
-        (*LOG_BUFFER.get()).clear();
+        let _ = log_type.log(buf.as_bytes_nul());
     }
 }
 
