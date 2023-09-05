@@ -382,6 +382,8 @@ static player_avo_mod_base_entry: GameRef<
 static player_avo_mod_current_entry: GameRef<
     unsafe extern "system-unwind" fn(*mut ActorValueOwner, u32, c_int, f32)
 > = GameRef::new();
+#[no_mangle]
+static libc_powf_entry: GameRef<unsafe extern "system-unwind" fn(f32, f32) -> f32> = GameRef::new();
 
 core_util::disarray! {
     ///
@@ -460,6 +462,12 @@ core_util::disarray! {
             name: "PlayerAVOModCurrent",
             loc: GameLocation::Base { se: 37522, ae: 38467 },
             object: DescriptorObject::Function(player_avo_mod_current_entry.inner())
+        },
+
+        Descriptor {
+            name: "powf",
+            loc: GameLocation::Base { se: 102262, ae: 109717 },
+            object: DescriptorObject::Function(libc_powf_entry.inner())
         }
     ];
 }
@@ -488,4 +496,16 @@ pub unsafe fn avo_get_current_unchecked(
     } else {
         player_avo_get_current_original_wrapper_ae(av, attr)
     }
+}
+
+/// Calls the version of powf that was linked into skyrim.
+///
+/// We use the games version, since no_std environments don't include the function. We could link in
+/// libm, but that would add an additional dependency for a function that we know the game is always
+/// using.
+pub fn powf(
+    base: f32,
+    exp: f32
+) -> f32 {
+    unsafe { (libc_powf_entry.get())(base, exp) }
 }
