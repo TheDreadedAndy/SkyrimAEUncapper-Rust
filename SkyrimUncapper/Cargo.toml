@@ -11,7 +11,6 @@ crate-type = ["cdylib"]
 core-util = { path = "../lib/core-util" }
 deflate   = { path = "../lib/deflate"   }
 libskyrim = { path = "../lib/libskyrim" }
-libm      = "0.2.7"
 
 [build-dependencies]
 winres         = "0.1.12"

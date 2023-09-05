@@ -792,18 +792,18 @@ extern "system" fn calculate_charge_points_per_use_hook(
     );
     let enchanting_level = cap.min(PlayerCharacter::get_current(ActorAttribute::Enchanting));
 
-    let base = cost_mult * libm::powf(base_points, cost_exponent);
+    let base = cost_mult * core_util::powf(base_points, cost_exponent);
     if SETTINGS.enchant.use_linear_charge.get() {
         // Linearly scale between current min/max of charge points. Max scales with skills/perks,
         // so this isn't perfectly linear. It still smooths the EQ a lot, though.
-        let max_level_scale = libm::powf(cap * cost_base, cost_scale);
+        let max_level_scale = core_util::powf(cap * cost_base, cost_scale);
         let slope = (max_charge * max_level_scale) / (base * (1.0 - max_level_scale) * cap);
         let intercept = max_charge / base;
         let linear_charge = slope * enchanting_level + intercept;
         max_charge / linear_charge
     } else {
         // Original game equation.
-        base * (1.0 - libm::powf(enchanting_level * cost_base, cost_scale))
+        base * (1.0 - core_util::powf(enchanting_level * cost_base, cost_scale))
     }
 }
 

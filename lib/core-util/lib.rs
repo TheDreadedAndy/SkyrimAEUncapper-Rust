@@ -205,6 +205,115 @@ impl<const SIZE: usize> fmt::Write for StringBuffer<SIZE> {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Platform independent math
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Raises the float x to the yth power.
+///
+/// For whatever reason, this isn't available in a no_std environment unless you pull in libm.
+pub fn powf(
+    x: f32,
+    y: f32
+) -> f32 {
+    // For any real numbers x and y, it is true that x^y = 2^(ylog2(x)).
+    pow2(y * log2(x))
+}
+
+/// Raises 2 to the xth power.
+///
+/// Explanation of calculation:
+///   Given a real number x, we have that 2^x = 2^floor(x) * 2^(x - floor(x)). Note that for
+///   floating point numbers, we can easily acquire 2^floor(x), and so we are only really interested
+///   in 2^(x - floor(x)).
+///
+///   2^(x - floor(x)) can be approximated accurately since its domain is in the range [0, 1], which
+///   is small. This can be approximated using the taylor series expansion for e^x, and the
+///   observation that 2^x = e^(xln(2)), and so 2^x is approximately:
+///     f(x) = 1 + x * ln(2)/1! + x^2 * (ln(2)^2)/2! + x^3 * (ln(2)^3)/3! + ... ~= 2^x
+///
+///   Note that our approximation will be more accurate over the domain closest to zero, and so we
+///   can optimize our accuracy vs number of terms trade off by abusing the fact that
+///   (2^(x/n))^n = 2^x. Using this, we achieve "good" accuracy (for f32) using a third degree
+///   taylor expansion taken to the 8th power over the domain [0, 1/8].
+///
+///   And so our final calculation is:
+///     pow2(x) = 2^floor(x) * f((x - floor(x))/8)^8
+pub fn pow2(
+    x: f32
+) -> f32 {
+    // Deal with the negative exponent notation.
+    if x.is_sign_negative() {
+        return pow2(-x).recip();
+    }
+
+    // Precalculate our coefficients, since we don't believe in division.
+    const TAYLOR_COEFF1 : f32 = 0.69314718056;
+    const TAYLOR_COEFF2 : f32 = 0.24022650695;
+    const TAYLOR_COEFF3 : f32 = 0.05550410866;
+    const ONE_EIGHTH    : f32 = 0.125;
+
+    // Calculate the approximation over 2^x for the range [0, 1]
+    let x2 = (x - (x as u32 as f32)) * ONE_EIGHTH;
+    let fx = 1.0 + x2 * TAYLOR_COEFF1 + x2 * x2 * TAYLOR_COEFF2 + x2 * x2 * x2 * TAYLOR_COEFF3;
+    let approx_pow2 = fx * fx * fx * fx * fx * fx * fx * fx;
+
+    // Calculate 2^floor(x) by moving floor(x) into the mantissa of a new float.
+    let floor_pow2 = unsafe {
+        core::mem::transmute::<u32, f32>((core::cmp::max(x as u32, 127) + 127) << 23)
+    };
+
+    return floor_pow2 * approx_pow2;
+}
+
+/// Calculates the floating point log base 2 of x.
+///
+/// Explanation of calculation:
+///   Given that the derivative of ln(x) is 1/x and ln(1) = 0, we know that:
+///     integrate(1, x) 1/u du = ln(x)
+///   It is also true that given a some known log value, n, which is equal to y + z:
+///     ln(n) = ln(y) + integrate(n - z, n) 1/u du.
+///   as the above follows from the fundamental theorem of calculus.
+///
+///   Note that, from the change in base formula:
+///     log2(x) = ln(x) * (1 / ln(2))
+///
+///   Using the above, we can get an approximation for log2(x) that is reasonable for f32s.
+///   Note that:
+///     log2(x) = log2(floor(x)) + (1 / ln(2)) * integrate(floor(x), x) 1/u du
+///   Getting log2(floor(x)) is easy for floating point numbers, as it is simply the mantissa. Since
+///   the derivative of ln(x) is simple and smooth, we can use simpsons rule to get a reasonable
+///   approximation for it quickly:
+///     f(x) = ((x - floor(x))/(8ln(2))) * (1/x + 1/floor(x) + 9/(x + 2floor(x)) + 9/(2x + floor(x))
+///          ~= integrate(floor(x), x) 1/u du
+///   And so our final result is:
+///     log2(x) = log2(floor(x)) + f(x)
+///
+///   Note that this equation only works on values >= 1. Values in the range [0, 1) must be
+///   calculated using:
+///     log2(x) = -log2(1/x)
+///   And negative values are absoluted.
+pub fn log2(
+    x: f32
+) -> f32 {
+    if x.is_sign_negative() {
+        return log2(-x);
+    } else if x < 1.0 {
+        return -log2(x.recip());
+    }
+
+    // The coefficient in front of f(x). Equal to 1/(8 * ln(2))
+    const SIMPSON_COEFF: f32 = 0.18033688011;
+
+    let floor_log2 = unsafe { (core::mem::transmute::<f32, u32>(x) >> 23) & 0xFF } as f32 - 127.0;
+
+    let floor_x = x as u32 as f32;
+    let fx = (x - floor_x) * SIMPSON_COEFF
+                           * (x.recip() + floor_x.recip() + 9.0 * (x + 2.0 * floor_x).recip()
+                                                          + 9.0 * (2.0 * x + floor_x).recip());
+
+    return fx + floor_log2;
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Cells
