@@ -239,6 +239,7 @@ pub fn apply<const NUM_PATCHES: usize>(
                 if id != desc_id { continue; }
                 unresolved -= 1;
 
+                let addr = addr + desc_offset;
                 if let DescriptorObject::Patch { hook, sig, conflicts, .. } = &patches[i].object {
                     // SAFETY: We know addr is in the skyrim binary, since it came from the db.
                     if let Err(mismatch) = unsafe { sig.check(addr.addr()) } {
@@ -254,7 +255,7 @@ pub fn apply<const NUM_PATCHES: usize>(
                         loc: addr
                     });
                 }
-                desc_state[i] = DescriptorState::Resolved(addr + desc_offset);
+                desc_state[i] = DescriptorState::Resolved(addr);
             }
         }
 
