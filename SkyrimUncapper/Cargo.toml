@@ -13,4 +13,3 @@ libskyrim = { path = "../lib/libskyrim" }
 
 [build-dependencies]
 winres         = "0.1.12"
-embed-resource = "1.8.0"

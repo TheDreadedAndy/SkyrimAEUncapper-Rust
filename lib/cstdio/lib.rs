@@ -126,6 +126,7 @@ impl File {
         ret.resize(self.pos()? as usize, 0);
         self.seek(Seek::Set(0))?;
         self.read(ret.as_mut_slice())?;
+        ret.shrink_to_fit(); // Anything extra is wasted space now.
         return Ok(ret);
     }
 
@@ -156,7 +157,7 @@ impl File {
                             //         belong to our allocated vector.
                             core::slice::from_raw_parts(bytes.as_ptr().cast(), bytes.len() / 2)
                         }
-                    ).map_err(|_e| ())
+                    ).map_err(|_| ())
                 }
             }
         }

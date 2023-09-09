@@ -14,6 +14,11 @@ fn main() {
     // Terminate the arg string.
     args[1] += "\0";
 
+    // We can't use the VersionDb until after the relocation manager has some base address. The SKSE
+    // loading code in libskyrim normally handles this, but we're not a skyrim mod so we need to do
+    // it ourself.
+    sre_common::skse64::reloc::RelocAddr::init_manager(0x140000000);
+
     println!("|----ID----|--OFFSET--|");
     let mut db: Vec<DatabaseItem> = VersionDbStream::new_from_path(
         std::ffi::CStr::from_bytes_until_nul(args[1].as_bytes()).unwrap()

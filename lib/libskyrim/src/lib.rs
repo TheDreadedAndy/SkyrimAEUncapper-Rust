@@ -16,6 +16,10 @@ pub mod ini;
 // Needed for macros
 pub use core;
 
+use core::ptr;
+
+use windows_sys::Win32::System::LibraryLoader::GetModuleHandleA;
+
 use core_util::RacyCell;
 
 use crate::version::{RUNNING_GAME_VERSION, RUNNING_SKSE_VERSION, RUNTIME_VERSION_1_5_97};
@@ -51,7 +55,8 @@ unsafe fn init_skse(
         return ret;
     }
 
-    RelocAddr::init_manager();
+    // Initialize the relocation manager with the base address of skyrims binary.
+    RelocAddr::init_manager(unsafe { GetModuleHandleA(ptr::null_mut()) as usize });
 
     // Before we do anything else, we try and open up a log file.
     log::open();

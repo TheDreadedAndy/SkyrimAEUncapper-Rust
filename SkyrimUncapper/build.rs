@@ -1,7 +1,7 @@
 //!
 //! @file build.rs
 //! @author Andrew Spaulding (Kasplat)
-//! @brief Builds/links the ASM and resource file for the uncapper.
+//! @brief Builds/links the resource file for the uncapper.
 //! @bug No known bugs.
 //!
 
@@ -16,7 +16,6 @@ fn main() {
 
     // Embed resource information.
     let mut res = winres::WindowsResource::new();
-    let resource_file = format!("{}/uncapper.rc", std::env::var("OUT_DIR").unwrap());
     res.set("CompanyName", RC_AUTHOR);
     res.set("FileDescription", RC_NAME);
     res.set("FileVersion", RC_VERSION);
@@ -25,11 +24,7 @@ fn main() {
     res.set("OriginalFilename", RC_FILE);
     res.set("ProductName", RC_NAME);
     res.set("ProductVersion", RC_VERSION);
-    res.write_resource_file(&resource_file).unwrap();
-
-    // Win-res can't cross compile, but embed-resource can. Thus, we use winres to generate
-    // the rc file and embed-resource to embed it. It do be like that sometimes.
-    embed_resource::compile(&resource_file);
+    res.compile().unwrap();
 
     // Generate git version information.
     let std::process::Output { stdout, .. } = std::process::Command::new("git").args(&[

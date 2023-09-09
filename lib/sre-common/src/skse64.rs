@@ -169,8 +169,6 @@ pub mod version {
 pub mod reloc {
     use core_util::Later;
 
-    use windows_sys::Win32::System::LibraryLoader::GetModuleHandleA;
-
     /// Holds a game address, which can be accessed by offset or address.
     #[repr(transparent)]
     #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
@@ -180,14 +178,18 @@ pub mod reloc {
     static BASE_ADDR: Later<usize> = Later::new();
 
     impl RelocAddr {
-        #[doc(hidden)]
-        pub fn init_manager() {
-            BASE_ADDR.init(unsafe { GetModuleHandleA(core::ptr::null_mut()) as usize });
+        /// Initializes the relocation manager with the given base address.
+        ///
+        /// This function may only be called once.
+        pub fn init_manager(
+            addr: usize
+        ) {
+            BASE_ADDR.init(addr);
         }
 
         /// Gets the base address of the skyrim binary.
         pub fn base() -> usize {
-            if BASE_ADDR.is_init() { *BASE_ADDR } else { 0x140000000 }
+            *BASE_ADDR
         }
 
         /// Creates a reloc addr from an offset.
