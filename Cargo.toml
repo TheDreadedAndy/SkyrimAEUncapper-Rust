@@ -3,7 +3,6 @@
 members = [
     "lib/core-util",
     "lib/cstdio",
-    "lib/deflate",
     "lib/sre-common",
     "lib/libskyrim",
     "vdb-dump",

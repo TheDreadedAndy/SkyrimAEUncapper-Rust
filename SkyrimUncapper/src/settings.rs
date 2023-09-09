@@ -20,7 +20,7 @@ use crate::skyrim::{ActorAttribute, SkillIterator, HungarianAttribute, SKILL_COU
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-const DEFAULT_INI_LZ: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/SkyrimUncapper.ini.lz"));
+const DEFAULT_INI: &'static str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/SkyrimUncapper.ini"));
 
 /// Manages the loading of a skill multiplier, which contains both a base and offset multiplier.
 #[derive(Default, Copy, Clone)]
@@ -99,10 +99,7 @@ pub fn init(
 ) {
     skse_message!("Loading config file: {}", String::from_utf8_lossy(path.to_bytes()));
 
-    let default_ini = Ini::from_str(unsafe {
-        // SAFETY: We know this file was given as UTF8 text when it was compressed.
-        &String::from_utf8_unchecked(deflate::decompress(DEFAULT_INI_LZ))
-    }).unwrap();
+    let default_ini = Ini::from_str(DEFAULT_INI).unwrap();
 
     // Read the configuration from the file.
     let ini = Ini::from_path(path);

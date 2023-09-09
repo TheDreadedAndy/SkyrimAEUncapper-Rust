@@ -5,10 +5,6 @@
 //! @bug No known bugs.
 //!
 
-use std::path::PathBuf;
-use std::fs::File;
-use std::io::Write;
-
 const RC_AUTHOR  : &str = "Kasplat";
 const RC_NAME    : &str = "Skyrim Uncapper AE";
 const RC_VERSION : &str = env!("CARGO_PKG_VERSION");
@@ -44,12 +40,4 @@ fn main() {
     ]).output().unwrap();
     let version = String::from_utf8(stdout).unwrap();
     println!("cargo:rustc-env=UNCAPPER_GIT_VERSION={}", version.trim());
-
-    // Create a compressed default INI file.
-    let comp_ini = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("SkyrimUncapper.ini.lz");
-    let mut f = File::create(&comp_ini).unwrap();
-    let base_file = include_str!("SkyrimUncapper.ini").as_bytes();
-    let compressed_file = deflate::compress(base_file);
-    f.write(compressed_file.as_slice()).unwrap();
-    assert!(base_file == deflate::decompress(&compressed_file));
 }
