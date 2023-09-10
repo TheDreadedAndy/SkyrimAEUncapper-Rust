@@ -374,8 +374,7 @@ core_util::disarray! {
                 offset_se: 0
             },
             object: DescriptorObject::Patch {
-                enabled: || SETTINGS.general.skill_formula_caps_en.get() &&
-                            SETTINGS.general.skill_formula_ui_fix_en.get(),
+                enabled: || SETTINGS.general.skill_formula_caps_en.get(),
                 conflicts: None,
                 hook: Hook::Jump12 {
                     entry: update_skill_list_wrapper as *const u8,

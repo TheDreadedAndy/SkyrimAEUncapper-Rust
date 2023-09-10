@@ -33,7 +33,6 @@ pub struct SkillMult {
 pub struct GeneralSettings {
     pub skill_caps_en           : IniField<bool>,
     pub skill_formula_caps_en   : IniField<bool>,
-    pub skill_formula_ui_fix_en : IniField<bool>,
     pub enchanting_patch_en     : IniField<bool>,
     pub skill_exp_mults_en      : IniField<bool>,
     pub level_exp_mults_en      : IniField<bool>,
@@ -150,12 +149,6 @@ impl Settings {
             ini,
             GEN_SEC,
             "bUseSkillFormulaCaps",
-            true
-        );
-        ret.general.skill_formula_ui_fix_en.read_ini_field(
-            ini,
-            GEN_SEC,
-            "bUseSkillFormulaCapsUIFix",
             true
         );
         ret.general.enchanting_patch_en.read_ini_field(ini, GEN_SEC, "bUseEnchanterCaps", true);

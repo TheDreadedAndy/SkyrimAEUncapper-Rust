@@ -222,6 +222,29 @@ unusable for some players) are in italics.
 \stopblock
 
 \startblock
+\noindent
+\textbf{2.2.1-beta}
+\begin{itemize}
+    \item Fixed an issue where the formula cap was applied to NPCs as well.
+    \item Rosolved the incompatibilty between the Custom Skills Framework and
+          the formula cap UI fix. Note that the legendary patch is still
+          incompatible with CSF.
+\end{itemize}
+\stopblock
+
+\startblock
+\noindent
+\textbf{2.2.1}
+\begin{itemize}
+    \item Stablized patches from 2.2.1 beta.
+    \item Fixed a long-standing issue which prevented the formula cap from
+          correctly applying for certain effects (e.g. one-handed damage,
+          spell cost)
+    \item Refactored code for simplicity. Moved to a "no\_std" environment.
+\end{itemize}
+\stopblock
+
+\startblock
 \section{Bug Reports}
 
 If you encounter an issue with the plugin, which may include strange game
@@ -372,19 +395,39 @@ Enables patches:
 \subsubsection{bUseSkillFormulaCaps = \textlangle true/false\textrangle}\hfill\\
 
 Enables the patch group which allows the formula cap for skills to be altered.
-Without this group, there is no formula cap.
+Without this group, the game will cap the formula in the default manner
+(e.g. it either wont or will cap at 100, depending on what it is).
 
 Enables patches:
 \begin{itemize}
     \item PlayerAVOGetCurrent
-    \item DisplayTrueSkillLevel
-    \item DisplayTrueSkillColor
+    \item (2.2.1 and above) CapMagickaCDR
+    \item (2.2.1-beta and above) UpdateSkillList
+    \item (2.2.0 and below) DisplayTrueSkillLevel
+    \item (2.2.0 and below) DisplayTrueSkillColor
 \end{itemize}
 \stopblock
 
 \startblock
 \subsubsection{bUseSkillFormulaCapsUIFix = \textlangle true/false\textrangle}\hfill\\
 
+Deprecated. Does nothing in versions 2.2.1 and above.
+
+In versions 2.2.0 and below, disabling these patches is necessary for the mod to
+load with the Custom Skills Framework, however it will also cause skill levels
+to display incorrectly in some menus.
+
+Note that this option does nothing if bUseSkillFormulaCaps is disabled.
+
+In 2.2.1-beta and below, this option controls the following patches:
+\begin{itemize}
+    \item (2.2.1-beta) UpdateSkillList
+    \item (2.2.0 and below) DisplayTrueSkillLevel
+    \item (2.2.0 and below) DisplayTrueSkillColor
+\end{itemize}
+\stopblock
+
+\startblock
 \subsubsection{bUseEnchanterCaps = \textlangle true/false\textrangle}\hfill\\
 
 \subsubsection{bUseSkillExpGainMults = \textlangle true/false\textrangle}\hfill\\
