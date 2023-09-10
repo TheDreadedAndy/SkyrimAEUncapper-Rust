@@ -7,4 +7,4 @@ edition = "2021"
 path = "lib.rs"
 
 [dependencies]
-libc = "0.2"
+core-util = { path = "../core-util" }

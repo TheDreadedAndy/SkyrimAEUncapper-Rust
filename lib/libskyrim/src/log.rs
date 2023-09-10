@@ -96,11 +96,15 @@ pub (in crate) fn open() {
             let mut path: windows_sys::core::PWSTR = core::ptr::null_mut();
 
             assert!(SHGetKnownFolderPath(&FOLDERID_Documents, 0, 0, &mut path) == S_OK);
+
+            let mut wchars: usize = 0;
+            while *path.add(wchars) != 0 { wchars += 1; }
+
             assert!(WideCharToMultiByte(
                 CP_UTF8,
                 WC_ERR_INVALID_CHARS,
                 path,
-                libc::wcslen(path.cast()).try_into().unwrap(), // Size in WCHARS
+                wchars.try_into().unwrap(),
                 buf.as_mut_ptr(),
                 buf.len().try_into().unwrap(), // Size in BYTES
                 core::ptr::null_mut(),

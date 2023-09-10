@@ -11,18 +11,31 @@
 extern crate alloc;
 
 use core::ptr::NonNull;
-use core::ffi::CStr;
+use core::ffi::{c_void, c_char, c_int, c_long, CStr};
 use core::mem::size_of;
 
 use alloc::vec::Vec;
 use alloc::string::String;
 
-use libc::{fopen, fread, fwrite, fseek, ferror, ftell, fflush, fclose, FILE};
-use libc::{SEEK_SET, SEEK_CUR, SEEK_END};
+core_util::abstract_type! {
+    /// The file type used by the C standard library. Used as an abstract type.
+    type FILE;
+}
 
-// Oddly, libc doesn't link in msvcrt. Only the std crate does.
+// C standard definitions from stdio.h.
+//
+// We also must link in msvcrt, so that these will actually be available.
 #[link(name = "msvcrt")]
-extern "C" {}
+extern "C" {
+    fn fopen(filename: *const c_char, mode: *const c_char) -> Option<NonNull<FILE>>;
+    fn fclose(stream: *mut FILE) -> c_int;
+    fn fread(ptr: *mut c_void, size: usize, count: usize, stream: *mut FILE) -> usize;
+    fn fwrite(ptr: *const c_void, size: usize, count: usize, stream: *mut FILE) -> usize;
+    fn fseek(stream: *mut FILE, offset: c_long, origin: c_int) -> c_int;
+    fn ftell(stream: *mut FILE) -> c_long;
+    fn ferror(stream: *mut FILE) -> c_int;
+    fn fflush(stream: *mut FILE) -> c_int;
+}
 
 /// A wrapper around a cstdio FILE pointer. Guaranteed to never be NULL.
 #[repr(transparent)]
@@ -45,7 +58,7 @@ impl File {
     ) -> Result<File, ()> {
         unsafe {
             // SAFETY: The user has passed us valid CStr types.
-            Ok(Self(NonNull::new(fopen(path.as_ptr(), mode.as_ptr())).ok_or(())?))
+            fopen(path.as_ptr(), mode.as_ptr()).map(|f| Self(f)).ok_or(())
         }
     }
 
@@ -82,6 +95,11 @@ impl File {
         &mut self,
         seek: Seek
     ) -> Result<(), ()> {
+        // These definitions come from the C standard library.
+        const SEEK_SET: c_int = 0;
+        const SEEK_CUR: c_int = 1;
+        const SEEK_END: c_int = 2;
+
         unsafe {
             // SAFETY: We have been provided a valid file and only use valid seek values.
             if 0 == match seek {
@@ -153,7 +171,7 @@ impl File {
                     let bytes = err.as_bytes();
                     String::from_utf16(
                         unsafe {
-                            // SAFETY: We know the pointer and length are valid, since they 
+                            // SAFETY: We know the pointer and length are valid, since they
                             //         belong to our allocated vector.
                             core::slice::from_raw_parts(bytes.as_ptr().cast(), bytes.len() / 2)
                         }

@@ -358,6 +358,10 @@ mod errors {
         fn stop_plugin() -> !;
     }
 
+    // C standard abort, for post-load panics.
+    #[link(name = "msvcrt")]
+    extern "C" { fn abort() -> !; }
+
     // Implement stop_plugin().
     core::arch::global_asm! {
         include_str!("stop_plugin.S"),
@@ -378,7 +382,7 @@ mod errors {
             // if they are thrown during the messaging phases. As such, we abort on panic if it
             // happens after the loading phase has finished.
             if *SKSE_LOADER_DONE.get() {
-                libc::abort();
+                abort();
             } else {
                 stop_plugin();
             }
