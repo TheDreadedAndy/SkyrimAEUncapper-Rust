@@ -153,7 +153,7 @@ impl File {
         self
     ) -> Result<String, ()> {
         let bytes = self.into_vec()?;
-        if bytes[0..UTF16LE_BOM.len()] == UTF16LE_BOM {
+        if bytes.len() >= UTF16LE_BOM.len() && bytes[0..UTF16LE_BOM.len()] == UTF16LE_BOM {
             Ok(String::from_utf16_lossy(
                 unsafe {
                     // SAFETY: We know the pointer and length are valid, since they belong to our
@@ -161,7 +161,7 @@ impl File {
                     core::slice::from_raw_parts(bytes.as_ptr().cast(), bytes.len() / 2)
                 }
             ))
-        } else if bytes[0..UTF8_BOM.len()] == UTF8_BOM {
+        } else if bytes.len() >= UTF8_BOM.len() && bytes[0..UTF8_BOM.len()] == UTF8_BOM {
             Ok(String::from(String::from_utf8_lossy(&bytes)))
         } else {
             // Assume its utf8. If that fails, try utf16. Give up if neither works.
