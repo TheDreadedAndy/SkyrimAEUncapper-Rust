@@ -113,11 +113,11 @@ impl Ini {
     }
 
     /// Gets a value in the INI from the given section/field pair.
-    pub fn get<T: FromStr>(
-        &self,
+    pub fn get<'a>(
+        &'a self,
         section: &str,
         field: &str
-    ) -> Option<T> {
+    ) -> Option<&'a str> {
         self.section(section).ok()?.field(field).ok()?.value()
     }
 
@@ -338,10 +338,10 @@ impl<'a> Field<'a> {
     }
 
     /// Attempts to read the value for the given field.
-    pub fn value<T: FromStr>(
+    pub fn value(
         &self
-    ) -> Option<T> {
-        self.meta.val.as_ref().and_then(|s| T::from_str(s).ok())
+    ) -> Option<&'a str> {
+        self.meta.val.as_ref().map(|s| s.as_str())
     }
 }
 
