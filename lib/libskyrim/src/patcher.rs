@@ -211,11 +211,12 @@ pub fn apply<const NUM_PATCHES: usize>(
     let mut unresolved : usize                          = 0;
 
     for (i, descriptor) in patches.iter().enumerate() {
-        desc_state[i] = if let Ok((id, offset)) = descriptor.loc.get() {
-            DescriptorState::Unresolved(id, offset)
+        if let Ok((id, offset)) = descriptor.loc.get() {
+            desc_state[i] = DescriptorState::Unresolved(id, offset);
         } else {
-            DescriptorState::Incompatible
-        };
+            desc_state[i] = DescriptorState::Incompatible;
+            continue;
+        }
 
         if let DescriptorObject::Patch { enabled, .. } = descriptor.object {
             desc_state[i] = if enabled() { desc_state[i] } else { DescriptorState::Disabled };
@@ -270,7 +271,6 @@ pub fn apply<const NUM_PATCHES: usize>(
                 skse_message!( "[SUCCESS] {} is at offset {:#x}", patches[i], addr.offset());
             },
             DescriptorState::Disabled => {
-                failed = true;
                 skse_message!("[SKIPPED] {} is disabled", patches[i]);
             },
             DescriptorState::Unresolved(..) => {
