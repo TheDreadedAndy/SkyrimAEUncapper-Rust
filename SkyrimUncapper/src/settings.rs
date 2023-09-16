@@ -6,7 +6,6 @@
 //! @bug No known bugs.
 //!
 
-use core::fmt::Debug;
 use core::str::FromStr;
 use core::ffi::CStr;
 use alloc::vec::Vec;
@@ -242,31 +241,6 @@ impl Settings {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-
-/// Allows for the optional loading of an offset multiplier.
-impl FromStr for SkillMult {
-    type Err = <f32 as FromStr>::Err;
-
-    fn from_str(
-        s: &str
-    ) -> Result<Self, Self::Err> {
-        if let Some(s) = s.split_once('/') {
-            // Since there is a mode symbol, the offset has been specified in some way.
-            if s.1.trim().is_empty() {
-                // We have been asked to duplicate the first number for both.
-                Ok(Self { base: f32::from_str(s.0)?, offset: f32::from_str(s.0)? })
-            } else {
-                // Both values were given.
-                Ok(Self { base: f32::from_str(s.0)?, offset: f32::from_str(s.1)? })
-            }
-        } else {
-            // Compat mode: Assume offset mult is 1.0 and parse as single float.
-            Ok(Self { base: f32::from_str(s)?, offset: 1.0 })
-        }
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
 // Ini reading traits
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -355,9 +329,7 @@ impl<T: Copy + Default> IniField<T> {
     }
 }
 
-impl<T: Copy + FromStr + Default> IniReadableField for IniField<T>
-    where <T as FromStr>::Err: Debug
-{
+impl<T: Copy + ParseField + Default> IniReadableField for IniField<T> {
     type Value = T;
     fn read_ini_field(
         &mut self,
@@ -366,7 +338,7 @@ impl<T: Copy + FromStr + Default> IniReadableField for IniField<T>
         name: &str,
         default: Self::Value
     ) {
-        let val = ini.get(section, name).unwrap_or_else(|| {
+        let val = ini.get(section, name).and_then(|v| T::parse(v).ok()).unwrap_or_else(|| {
             skse_message!("[WARNING] Failed to load INI value {}: {}", section, name);
             default
         });
@@ -375,9 +347,7 @@ impl<T: Copy + FromStr + Default> IniReadableField for IniField<T>
     }
 }
 
-impl<T: Copy + FromStr + Default + HungarianAttribute> IniReadableSkill for IniField<T>
-    where <T as FromStr>::Err: core::fmt::Debug
-{
+impl<T: Copy + ParseField + Default + HungarianAttribute> IniReadableSkill for IniField<T> {
     type Value = T;
     fn read_ini_skill(
         &mut self,
@@ -488,9 +458,7 @@ impl LeveledIniSection<f32> {
     }
 }
 
-impl<T: Copy + FromStr> IniReadableSection for LeveledIniSection<T>
-    where <T as FromStr>::Err: core::fmt::Debug
-{
+impl<T: Copy + ParseField> IniReadableSection for LeveledIniSection<T> {
     type Value = T;
     fn read_ini_section(
         &mut self,
@@ -500,19 +468,29 @@ impl<T: Copy + FromStr> IniReadableSection for LeveledIniSection<T>
     ) {
         if let Ok(sec) = ini.section(section) {
             for field in sec.fields() {
-                let level = if let Ok(l) = u32::from_str(field.name()) {
+                let level = if let Ok(l) = u32::parse(field.name()) {
                     l
                 } else {
                     skse_message!("[WARNING] Unable to convert {} to a u32; skipped", field.name());
                     continue;
                 };
 
-                let item = if let Some(i) = field.value() {
-                    i
-                } else {
+                let value = if let Some(i) = field.value() { i } else {
                     skse_message!(
-                        "[WARNING] Unabled to convert {} to value type; skipped",
-                        field.value::<String>().as_ref().map(|s| s.as_ref()).unwrap_or("None")
+                        "[WARNING] In section {}, field '{}' has no value; skipped",
+                        section,
+                        level
+                    );
+                    continue;
+                };
+
+                let item = if let Ok(i) = T::parse(value) { i } else {
+                    skse_message!(
+                        "[WARNING] In section {}, unabled to convert field {}'s value '{}' \
+                         to required type; skipped",
+                        section,
+                        level,
+                        value
                     );
                     continue;
                 };
@@ -533,9 +511,7 @@ impl<T: Copy + FromStr> IniReadableSection for LeveledIniSection<T>
     }
 }
 
-impl<T: Copy + FromStr> IniReadableSkill for LeveledIniSection<T>
-    where <T as FromStr>::Err: core::fmt::Debug
-{
+impl<T: Copy + ParseField> IniReadableSkill for LeveledIniSection<T> {
     type Value = T;
     fn read_ini_skill(
         &mut self,
@@ -576,3 +552,79 @@ impl<T: IniReadableSkill + Default> IniReadableSection for IniSkillManager<T> {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// String parsing goop
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// We can't use FromStr for bool, since it only accepts "true" and "false" (case sensitive). Thus,
+// we implement our own parsing method to be more forgiving.
+
+/// Parses a field into the given type.
+trait ParseField: Sized {
+    fn parse(s: &str) -> Result<Self, ()>;
+}
+
+// Allows for the optional loading of an offset multiplier.
+impl ParseField for SkillMult {
+    fn parse(
+        s: &str
+    ) -> Result<Self, ()> {
+        core_util::attempt! {{
+            if let Some(s) = s.split_once('/') {
+                // Since there is a mode symbol, the offset has been specified in some way.
+                if s.1.trim().is_empty() {
+                    // We have been asked to duplicate the first number for both.
+                    Ok(Self { base: f32::from_str(s.0)?, offset: f32::from_str(s.0)? })
+                } else {
+                    // Both values were given.
+                    Ok(Self { base: f32::from_str(s.0)?, offset: f32::from_str(s.1)? })
+                }
+            } else {
+                // Compat mode: Assume offset mult is 1.0 and parse as single float.
+                Ok(Self { base: f32::from_str(s)?, offset: 1.0 })
+            }
+        }}.map_err(|_: <f32 as FromStr>::Err| ())
+    }
+}
+
+// Allow for more permissive bool parsing.
+impl ParseField for bool {
+    fn parse(
+        s: &str
+    ) -> Result<bool, ()> {
+        let lower_streq = |a: &str, b: &str| {
+            if a.len() != b.len() { return false; }
+            for i in 0..a.len() {
+                if a.as_bytes()[i].to_ascii_lowercase() != b.as_bytes()[i].to_ascii_lowercase() {
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        if lower_streq(s, "true") || lower_streq(s, "t") ||
+                f32::from_str(s).map(|f| f != 0.0).unwrap_or(false) {
+            Ok(true)
+        } else if lower_streq(s, "false") || lower_streq(s, "f") ||
+                f32::from_str(s).map(|f| f == 0.0).unwrap_or(false) {
+            Ok(false)
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl ParseField for u32 {
+    fn parse(
+        s: &str
+    ) -> Result<u32, ()> {
+        u32::from_str(s).map_err(|_| ())
+    }
+}
+
+impl ParseField for f32 {
+    fn parse(
+        s: &str
+    ) -> Result<f32, ()> {
+        f32::from_str(s).map_err(|_| ())
+    }
+}
