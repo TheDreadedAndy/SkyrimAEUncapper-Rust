@@ -405,3 +405,62 @@ clear_legendary_button_wrapper_se:
     call {clear_legendary_button_hook}
     RESTOREALL retfpr=1
     ret
+
+////////////////////////////////////////////////////////////////////////////////
+// Legendary skill patches
+////////////////////////////////////////////////////////////////////////////////
+// The patches in this section are controlled by the bUseLegendarySettings
+// field in the INI file. They allow the player to reconfigure the level
+// requirements for legendarying skills.
+
+// Overwrites the game code which checks if a skill is at level 100 by changing
+// the value checked to be the one which the user configured in the INI file.
+//
+// Note that this patch must be generated for multiple different locations,
+// since the source code its changing was inlined multiple times. As such, it is
+// declared as a macro with the relevant trampolines as its parameters.
+.macro LEGENDARY_CHECK_PATCH return_trampoline, parent_return
+    // NOW TRUE:
+    //   - %xmm0 contains the level of the relevant skill.
+    //   - %rax matches the current value of %rip from our jump to this patch.
+    //   - All other registers are values we must not alter.
+    //   - We have no return address, since we jumped to this location.
+    //   - The shadow space is set up for calling a function.
+    //   - Our stack is aligned to 16 bytes.
+    // MUST BE TRUE:
+    //   - The symbol {legendary_skill_level_en_value} points to the f32 value
+    //     of the condition check setting.
+    comiss {legendary_skill_level_en_value}(%rip), %xmm0
+
+    // NOW TRUE:
+    //   - The %eflags register contains the result of our comparison.
+    //   - All other values remain the same.
+    jb _check_condition_return_jump
+
+    // NOW TRUE:
+    //   - The level value contained in %xmm0 is greater than or equal to the 
+    //     configured legendary skill enable setting.
+    //   - All other values remain the same.
+    // MUST BE TRUE:
+    //   - The trampoline for this patch returns to the location after the 'jb'
+    //     instruction in the games source code.
+    jmp *return_trampoline(%rip)
+
+_check_condition_return_jump?:
+    // NOW TRUE:
+    //   - The level value contained in %xmm0 is less than the configured
+    //     legendary skill enable setting.
+    //   - All other values remain the same.
+    // MUST BE TRUE:
+    //   - The symbol below contains the address which starts the return code
+    //     for the legendary condition check function.
+    jmp *parent_return(%rip)
+.endm
+
+check_condition_for_legendary_skill_wrapper:
+    LEGENDARY_CHECK_PATCH return_trampoline={check_condition_for_legendary_skill_return_trampoline}, parent_return={check_condition_for_legendary_skill_parent_return}
+
+check_condition_for_legendary_skill_alt_wrapper:
+    LEGENDARY_CHECK_PATCH return_trampoline={check_condition_for_legendary_skill_alt_return_trampoline}, parent_return={check_condition_for_legendary_skill_alt_parent_return}
+
+////////////////////////////////////////////////////////////////////////////////
