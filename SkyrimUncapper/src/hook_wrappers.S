@@ -1,5 +1,5 @@
 /**
- * @file HookWrappers.S
+ * @file hook_wrappers.S
  * @author Andrew Spaulding (Kasplat)
  * @author Vadfromnu
  * @author Kassent
@@ -37,6 +37,8 @@
 .global player_avo_get_current_original_wrapper_ae
 .global player_avo_get_current_original_wrapper_se
 .global update_skill_list_original_wrapper
+
+////////////////////////////////////////////////////////////////////////////////
 
 // Saves all caller saved registers.
 .macro SAVEALL is_jump
@@ -86,6 +88,8 @@
     .endif
 .endm
 
+////////////////////////////////////////////////////////////////////////////////
+
 /*
  * This function gets injected in the middle of another, so we must use the call
  * injection macros to protect the register state.
@@ -117,6 +121,8 @@ skill_cap_patch_wrapper_se:
 
     RESTOREALL retfpr=1
     ret
+
+////////////////////////////////////////////////////////////////////////////////
 
 /*
  * Begins a max_charge calculation by changing the enchanting formula cap
@@ -194,6 +200,8 @@ _calculate_charge_points_per_use_wrapper:
     RESTOREALL retfpr=1
     ret
 
+////////////////////////////////////////////////////////////////////////////////
+
 /*
  * This is mostly here out of paranoia. Since the compiler could technically
  * optimize out register saving here, we save everything except our return
@@ -254,6 +262,8 @@ update_skill_list_original_wrapper:
     push %r14
     jmp *{update_skill_list_return_trampoline}(%rip)
 
+////////////////////////////////////////////////////////////////////////////////
+
 /*
  * Applies additional multipliers to the skill experience gained in the location
  * where the game applies the skill experience base multiplier and offset.
@@ -280,6 +290,8 @@ _improve_player_skill_points_wrapper:
     RESTOREALL retfpr=1
     ret
 
+////////////////////////////////////////////////////////////////////////////////
+
 /*
  * Reads in the number of perk points to add to the players pool and then updates
  * the pool based on the sign of that number and our config settings.
@@ -297,6 +309,8 @@ modify_perk_pool_wrapper_se:
     call {modify_perk_pool_hook}
     RESTOREALL
     ret
+
+////////////////////////////////////////////////////////////////////////////////
 
 /*
  * Passes the EXP gain to our function for further modification.
@@ -327,6 +341,8 @@ improve_level_exp_by_skill_level_wrapper_se:
     RESTOREALL retfpr=1
     ret
 
+////////////////////////////////////////////////////////////////////////////////
+
 /*
  * Fixes the arguments before jumping to the hook.
  */
@@ -336,6 +352,8 @@ improve_attribute_when_level_up_wrapper:
     call {improve_attribute_when_level_up_hook}
     RESTOREALL
     ret
+
+////////////////////////////////////////////////////////////////////////////////
 
 /*
  * Modifies the rest level of legendarying a skill depending on the user
@@ -415,6 +433,9 @@ clear_legendary_button_wrapper_se:
 
 // Overwrites the game code which checks if a skill is at level 100 by changing
 // the value checked to be the one which the user configured in the INI file.
+//
+// In the games source code, the asm we replace would compare xmm0 to 100 and
+// then return if it was below that value and continue otherwise.
 //
 // Note that this patch must be generated for multiple different locations,
 // since the source code its changing was inlined multiple times. As such, it is
