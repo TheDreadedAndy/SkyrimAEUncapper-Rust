@@ -163,13 +163,6 @@ impl WideStr {
         Self::from_slice(core::slice::from_raw_parts::<'a, u16>(s, wchars + 1))
     }
 
-    /// Gets the number of characters in a wide character string.
-    pub const fn len(
-        &self
-    ) -> usize {
-        self.0.len() - 1
-    }
-
     /// Returns the wide char string as a pointer.
     pub const fn as_ptr(
         &self
@@ -209,13 +202,13 @@ impl<const SIZE: usize> WideStringBuffer<SIZE> {
         &mut self,
         s: &WideStr
     ) -> Result<(), fmt::Error> {
-        if s.len() + self.len > SIZE - 1 {
+        if s.0.len() + self.len > SIZE - 1 {
             return Err(fmt::Error);
         }
 
-        self.buf.split_at_mut(self.len).1.split_at_mut(s.len()).0.copy_from_slice(&s.0);
-        self.len += s.len();
-        self.buf[self.len] = 0; // Always null terminate.
+        // Copy, including NUL.
+        self.buf.split_at_mut(self.len).1.split_at_mut(s.0.len()).0.copy_from_slice(&s.0);
+        self.len += s.0.len() - 1;
         Ok(())
     }
 }
