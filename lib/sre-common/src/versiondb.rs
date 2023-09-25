@@ -83,7 +83,7 @@ impl VersionDbStream {
             version.build()
         )).unwrap();
 
-        Self::new_from_path(buf.as_c_str().unwrap())
+        Self::new_from_path(buf.as_c_str())
     }
 
     /// Creates a version database from the given path, setting the version based on the file.

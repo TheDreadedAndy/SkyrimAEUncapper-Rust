@@ -23,7 +23,6 @@
 pub use core;
 
 use core::fmt;
-use core::fmt::{Arguments, Write};
 use core::ffi::CStr;
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::cell::UnsafeCell;
@@ -105,6 +104,10 @@ macro_rules! abstract_type {
     };
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// C string FFI
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 /// Creates a CStr literal from a string literal.
 #[macro_export]
 macro_rules! cstr {
@@ -115,8 +118,127 @@ macro_rules! cstr {
     };
 }
 
+/// Creates a wide CStr literal from a string literal.
+#[macro_export]
+macro_rules! wcstr {
+    ( $str:literal ) => {{
+        const SIZE: usize = $crate::get_utf16_len($str) + 1;
+        $crate::WideStr::from_slice(&$crate::create_utf16_string::<SIZE>($str))
+    }};
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// Anti-allocation goop
+
+/// A wide string struct, for C FFI. Must be NUL-terminated.
+#[repr(transparent)]
+pub struct WideStr([u16]);
+
+impl WideStr {
+    /// Creates a wide char from a slice. The slice must only contain NUL as its last byte, and must
+    /// be null terminated.
+    pub const fn from_slice<'a>(
+        s: &'a [u16]
+    ) -> &'a Self {
+        assert!(s[s.len() - 1] == 0);
+
+        // Must not contain NULL.
+        let mut i = 0;
+        while i < s.len() - 1 {
+            assert!(s[i] != 0);
+            i += 1;
+        }
+
+        // SAFETY: WideStr is declared as transparent.
+        unsafe {
+            &*(s as *const [u16] as *const Self)
+        }
+    }
+
+    /// Creates a wide char from a pointer. The given string must be NUL terminated.
+    pub unsafe fn from_ptr<'a>(
+        s: *const u16
+    ) -> &'a Self {
+        let mut wchars = 0;
+        while *s.add(wchars) != 0 { wchars += 1 }
+        Self::from_slice(core::slice::from_raw_parts::<'a, u16>(s, wchars + 1))
+    }
+
+    /// Gets the number of characters in a wide character string.
+    pub const fn len(
+        &self
+    ) -> usize {
+        self.0.len() - 1
+    }
+
+    /// Returns the wide char string as a pointer.
+    pub const fn as_ptr(
+        &self
+    ) -> *const u16 {
+        self.0.as_ptr()
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+///
+/// A structure for formatting wide strings, and automatically converting UTF-8 to UTF-16.
+/// Necessary for FFI to Windows API functions that use unicode.
+///
+/// The buffer is always null terminated.
+///
+pub struct WideStringBuffer<const SIZE: usize> {
+    buf: [u16; SIZE],
+    len: usize
+}
+
+impl<const SIZE: usize> WideStringBuffer<SIZE> {
+    /// Creates an empty wide string buffer.
+    pub const fn new() -> Self {
+        Self { buf: [0; SIZE], len: 0 }
+    }
+
+    /// Converts the contents of the buffer to a WideStr.
+    pub fn as_w_str(
+        &self
+    ) -> &WideStr {
+        WideStr::from_slice(self.buf.split_at(self.len + 1).0)
+    }
+
+    /// Writes a wide string to the buffer, if there is room for it.
+    pub fn write_w_str(
+        &mut self,
+        s: &WideStr
+    ) -> Result<(), fmt::Error> {
+        if s.len() + self.len > SIZE - 1 {
+            return Err(fmt::Error);
+        }
+
+        self.buf.split_at_mut(self.len).1.split_at_mut(s.len()).0.copy_from_slice(&s.0);
+        self.len += s.len();
+        self.buf[self.len] = 0; // Always null terminate.
+        Ok(())
+    }
+}
+
+impl<const SIZE: usize> fmt::Write for WideStringBuffer<SIZE> {
+    fn write_str(
+        &mut self,
+        s: &str
+    ) -> Result<(), fmt::Error> {
+        if s.encode_utf16().count() >= SIZE - self.len {
+            return Err(fmt::Error);
+        }
+
+        for w in s.encode_utf16() {
+            self.buf[self.len] = w;
+            self.len += 1;
+        }
+        self.buf[self.len] = 0;
+
+        Ok(())
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 ///
@@ -133,59 +255,14 @@ pub struct StringBuffer<const SIZE: usize> {
 impl<const SIZE: usize> StringBuffer<SIZE> {
     /// Creates a new, empty, string buffer.
     pub const fn new() -> Self {
-        Self {
-            buf: [0; SIZE],
-            len: 0
-        }
+        Self { buf: [0; SIZE], len: 0 }
     }
 
-    /// Attempts to convert the contents of the buffer to a CStr.
+    /// Converts the contents of the buffer to a CStr.
     pub fn as_c_str(
         &self
-    ) -> Result<&CStr, ()> {
-        CStr::from_bytes_with_nul(self.as_bytes_nul()).map_err(|_| ())
-    }
-
-    /// Gets the underlying &[u8] in the buffer, with the null.
-    pub fn as_bytes_nul(
-        &self
-    ) -> &[u8] {
-        self.buf.split_at(self.len + 1).0
-    }
-
-    /// Formats the given arguments into the buffer, adding a newline.
-    pub fn formatln(
-        &mut self,
-        args: Arguments<'_>
-    ) -> Result<(), fmt::Error> {
-        fmt::write(self, args)?;
-        self.write_str("\n")?;
-        Ok(())
-    }
-
-    ///
-    /// Calls the given function, then updates the length of the buffer based on the null
-    /// terminator.
-    ///
-    /// The given function must null terminate any data it appends.
-    ///
-    pub unsafe fn write_ffi(
-        &mut self,
-        func: impl FnOnce(&mut [u8])
-    ) {
-        func(self.buf.split_at_mut(self.len).1);
-
-        while self.buf[self.len] != 0 {
-            self.len += 1;
-        }
-    }
-
-    /// Erases the contents of the buffer.
-    pub fn clear(
-        &mut self
-    ) {
-        self.buf[0] = 0;
-        self.len = 0;
+    ) -> &CStr {
+        CStr::from_bytes_with_nul(self.buf.split_at(self.len + 1).0).unwrap()
     }
 }
 
@@ -203,6 +280,92 @@ impl<const SIZE: usize> fmt::Write for StringBuffer<SIZE> {
         self.buf[self.len] = 0; // Always null terminate.
         Ok(())
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Converts a UTF-8 string to a statically sized array of UTF-16.
+#[doc(hidden)]
+pub const fn create_utf16_string<const DIM: usize>(
+    s: &'static str
+) -> [u16; DIM] {
+    let b       = s.as_bytes();
+    let mut ret = [0; DIM];
+
+    let mut b_i : usize = 0;
+    let mut w_i : usize = 0;
+    while b_i < b.len() {
+        if b[b_i] & 0x80 == 0 {
+            ret[w_i] = b[b_i] as u16;
+        } else if b[b_i] & 0xE0 == 0xC0 {
+            assert!(b[b_i + 1] & 0xC0 == 0x80);
+            ret[w_i] = (((b[b_i] & 0x1F) as u16) << 6) | ((b[b_i + 1] & 0x3F) as u16);
+            b_i += 1;
+        } else if b[b_i] & 0xF0 == 0xE0 {
+            assert!(b[b_i + 1] & 0xC0 == 0x80);
+            assert!(b[b_i + 2] & 0xC0 == 0x80);
+            ret[w_i] = (((b[b_i] & 0x0F) as u16) << 12) | (((b[b_i + 1] & 0x3F) as u16) << 6)
+                                                        | ((b[b_i + 2] & 0x3F) as u16);
+            assert!(ret[w_i] & 0xF800 != 0xD8);
+            b_i += 2;
+        } else {
+            assert!(b[b_i] & 0xF8 == 0xF0);
+            assert!(b[b_i + 1] & 0xC0 == 0x80);
+            assert!(b[b_i + 2] & 0xC0 == 0x80);
+            assert!(b[b_i + 3] & 0xC0 == 0x80);
+            ret[w_i]     = 0xD800 | (((b[b_i] & 0x03) as u16) << 8)
+                                  | (((b[b_i + 1] & 0x3F) as u16) << 2)
+                                  | (((b[b_i + 2] & 0x30) as u16) >> 4);
+            ret[w_i + 1] = 0xDC00 | (((b[b_i + 2] & 0x0F) as u16) << 6)
+                                  | ((b[b_i + 3] & 0x3F) as u16);
+            w_i += 1;
+            b_i += 3;
+        }
+
+        w_i += 1;
+        b_i += 1;
+    }
+
+    assert!(w_i == DIM - 1);
+    return ret;
+}
+
+// Counts the number of UTF-16 code points in a UTF-8 string.
+#[doc(hidden)]
+pub const fn get_utf16_len(
+    s: &'static str
+) -> usize {
+    let b = s.as_bytes();
+
+    let mut code_points : usize = 0;
+    let mut i           : usize = 0;
+    while i < b.len() {
+        if b[i] & 0x80 == 0 {
+            code_points += 1;
+        } else if b[i] & 0xE0 == 0xC0 {
+            code_points += 1;
+            i += 1;
+            assert!(b[i] & 0xC0 == 0x80);
+        } else if b[i] & 0xF0 == 0xE0 {
+            code_points += 1;
+            i += 1;
+            assert!(b[i] & 0xC0 == 0x80);
+            i += 1;
+            assert!(b[i] & 0xC0 == 0x80);
+        } else {
+            assert!(b[i] & 0xF8 == 0xF0);
+            code_points += 1;
+            i += 1;
+            assert!(b[i] & 0xC0 == 0x80);
+            i += 1;
+            assert!(b[i] & 0xC0 == 0x80);
+            i += 1;
+            assert!(b[i] & 0xC0 == 0x80);
+        }
+        i += 1;
+    }
+
+    return code_points;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

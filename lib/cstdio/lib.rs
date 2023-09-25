@@ -17,6 +17,8 @@ use core::mem::size_of;
 use alloc::vec::Vec;
 use alloc::string::String;
 
+use core_util::WideStr;
+
 core_util::abstract_type! {
     /// The file type used by the C standard library. Used as an abstract type.
     type FILE;
@@ -28,6 +30,7 @@ core_util::abstract_type! {
 #[link(name = "msvcrt")]
 extern "C" {
     fn fopen(filename: *const c_char, mode: *const c_char) -> Option<NonNull<FILE>>;
+    fn _wfopen(filename: *const u16, mode: *const u16) -> Option<NonNull<FILE>>;
     fn fclose(stream: *mut FILE) -> c_int;
     fn fread(ptr: *mut c_void, size: usize, count: usize, stream: *mut FILE) -> usize;
     fn fwrite(ptr: *const c_void, size: usize, count: usize, stream: *mut FILE) -> usize;
@@ -59,6 +62,17 @@ impl File {
         unsafe {
             // SAFETY: The user has passed us valid CStr types.
             fopen(path.as_ptr(), mode.as_ptr()).map(|f| Self(f)).ok_or(())
+        }
+    }
+
+    /// Opens a file using a UTF-16 file name and mode.
+    pub fn wopen(
+        path: &WideStr,
+        mode: &WideStr
+    ) -> Result<File, ()> {
+        unsafe {
+            // SAFETY: The user has passed us valid WideStr types.
+            _wfopen(path.as_ptr(), mode.as_ptr()).map(|f| Self(f)).ok_or(())
         }
     }
 
