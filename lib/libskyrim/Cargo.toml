@@ -12,7 +12,6 @@ sre-common = { path = "../sre-common" }
 version = "0.45"
 features = [
     "Win32_Foundation",
-    "Win32_Globalization",
     "Win32_System_LibraryLoader",
     "Win32_System_Memory",
     "Win32_System_ProcessStatus",

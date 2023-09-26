@@ -10,9 +10,8 @@ use core::fmt::{Arguments, Write};
 use core::ffi::CStr;
 
 use cstdio::File;
-use core_util::{Later, RacyCell, StringBuffer};
+use core_util::{Later, RacyCell, StringBuffer, WideStringBuffer, WideStr};
 use windows_sys::Win32::UI::WindowsAndMessaging::MessageBoxA;
-use windows_sys::Win32::Globalization::{WC_ERR_INVALID_CHARS, CP_UTF8, WideCharToMultiByte};
 use windows_sys::Win32::System::Com::CoTaskMemFree;
 use windows_sys::Win32::UI::Shell::{SHGetKnownFolderPath, FOLDERID_Documents};
 use windows_sys::Win32::Foundation::{MAX_PATH, S_OK};
@@ -41,23 +40,17 @@ impl LogType {
     //
     // Attempts to write a message to the requested log types.
     //
-    // The given message must be nul-terminated.
-    //
     // Note that this function does not panic, since it may be called from the panic impl.
     //
     unsafe fn log(
         &self,
-        msg: &[u8]
+        msg: &CStr
     ) -> Result<(), ()> {
-        if msg[msg.len() - 1] != 0 {
-            return Err(());
-        }
-
         let win_res = match self {
             Self::Window(ico) | Self::Both(ico) => {
                 let res = MessageBoxA(
                     0,
-                    msg.as_ptr(),
+                    msg.as_ptr().cast(),
                     SKSEPlugin_Version.name.as_ptr().cast(),
                     *ico
                 );
@@ -69,9 +62,9 @@ impl LogType {
 
         let log_res = match self {
             Self::File | Self::Both(_) => {
-                let msg = msg.split_at(msg.len() - 1).0;
                 if LOG_FILE.is_init() &&
-                        (*LOG_FILE.get()).write(msg).is_ok() && (*LOG_FILE.get()).flush().is_ok() {
+                        (*LOG_FILE.get()).write(msg.to_bytes()).is_ok() &&
+                        (*LOG_FILE.get()).flush().is_ok() {
                     Ok(())
                 } else {
                     Err(())
@@ -86,32 +79,17 @@ impl LogType {
 
 /// Opens a log file under the plugins name in the SKSE log directory.
 pub (in crate) fn open() {
-    let mut buf = StringBuffer::<BUF_SIZE>::new();
+    let mut buf: WideStringBuffer<BUF_SIZE> = WideStringBuffer::new();
 
     unsafe {
-        // SAFETY: Single threaded library, protected from double init by skse.
         // SAFETY: The buffer is empty, and its size is larger than MAX_PATH (260).
-        buf.write_ffi(|buf| {
-            assert!(buf.len() > MAX_PATH as usize);
-            let mut path: windows_sys::core::PWSTR = core::ptr::null_mut();
+        assert!(BUF_SIZE > MAX_PATH as usize);
+        let mut path: windows_sys::core::PWSTR = core::ptr::null_mut();
 
-            assert!(SHGetKnownFolderPath(&FOLDERID_Documents, 0, 0, &mut path) == S_OK);
-
-            let mut wchars: usize = 0;
-            while *path.add(wchars) != 0 { wchars += 1; }
-
-            assert!(WideCharToMultiByte(
-                CP_UTF8,
-                WC_ERR_INVALID_CHARS,
-                path,
-                wchars.try_into().unwrap(),
-                buf.as_mut_ptr(),
-                buf.len().try_into().unwrap(), // Size in BYTES
-                core::ptr::null_mut(),
-                core::ptr::null_mut()
-            ) > 0);
-            CoTaskMemFree(path.cast());
-        });
+        // Add the path to the users documents folder to the buffer.
+        assert!(SHGetKnownFolderPath(&FOLDERID_Documents, 0, 0, &mut path) == S_OK);
+        buf.write_w_str(WideStr::from_ptr(path)).unwrap();
+        CoTaskMemFree(path.cast());
     }
 
     buf.write_fmt(format_args!(
@@ -120,9 +98,9 @@ pub (in crate) fn open() {
         unsafe { CStr::from_ptr(SKSEPlugin_Version.name.as_ptr()).to_str().unwrap() }
     )).unwrap();
 
-    LOG_FILE.init(RacyCell::new(File::open(
-        CStr::from_bytes_with_nul(buf.as_bytes_nul()).unwrap(),
-        core_util::cstr!("w+b")
+    LOG_FILE.init(RacyCell::new(File::wopen(
+        buf.as_w_str(),
+        core_util::wcstr!("w+b")
     ).unwrap()));
 
     unsafe {
@@ -139,10 +117,11 @@ pub fn write(
     args: Arguments<'_>
 ) {
     let mut buf = StringBuffer::<BUF_SIZE>::new();
-    buf.formatln(args).unwrap();
+    buf.write_fmt(args).unwrap();
+    buf.write_str("\n").unwrap();
     unsafe {
         // SAFETY: This library is single threaded.
-        log_type.log(buf.as_bytes_nul()).unwrap();
+        log_type.log(buf.as_c_str()).unwrap();
     }
 }
 
@@ -157,14 +136,15 @@ pub fn fatal(
     args: Arguments<'_>
 ) {
     let mut buf = StringBuffer::<BUF_SIZE>::new();
-    if let Err(_) = buf.formatln(args) {
-        buf.clear();
-        let _ = buf.write_str("The plugin encountered an unknown fatal error.\n");
-    }
-
+    // SAFETY: This library is single threaded.
     unsafe {
-        // SAFETY: This library is single threaded.
-        let _ = log_type.log(buf.as_bytes_nul());
+        if buf.write_fmt(args).is_err() || buf.write_str("\n").is_err() {
+            let _ = log_type.log(
+                core_util::cstr!("The plugin encountered an unknown fatal error.\n")
+            );
+        } else {
+            let _ = log_type.log(buf.as_c_str());
+        }
     }
 }
 
