@@ -116,7 +116,7 @@ pub (in crate) fn open() {
 
     buf.write_fmt(format_args!(
         "\\My Games\\{}\\SKSE\\{}.log",
-        crate::version::current_skse().save_folder(),
+        crate::version::current_runtime().save_folder(),
         unsafe { CStr::from_ptr(SKSEPlugin_Version.name.as_ptr()).to_str().unwrap() }
     )).unwrap();
 

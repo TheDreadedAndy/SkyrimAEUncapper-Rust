@@ -58,7 +58,11 @@ unsafe fn init_skse(
     // Initialize the relocation manager with the base address of skyrims binary.
     RelocAddr::init_manager(unsafe { GetModuleHandleA(ptr::null_mut()) as usize });
 
-    // Before we do anything else, we try and open up a log file.
+    // Set running version to the given value.
+    RUNNING_SKSE_VERSION.init((*skse).skse_version.unwrap());
+    RUNNING_GAME_VERSION.init((*skse).runtime_version.unwrap());
+
+    // Open up a log file. I live in fear of errors before this point.
     log::open();
 
     // "yup, no more editor. obscript is gone (mostly)" ~ianpatt
@@ -67,10 +71,6 @@ unsafe fn init_skse(
         *DO_ONCE.get() = Some(false);
         return false;
     }
-
-    // Set running version to the given value.
-    RUNNING_SKSE_VERSION.init((*skse).skse_version.unwrap());
-    RUNNING_GAME_VERSION.init((*skse).runtime_version.unwrap());
 
     // Get our plugin handle and set up our SKSE listener.
     PLUGIN_HANDLE.init(((*skse).get_plugin_handle)());
