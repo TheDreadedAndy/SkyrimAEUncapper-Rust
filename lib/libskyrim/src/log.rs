@@ -20,6 +20,7 @@ use windows_sys::Win32::Foundation::{MAX_PATH, S_OK};
 pub use windows_sys::Win32::UI::WindowsAndMessaging::{MB_ICONERROR, MB_ICONWARNING};
 
 use crate::SKSEPlugin_Version;
+use crate::version;
 
 // Enumeration to determine how an error will be presented to the user.
 #[doc(hidden)]
@@ -94,7 +95,7 @@ pub (in crate) fn open() {
 
     buf.write_fmt(format_args!(
         "\\My Games\\{}\\SKSE\\{}.log",
-        crate::version::current_runtime().save_folder(),
+        version::current_runtime().save_folder(),
         unsafe { CStr::from_ptr(SKSEPlugin_Version.name.as_ptr()).to_str().unwrap() }
     )).unwrap();
 
