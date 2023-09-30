@@ -34,5 +34,5 @@ fn main() {
         "--tags"
     ]).output().unwrap();
     let version = String::from_utf8(stdout).unwrap();
-    println!("cargo:rustc-env=UNCAPPER_GIT_VERSION={}", version.trim());
+    println!("cargo:rustc-env=LIBSKYRIM_PLUGIN_VC_VERSION={}", version.trim());
 }

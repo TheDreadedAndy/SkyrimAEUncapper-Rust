@@ -20,11 +20,9 @@ mod settings;
 // For macros.
 pub use core;
 
-use core::ffi::CStr;
 use alloc::alloc::{GlobalAlloc, Layout};
 
 use libskyrim::log::{skse_message, skse_fatal};
-use libskyrim::version::{SkseVersion, PACKED_SKSE_VERSION, CURRENT_RELEASE_RUNTIME};
 use libskyrim::plugin_api::{SksePluginVersionData, SkseInterface};
 use libskyrim::patcher::flatten_patch_groups;
 
@@ -82,24 +80,8 @@ libskyrim::plugin_api::plugin_version_data! {
 ///
 #[no_mangle]
 pub fn skse_plugin_rust_entry(
-    skse: &SkseInterface
+    _skse: &SkseInterface
 ) -> Result<(), ()> {
-    // Log runtime/skse info.
-    skse_message!(
-        "{} {:?} ({})\n\
-         Compiled: SKSE64 {}, Skyrim SE {}\n\
-         Running: SKSE64 {}, Skyrim SE {}\n\
-         Base addr: {:#x}",
-        unsafe { CStr::from_ptr(SKSEPlugin_Version.name.as_ptr()).to_str().unwrap() },
-        SKSEPlugin_Version.plugin_version,
-        env!("UNCAPPER_GIT_VERSION"),
-        PACKED_SKSE_VERSION,
-        CURRENT_RELEASE_RUNTIME,
-        (*skse).skse_version.unwrap(),
-        (*skse).runtime_version.unwrap(),
-        libskyrim::reloc::RelocAddr::base()
-    );
-
     settings::init(core_util::cstr!("Data\\SKSE\\Plugins\\SkyrimUncapper.ini"));
 
     let patches = flatten_patch_groups::<NUM_PATCHES>(&[&GAME_SIGNATURES, &HOOK_SIGNATURES]);
