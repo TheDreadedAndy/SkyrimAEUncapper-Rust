@@ -9,7 +9,7 @@
 use core::fmt::{Arguments, Write};
 use core::ffi::CStr;
 
-use cstdio::File;
+use cstd::io::File;
 use core_util::{Later, RacyCell, StringBuffer, WideStringBuffer, WideStr};
 use windows_sys::Win32::UI::WindowsAndMessaging::MessageBoxA;
 use windows_sys::Win32::System::Com::CoTaskMemFree;
@@ -107,7 +107,7 @@ pub (in crate) fn open() {
     unsafe {
         // SAFETY: Single threaded library, protected from double init by skse.
         // Add the BOM to the file to mark it as UTF-8.
-        (*LOG_FILE.get()).write(&cstdio::UTF8_BOM).unwrap();
+        (*LOG_FILE.get()).write(&cstd::io::UTF8_BOM).unwrap();
     }
 }
 
