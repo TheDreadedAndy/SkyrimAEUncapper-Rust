@@ -16,6 +16,7 @@ pub mod ini;
 // Needed for macros
 pub use core;
 
+use core::ffi::CStr;
 use core::ptr;
 
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleA;
@@ -23,6 +24,7 @@ use windows_sys::Win32::System::LibraryLoader::GetModuleHandleA;
 use core_util::RacyCell;
 
 use crate::version::{RUNNING_GAME_VERSION, RUNNING_SKSE_VERSION, RUNTIME_VERSION_1_5_97};
+use crate::version::{PACKED_SKSE_VERSION, CURRENT_RELEASE_RUNTIME};
 use crate::plugin_api::{SkseInterface, SksePluginVersionData, PluginInfo, PLUGIN_HANDLE};
 use crate::reloc::RelocAddr;
 use crate::errors::SKSE_LOADER_DONE;
@@ -58,7 +60,11 @@ unsafe fn init_skse(
     // Initialize the relocation manager with the base address of skyrims binary.
     RelocAddr::init_manager(unsafe { GetModuleHandleA(ptr::null_mut()) as usize });
 
-    // Before we do anything else, we try and open up a log file.
+    // Set running version to the given value.
+    RUNNING_SKSE_VERSION.init((*skse).skse_version.unwrap());
+    RUNNING_GAME_VERSION.init((*skse).runtime_version.unwrap());
+
+    // Open up a log file. I live in fear of errors before this point.
     log::open();
 
     // "yup, no more editor. obscript is gone (mostly)" ~ianpatt
@@ -67,10 +73,6 @@ unsafe fn init_skse(
         *DO_ONCE.get() = Some(false);
         return false;
     }
-
-    // Set running version to the given value.
-    RUNNING_SKSE_VERSION.init((*skse).skse_version.unwrap());
-    RUNNING_GAME_VERSION.init((*skse).runtime_version.unwrap());
 
     // Get our plugin handle and set up our SKSE listener.
     PLUGIN_HANDLE.init(((*skse).get_plugin_handle)());
@@ -131,6 +133,22 @@ pub unsafe extern "system" fn SKSEPlugin_Load(
 
     // If we're running on an AE version, we haven't done this yet.
     if !init_skse(skse) { return false; }
+
+    // Log runtime/skse info.
+    skse_message!(
+        "{} {:?} ({})\n\
+         Compiled: SKSE64 {}, Skyrim SE {}\n\
+         Running: SKSE64 {}, Skyrim SE {}\n\
+         Base addr: {:#x}",
+        unsafe { CStr::from_ptr(SKSEPlugin_Version.name.as_ptr()).to_str().unwrap() },
+        SKSEPlugin_Version.plugin_version,
+        option_env!("LIBSKYRIM_PLUGIN_VC_VERSION").unwrap_or("unversioned"),
+        PACKED_SKSE_VERSION,
+        CURRENT_RELEASE_RUNTIME,
+        (*skse).skse_version.unwrap(),
+        (*skse).runtime_version.unwrap(),
+        reloc::RelocAddr::base()
+    );
 
     // Call the rust entry point.
     if let Ok(_) = skse_plugin_rust_entry(skse.as_ref().unwrap()) {
@@ -244,7 +262,7 @@ pub mod plugin_api {
             pub static SKSEPlugin_Version: $crate::plugin_api::SksePluginVersionData =
             $crate::plugin_api::SksePluginVersionData {
                 data_version: $crate::plugin_api::SksePluginVersionData::VERSION,
-                plugin_version: SkseVersion::new(
+                plugin_version: $crate::version::SkseVersion::new(
                     $crate::plugin_api::unsigned_from_str(
                         $crate::core::env!("CARGO_PKG_VERSION_MAJOR")),
                     $crate::plugin_api::unsigned_from_str(

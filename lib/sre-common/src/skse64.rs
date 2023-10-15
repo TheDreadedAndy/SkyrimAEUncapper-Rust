@@ -23,6 +23,10 @@ pub mod version {
     pub const RUNTIME_TYPE_GOG      : u32 = 1;
     pub const RUNTIME_TYPE_EPIC     : u32 = 2;
 
+    pub const SAVE_FOLDER_NAME_BETHESDA : &'static str = "Skyrim Special Edition";
+    pub const SAVE_FOLDER_NAME_GOG      : &'static str = "Skyrim Special Edition GOG";
+    pub const SAVE_FOLDER_NAME_EPIC     : &'static str = "Skyrim Special Edition EPIC";
+
     pub const RUNTIME_VERSION_1_1_47: SkseVersion =
         SkseVersion::new(1, 1, 47, RUNTIME_TYPE_BETHESDA);
     pub const RUNTIME_VERSION_1_1_51: SkseVersion =
@@ -131,6 +135,17 @@ pub mod version {
             &self
         ) -> u32 {
             self.0.get() & 0xF
+        }
+
+        /// Gets the save folder name for this version.
+        pub const fn save_folder(
+            &self
+        ) -> &'static str {
+            match self.runtime_type() {
+                RUNTIME_TYPE_GOG  => SAVE_FOLDER_NAME_GOG,
+                RUNTIME_TYPE_EPIC => SAVE_FOLDER_NAME_EPIC,
+                _                 => SAVE_FOLDER_NAME_BETHESDA
+            }
         }
     }
 

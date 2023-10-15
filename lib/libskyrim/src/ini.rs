@@ -15,7 +15,7 @@ use alloc::rc::Rc;
 use alloc::vec::Vec;
 use alloc::string::String;
 
-use cstdio::File;
+use cstd::io::File;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // INI Implementation

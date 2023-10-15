@@ -9,7 +9,7 @@ use core::ffi::CStr;
 use core::fmt::Write;
 use core::mem::size_of;
 
-use cstdio::{File, Seek};
+use cstd::io::{File, Seek};
 
 use crate::skse64::version::{SkseVersion, RUNTIME_VERSION_1_6_317};
 use crate::skse64::reloc::RelocAddr;
@@ -83,7 +83,7 @@ impl VersionDbStream {
             version.build()
         )).unwrap();
 
-        Self::new_from_path(buf.as_c_str().unwrap())
+        Self::new_from_path(buf.as_c_str())
     }
 
     /// Creates a version database from the given path, setting the version based on the file.
