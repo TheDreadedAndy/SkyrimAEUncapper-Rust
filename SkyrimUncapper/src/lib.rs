@@ -20,15 +20,12 @@ mod settings;
 // For macros.
 pub use core;
 
-
 use libskyrim::log::{skse_message, skse_fatal};
 use libskyrim::plugin_api::{SksePluginVersionData, SkseInterface};
 use libskyrim::patcher::flatten_patch_groups;
 
 use skyrim::{GAME_SIGNATURES, NUM_GAME_SIGNATURES};
 use hooks::{HOOK_SIGNATURES, NUM_HOOK_SIGNATURES};
-
-const NUM_PATCHES: usize = NUM_GAME_SIGNATURES + NUM_HOOK_SIGNATURES;
 
 libskyrim::plugin_api::plugin_version_data! {
     author: "Andrew Spaulding (Kasplat)",
@@ -41,7 +38,7 @@ libskyrim::plugin_api::plugin_version_data! {
 ///
 /// Plugin entry point.
 ///
-/// Called by the SKSE64 crate when our plugin is loaded. This function will only be called once.
+/// Called by the libskyrim crate when our plugin is loaded. This function will only be called once.
 ///
 #[no_mangle]
 pub fn skse_plugin_rust_entry(
@@ -49,6 +46,7 @@ pub fn skse_plugin_rust_entry(
 ) -> Result<(), ()> {
     settings::init(core_util::cstr!("Data\\SKSE\\Plugins\\SkyrimUncapper.ini"));
 
+    const NUM_PATCHES: usize = NUM_GAME_SIGNATURES + NUM_HOOK_SIGNATURES;
     let patches = flatten_patch_groups::<NUM_PATCHES>(&[&GAME_SIGNATURES, &HOOK_SIGNATURES]);
     if let Err(_) = libskyrim::patcher::apply(patches) {
         skse_fatal!(
