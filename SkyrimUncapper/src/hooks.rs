@@ -81,6 +81,13 @@ core::arch::global_asm! {
     player_avo_get_base_unchecked            = sym PlayerCharacter::get_base_unchecked,
     get_player_avo                           = sym PlayerCharacter::get_avo,
 
+    // TODO
+    legendary_skill_level_en_value                        = sym PlayerCharacter::get_avo,
+    check_condition_for_legendary_skill_return_trampoline = sym PlayerCharacter::get_avo,
+    check_condition_for_legendary_skill_parent_return = sym PlayerCharacter::get_avo,
+    check_condition_for_legendary_skill_alt_return_trampoline = sym PlayerCharacter::get_avo,
+    check_condition_for_legendary_skill_alt_parent_return = sym PlayerCharacter::get_avo,
+
     options(att_syntax)
 }
 

@@ -63,26 +63,38 @@
 
 // Restores all caller saved registers.
 .macro RESTOREALL retgpr, retfpr, is_jump
+    // If we're returning a floating point number, it must be stored in %xmm0
+    // by convention. Therefore, we don't save it if the invoker of this macro
+    // indicated a float return.
     .ifb \retfpr
     movdqu 0x20(%rsp), %xmm0
     .endif
+
+    // Restore caller saved SSE registers, since the caller at the injection
+    // site may not have expected a function call at the patch location.
     movdqu 0x30(%rsp), %xmm1
     movdqu 0x40(%rsp), %xmm2
     movdqu 0x50(%rsp), %xmm3
     movdqu 0x60(%rsp), %xmm4
     movdqu 0x70(%rsp), %xmm5
     add $0x80, %rsp
+
+    // Restore caller saved general purpose registers.
     pop %r11
     pop %r10
     pop %r9
     pop %r8
     pop %rdx
     pop %rcx
+
+    // Restore %rax only when we aren't returning a gpr value.
     .ifb \retgpr
     pop %rax
     .else
     add $0x08, %rsp
     .endif
+
+    // If this patch came from a jump, we don't have a return address.
     .ifnb \is_jump
     add $0x08, %rsp
     .endif
@@ -94,33 +106,31 @@
  * This function gets injected in the middle of another, so we must use the call
  * injection macros to protect the register state.
  */
-skill_cap_patch_wrapper_ae:
+.macro SKILL_CAP_PATCH skill_level_reg, max_reg
+    // NOW TRUE:
+    //   - We have just exited a call to PlayerAVOGetBaseSkill, and %xmm0
+    //     contains the floating point skill level.
+    //   - %esi contains the skill ID enumeration value for the skill level
+    //     in %xmm0.
     SAVEALL
 
-    mov %edx, %ecx // We don't have an AVO arg.
+    mov %edx, %ecx                       // We don't have an AVO arg.
     call {player_avo_get_base_unchecked} // Reimplement replaced call.
-    movaps %xmm0, %xmm8 // Reimplement original move.
-    mov %esi, %ecx // Move skill ID back into first arg.
+    movaps %xmm0, skill_level_reg        // Reimplement original move.
+    mov %esi, %ecx                       // Move skill ID back into first arg.
     call {get_skill_cap_hook}
-    movss %xmm0, %xmm10 // Replace maximum with fn result.
-    movss %xmm8, %xmm0 // Restore skill level for comparison.
+    movss %xmm0, max_reg                 // Replace maximum with fn result.
+    movss skill_level_reg, %xmm0         // Restore skill level for comparison.
 
     RESTOREALL retfpr=1
     ret
+.endm
+
+skill_cap_patch_wrapper_ae:
+    SKILL_CAP_PATCH skill_level_reg=%xmm8, max_reg=%xmm10
 
 skill_cap_patch_wrapper_se:
-    SAVEALL
-
-    mov %edx, %ecx // We don't have an AVO arg.
-    call {player_avo_get_base_unchecked} // Reimplement replaced call.
-    movaps %xmm0, %xmm6 // Reimplement og move.
-    mov %esi, %ecx // Move skill ID back into first arg.
-    call {get_skill_cap_hook}
-    movss %xmm0, %xmm8  // Replace max with fn result.
-    movss %xmm6, %xmm0  // Fix xmm0 out of paranoia.
-
-    RESTOREALL retfpr=1
-    ret
+    SKILL_CAP_PATCH skill_level_reg=%xmm6, max_reg=%xmm8
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -479,9 +489,13 @@ _check_condition_return_jump?:
 .endm
 
 check_condition_for_legendary_skill_wrapper:
-    LEGENDARY_CHECK_PATCH return_trampoline={check_condition_for_legendary_skill_return_trampoline}, parent_return={check_condition_for_legendary_skill_parent_return}
+    LEGENDARY_CHECK_PATCH\
+        return_trampoline={check_condition_for_legendary_skill_return_trampoline},\
+        parent_return={check_condition_for_legendary_skill_parent_return}
 
 check_condition_for_legendary_skill_alt_wrapper:
-    LEGENDARY_CHECK_PATCH return_trampoline={check_condition_for_legendary_skill_alt_return_trampoline}, parent_return={check_condition_for_legendary_skill_alt_parent_return}
+    LEGENDARY_CHECK_PATCH\
+        return_trampoline={check_condition_for_legendary_skill_alt_return_trampoline},\
+        parent_return={check_condition_for_legendary_skill_alt_parent_return}
 
 ////////////////////////////////////////////////////////////////////////////////

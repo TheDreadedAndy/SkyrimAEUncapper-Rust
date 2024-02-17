@@ -303,7 +303,7 @@ trait IniReadableSkill {
 /// Wraps a field which can be loaded from an INI file.
 #[derive(Default)]
 #[repr(transparent)]
-pub struct IniField<T: Default>(T);
+pub struct IniField<T: Default>(Option<T>);
 
 /// Holds a level and setting pair in the list.
 struct LevelItem<T> {
@@ -326,7 +326,7 @@ impl<T: Copy + Default> IniField<T> {
     pub fn get(
         &self
     ) -> T {
-        self.0
+        self.0.unwrap()
     }
 }
 
