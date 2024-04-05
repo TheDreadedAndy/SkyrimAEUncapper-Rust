@@ -76,6 +76,7 @@ pub mod io {
         fn fclose(stream: *mut FILE) -> c_int;
         fn fread(ptr: *mut c_void, size: usize, count: usize, stream: *mut FILE) -> usize;
         fn fwrite(ptr: *const c_void, size: usize, count: usize, stream: *mut FILE) -> usize;
+        fn fgets(ptr: *mut c_char, n: c_int, stream: *mut FILE) -> *mut c_char;
         fn fseek(stream: *mut FILE, offset: c_long, origin: c_int) -> c_int;
         fn ftell(stream: *mut FILE) -> c_long;
         fn ferror(stream: *mut FILE) -> c_int;
@@ -148,6 +149,22 @@ pub mod io {
                 // SAFETY: We are using a valid C file stream. We know our data buffer is valid.
                 let ret = fwrite(data.as_ptr().cast(), size_of::<T>(), data.len(), self.0.as_ptr());
                 if ret != data.len() * size_of::<T>() { Err(ret / size_of::<T>()) } else { Ok(()) }
+            }
+        }
+
+        /// Reads a line of input from the file stream into the given buffer.
+        pub fn gets<T: Copy>(
+            &mut self,
+            data: &mut [u8]
+        ) -> Result<(), ()> {
+            unsafe {
+                // SAFETY: We are using a valid C file stream. We know our data buffer is valid.
+                let ret = fgets(
+                    data.as_mut_ptr().cast(),
+                    data.len().try_into().unwrap(),
+                    self.0.as_ptr()
+                );
+                if ret.is_null() { Err(()) } else { Ok(()) }
             }
         }
 

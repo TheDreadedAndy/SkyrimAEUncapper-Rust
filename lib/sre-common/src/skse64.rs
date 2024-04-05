@@ -14,16 +14,26 @@ pub mod version {
     use core::num::NonZeroU32;
     use core::fmt::{Display, Debug, Formatter, Error};
 
-    /// @brief Wraps a skse version.
+    /// Wraps a skse version.
     #[derive(Copy, Clone, PartialOrd, Ord, PartialEq, Eq)]
     #[repr(transparent)]
     pub struct SkseVersion(NonZeroU32);
 
+    /// Identifies which distribution of Skyrim is in use.
+    #[derive(Copy, Clone, PartialEq, Eq)]
+    pub enum RuntimeType { Bethesda, VR, GOG, Epic }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+
+    // Note that VR and GOG are aliased. You must check if you are AE/SE to
+    // tell the difference.
     pub const RUNTIME_TYPE_BETHESDA : u32 = 0;
+    pub const RUNTIME_TYPE_VR       : u32 = 1;
     pub const RUNTIME_TYPE_GOG      : u32 = 1;
     pub const RUNTIME_TYPE_EPIC     : u32 = 2;
 
     pub const SAVE_FOLDER_NAME_BETHESDA : &'static str = "Skyrim Special Edition";
+    pub const SAVE_FOLDER_NAME_VR       : &'static str = "Skyrim VR";
     pub const SAVE_FOLDER_NAME_GOG      : &'static str = "Skyrim Special Edition GOG";
     pub const SAVE_FOLDER_NAME_EPIC     : &'static str = "Skyrim Special Edition EPIC";
 
@@ -80,6 +90,15 @@ pub mod version {
     pub const RUNTIME_VERSION_1_6_678_EPIC: SkseVersion =
         SkseVersion::new(1, 6, 678, RUNTIME_TYPE_EPIC);
 
+    pub const RUNTIME_VR_VERSION_1_3_59: SkseVersion =
+        SkseVersion::new(1, 3, 59, RUNTIME_TYPE_VR);
+    pub const RUNTIME_VR_VERSION_1_3_64: SkseVersion =
+        SkseVersion::new(1, 3, 64, RUNTIME_TYPE_VR);
+    pub const RUNTIME_VR_VERSION_1_4_11: SkseVersion =
+        SkseVersion::new(1, 4, 11, RUNTIME_TYPE_VR);
+    pub const RUNTIME_VR_VERSION_1_4_15: SkseVersion =
+        SkseVersion::new(1, 4, 15, RUNTIME_TYPE_VR);
+
     pub const CURRENT_RELEASE_RUNTIME: SkseVersion = RUNTIME_VERSION_1_6_640;
     pub const PACKED_SKSE_VERSION: SkseVersion = SkseVersion::new(2, 2, 3, RUNTIME_TYPE_BETHESDA);
 
@@ -98,7 +117,7 @@ pub mod version {
             )
         }
 
-        /// @brief Converts a u32 to a skse version.
+        /// Converts a u32 to a skse version.
         pub const fn from_raw(
             v: u32
         ) -> Self {
@@ -109,32 +128,49 @@ pub mod version {
             }
         }
 
-        /// @brief Gets the versions major revision.
+        /// Gets the versions major revision.
         pub const fn major(
             &self
         ) -> u32 {
             self.0.get() >> 24
         }
 
-        /// @brief Gets the versions minor revision.
+        /// Gets the versions minor revision.
         pub const fn minor(
             &self
         ) -> u32 {
             (self.0.get() >> 16) & 0xFF
         }
 
-        /// @brief Gets the versions build number.
+        /// Gets the versions build number.
         pub const fn build(
             &self
         ) -> u32 {
             (self.0.get() >> 4) & 0xFFF
         }
 
-        /// @brief Gets the versions runtime type.
-        pub const fn runtime_type(
+        /// Gets the subtype of the runtime, which is not unique across versions.
+        pub const fn sub(
             &self
         ) -> u32 {
             self.0.get() & 0xF
+        }
+
+        /// Gets the versions runtime type.
+        pub const fn runtime_type(
+            &self
+        ) -> RuntimeType {
+            if self.sub() == RUNTIME_TYPE_EPIC {
+                RuntimeType::Epic
+            } else if self.sub() == RUNTIME_TYPE_VR &&
+                    self.0.get() < RUNTIME_VERSION_1_6_659_GOG.0.get() {
+                // VR and GOG are aliased.
+                RuntimeType::VR
+            } else if self.sub() == RUNTIME_TYPE_GOG {
+                RuntimeType::GOG
+            } else {
+                RuntimeType::Bethesda
+            }
         }
 
         /// Gets the save folder name for this version.
@@ -142,9 +178,10 @@ pub mod version {
             &self
         ) -> &'static str {
             match self.runtime_type() {
-                RUNTIME_TYPE_GOG  => SAVE_FOLDER_NAME_GOG,
-                RUNTIME_TYPE_EPIC => SAVE_FOLDER_NAME_EPIC,
-                _                 => SAVE_FOLDER_NAME_BETHESDA
+                RuntimeType::Bethesda => SAVE_FOLDER_NAME_BETHESDA,
+                RuntimeType::VR       => SAVE_FOLDER_NAME_VR,
+                RuntimeType::GOG      => SAVE_FOLDER_NAME_GOG,
+                RuntimeType::Epic     => SAVE_FOLDER_NAME_EPIC,
             }
         }
     }
@@ -155,10 +192,10 @@ pub mod version {
             f: &mut Formatter<'_>
         ) -> Result<(), Error> {
             let runtime = match self.runtime_type() {
-                RUNTIME_TYPE_BETHESDA => "Bethesda",
-                RUNTIME_TYPE_GOG => "GOG",
-                RUNTIME_TYPE_EPIC => "Epic",
-                _ => "Unknown"
+                RuntimeType::Bethesda => "Bethesda",
+                RuntimeType::VR       => "VR",
+                RuntimeType::GOG      => "GOG",
+                RuntimeType::Epic     => "Epic"
             };
 
             write!(f, "{}.{}.{} ({})", self.major(), self.minor(), self.build(), runtime)
@@ -170,7 +207,7 @@ pub mod version {
             &self,
             f: &mut Formatter<'_>
         ) -> Result<(), Error> {
-            write!(f, "{}.{}.{}.{}", self.major(), self.minor(), self.build(), self.runtime_type())
+            write!(f, "{}.{}.{}.{}", self.major(), self.minor(), self.build(), self.sub())
         }
     }
 }
@@ -178,8 +215,6 @@ pub mod version {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Relocation
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// Note that this definition has been extended to allow this type to work outside of the skyrim
-// runtime by defaulting the base address to 0x140000000.
 
 pub mod reloc {
     use core_util::Later;

@@ -11,7 +11,7 @@ use core::mem::size_of;
 
 use cstd::io::{File, Seek};
 
-use crate::skse64::version::{SkseVersion, RUNTIME_VERSION_1_6_317};
+use crate::skse64::version::{SkseVersion, RuntimeType, RUNTIME_VERSION_1_6_317};
 use crate::skse64::reloc::RelocAddr;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -76,11 +76,12 @@ impl VersionDbStream {
         // we can't just pull it from our version structure.
         //
         buf.write_fmt(format_args!(
-            "Data\\SKSE\\Plugins\\{}-{}-{}-{}-0.bin",
+            "Data\\SKSE\\Plugins\\{}-{}-{}-{}-0.{}",
             if version < RUNTIME_VERSION_1_6_317 { "version" } else { "versionlib" },
             version.major(),
             version.minor(),
-            version.build()
+            version.build(),
+            if version.runtime_type() == RuntimeType::VR { "csv" } else { "bin" }
         )).unwrap();
 
         Self::new_from_path(buf.as_c_str())
@@ -91,6 +92,8 @@ impl VersionDbStream {
         path: &CStr
     ) -> Self {
         let mut f = File::open(path, core_util::cstr!("rb")).unwrap();
+
+        // FIXME: Needs to parse differently if this is a CSV.
 
         //
         // Parses the header of a version database file.
