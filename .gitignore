@@ -22,3 +22,4 @@ SkyrimUncapper/hook_wrappers.asm
 *.out
 *.log
 *.pdf
+vendor/
