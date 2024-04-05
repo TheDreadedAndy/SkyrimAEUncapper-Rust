@@ -12,4 +12,4 @@ core-util = { path = "../lib/core-util" }
 libskyrim = { path = "../lib/libskyrim" }
 
 [build-dependencies]
-winres         = "0.1.12"
+winresource = "0.1.17"

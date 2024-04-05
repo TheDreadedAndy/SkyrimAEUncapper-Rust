@@ -15,7 +15,7 @@ fn main() {
     println!("cargo:rerun-if-changed=../");
 
     // Embed resource information.
-    let mut res = winres::WindowsResource::new();
+    let mut res = winresource::WindowsResource::new();
     res.set("CompanyName", RC_AUTHOR);
     res.set("FileDescription", RC_NAME);
     res.set("FileVersion", RC_VERSION);
