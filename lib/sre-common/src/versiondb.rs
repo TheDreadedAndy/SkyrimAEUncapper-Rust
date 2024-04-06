@@ -22,17 +22,30 @@ pub struct DatabaseItem {
     pub addr : RelocAddr
 }
 
+/// An abstract version database stream iterator, which iterates over the IDs and offsets
+/// in a version database.
+pub struct VersionDbStream(VersionDbStreamImpl);
+
+/// An enumeration which contains the current version db stream implementation.
+enum VersionDbStreamImpl {
+    Bin(VersionDbStreamBin),
+    CSV(VersionDbStreamCSV)
+}
+
 /// A file stream for iterating over the items in a version database.
 ///
 /// Additionally contains the previous ID/offset and the pointer size of the database, which are
 /// necessary to correctly parse it.
-pub struct VersionDbStream {
+struct VersionDbStreamBin {
     file              : File,
     prev_id           : usize,
     prev_offset       : usize,
     ptr_size          : usize,
     remaining_entries : usize,
 }
+
+/// A file stream for iterating over a version database CSV.
+struct VersionDbStreamCSV(File);
 
 /// An enumeration used to encode how the data in an address is stored in the database.
 ///
@@ -91,10 +104,22 @@ impl VersionDbStream {
     pub fn new_from_path(
         path: &CStr
     ) -> Self {
-        let mut f = File::open(path, core_util::cstr!("rb")).unwrap();
+        let f        = File::open(path, core_util::cstr!("rb")).unwrap();
+        let path_str = path.to_str().unwrap();
+        if path_str.ends_with(".csv") {
+            Self(VersionDbStreamImpl::CSV(VersionDbStreamCSV::new(f)))
+        } else {
+            assert!(path_str.ends_with(".bin"));
+            Self(VersionDbStreamImpl::Bin(VersionDbStreamBin::new(f)))
+        }
+    }
+}
 
-        // FIXME: Needs to parse differently if this is a CSV.
-
+impl VersionDbStreamBin {
+    /// Creates a new binary database stream.
+    fn new(
+        mut f: File
+    ) -> Self {
         //
         // Parses the header of a version database file.
         //
@@ -134,7 +159,51 @@ impl VersionDbStream {
     }
 }
 
+impl VersionDbStreamCSV {
+    // A buffer large enough to hold a full length id/address pair on a line.
+    const BUF_SIZE: usize = 64;
+
+    /// Creates a new CSV database stream.
+    fn new(
+        mut f: File
+    ) -> Self {
+        // Read in the first line of the file, which should be "id,offset\n".
+        let mut buf: [u8; Self::BUF_SIZE] = [0; Self::BUF_SIZE];
+        let line = Self::readline(&mut f, &mut buf).unwrap();
+        assert!(line == "id,offset");
+        Self(f)
+    }
+
+    /// Reads a line of input from the file, returning it as a string placed in the buffer.
+    ///
+    /// The newline character is removed from the output.
+    fn readline<'a>(
+        f: &mut File,
+        buf: &'a mut [u8]
+    ) -> Result<&'a str, ()> {
+        f.gets(buf)?;
+        let s = buf.split(|c| *c == 0u8).next().unwrap();
+        let s = if s[s.len() - 1] == b'\n' { &s[..s.len() - 1] } else { s };
+        Ok(core::str::from_utf8(s).unwrap())
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 impl Iterator for VersionDbStream {
+    type Item = DatabaseItem;
+
+    fn next(
+        &mut self
+    ) -> Option<Self::Item> {
+        match &mut self.0 {
+            VersionDbStreamImpl::Bin(s) => s.next(),
+            VersionDbStreamImpl::CSV(s) => s.next()
+        }
+    }
+}
+
+impl Iterator for VersionDbStreamBin {
     type Item = DatabaseItem;
 
     fn next(
@@ -179,6 +248,29 @@ impl Iterator for VersionDbStream {
     }
 }
 
+impl Iterator for VersionDbStreamCSV {
+    type Item = DatabaseItem;
+
+    fn next(
+        &mut self
+    ) -> Option<Self::Item> {
+        let mut buf: [u8; Self::BUF_SIZE] = [0; Self::BUF_SIZE];
+
+        while let Ok(s) = Self::readline(&mut self.0, &mut buf) {
+            // Skip empty newlines.
+            if s == "" { continue; }
+
+            let (id, offset) = s.split_once(",").unwrap();
+            return Some(DatabaseItem {
+                id: usize::from_str_radix(id, 10).unwrap(),
+                addr: RelocAddr::from_offset(usize::from_str_radix(offset, 16).unwrap())
+            });
+        }
+
+        None
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 impl AddrEncoding {
@@ -189,14 +281,14 @@ impl AddrEncoding {
         prev: usize
     ) -> usize {
         match self {
-            Self::Raw64      => VersionDbStream::read::<u64>(f) as usize,
-            Self::Raw32      => VersionDbStream::read::<u32>(f) as usize,
-            Self::Raw16      => VersionDbStream::read::<u16>(f) as usize,
+            Self::Raw64      => VersionDbStreamBin::read::<u64>(f) as usize,
+            Self::Raw32      => VersionDbStreamBin::read::<u32>(f) as usize,
+            Self::Raw16      => VersionDbStreamBin::read::<u16>(f) as usize,
             Self::Inc        => prev + 1,
-            Self::PosDelta8  => prev + (VersionDbStream::read::<u8>(f) as usize),
-            Self::NegDelta8  => prev - (VersionDbStream::read::<u8>(f) as usize),
-            Self::PosDelta16 => prev + (VersionDbStream::read::<u16>(f) as usize),
-            Self::NegDelta16 => prev - (VersionDbStream::read::<u16>(f) as usize)
+            Self::PosDelta8  => prev + (VersionDbStreamBin::read::<u8>(f) as usize),
+            Self::NegDelta8  => prev - (VersionDbStreamBin::read::<u8>(f) as usize),
+            Self::PosDelta16 => prev + (VersionDbStreamBin::read::<u16>(f) as usize),
+            Self::NegDelta16 => prev - (VersionDbStreamBin::read::<u16>(f) as usize)
         }
     }
 }

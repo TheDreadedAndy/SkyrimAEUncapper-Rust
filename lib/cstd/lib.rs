@@ -153,7 +153,7 @@ pub mod io {
         }
 
         /// Reads a line of input from the file stream into the given buffer.
-        pub fn gets<T: Copy>(
+        pub fn gets(
             &mut self,
             data: &mut [u8]
         ) -> Result<(), ()> {
