@@ -28,6 +28,7 @@ pub struct DatabaseItem {
 /// necessary to correctly parse it.
 pub struct VersionDbStream {
     file              : File,
+    db_format         : u32,
     prev_id           : usize,
     prev_offset       : usize,
     ptr_size          : usize,
@@ -95,7 +96,7 @@ impl VersionDbStream {
         //
         // Parses the header of a version database file.
         //
-        // The version db file format seems to be as follows:
+        // The version db file format (v1/v2) seems to be as follows:
         // - Each binary begins with a u32 version, where 1 is SE and 2 is AE.
         // - After that, there is a (major, minor, build, sub) u32 tuple. This can be skipped.
         // - The version tuple is followed by a u32 module name string len, between 0 and 0x10000.
@@ -104,20 +105,56 @@ impl VersionDbStream {
         // - After that, there is a u32 count for the number of addresses in the database.
         // - The remainder of the database is the addresses contained within it.
         //
+        // Version 5 of the database format (for skyrim 1.7.x.x) has updated
+        // the format to instead be:
+        // - Starting version number is now the u32 3.
+        // - As before, the version tuple.
+        // - Next, the module name, which is now always 64-bytes
+        // - As before, next is the u32 pointer size.
+        // - *NEW* u32 data format, which is currently unused. I suspect this is
+        //   in case they change the internal representation in commonlib later.
+        // - *NEW* u32 number of offsets.
+        // - A direct list of u32 offsets, with the index in the list being the
+        //   offset.
+        //
         let format = Self::read::<u32>(&mut f); // File format.
-        assert!((format == 1) || (format == 2));
+        assert!((format == 1) || (format == 2) || (format == 5));
 
         f.seek(Seek::Current((size_of::<u32>() * 4) as i64)).unwrap();
 
-        let mod_len = Self::read::<u32>(&mut f); // Module name length
-        f.seek(Seek::Current(mod_len as i64)).unwrap();
+        let (ptr_size, addr_count) = if format != 5 {
+            let mod_len = Self::read::<u32>(&mut f); // Module name length
+            f.seek(Seek::Current(mod_len as i64)).unwrap();
 
-        let (ptr_size, addr_count) = (
-            Self::read::<u32>(&mut f) as usize,
-            Self::read::<u32>(&mut f) as usize
-        );
+            (
+                Self::read::<u32>(&mut f) as usize,
+                Self::read::<u32>(&mut f) as usize
+            )
+        } else {
+            const NAME_LEN: i64 = 64;
+            f.seek(Seek::Current(NAME_LEN)).unwrap();
 
-        Self { file: f, ptr_size, prev_id: 0, prev_offset: 0, remaining_entries: addr_count }
+            let (ptr_size, data_format, addr_count) = (
+                Self::read::<u32>(&mut f) as usize,
+                Self::read::<u32>(&mut f) as usize,
+                Self::read::<u32>(&mut f) as usize
+            );
+
+            if data_format != 0 {
+                panic!("The address library format changed! Please contact Kasplat.");
+            }
+
+            (ptr_size, addr_count)
+        };
+
+        Self {
+            file: f,
+            db_format: format,
+            ptr_size,
+            prev_id: 0,
+            prev_offset: 0,
+            remaining_entries: addr_count
+        }
     }
 
     /// Read T from file.
@@ -142,37 +179,48 @@ impl Iterator for VersionDbStream {
         }
         self.remaining_entries -= 1;
 
-        //
-        // Parses an address in the version database.
-        //
-        // Each address seems to be encoded as follows:
-        // - First, is a control byte encoding two 3-bit values denoting an item type.
-        //   The msb of the control byte determines if offset calculations should use
-        //   the previous offset (0) or the poffset/ptr_size (1). We call this modified
-        //   offset "tpoffset".
-        // - Then, the encoded data. Relative control encoding is applied to pid/tpoffset.
-        //   If the high byte of the control bit was set, the resulting offset is later
-        //   multiplied by pointer size (equiv, each delta is multiplied by pointer size and
-        //   we can just use poffset).
-        //
-        let control = Self::read::<u8>(&mut self.file);
-        assert!(control & 0x08 == 0);
+        if self.db_format != 5 {
+            //
+            // Parses an address in the version database.
+            //
+            // Each address seems to be encoded as follows:
+            // - First, is a control byte encoding two 3-bit values denoting an item type.
+            //   The msb of the control byte determines if offset calculations should use
+            //   the previous offset (0) or the poffset/ptr_size (1). We call this modified
+            //   offset "tpoffset".
+            // - Then, the encoded data. Relative control encoding is applied to pid/tpoffset.
+            //   If the high byte of the control bit was set, the resulting offset is later
+            //   multiplied by pointer size (equiv, each delta is multiplied by pointer size and
+            //   we can just use poffset).
+            //
+            let control = Self::read::<u8>(&mut self.file);
+            assert!(control & 0x08 == 0);
 
-        // SAFETY: This is the defined encoding of the control byte.
-        //         The enum is sized to always be in range.
-        let (id_enc, offset_enc) = unsafe {(
-            core::mem::transmute::<u8, AddrEncoding>(control & 0x07),
-            core::mem::transmute::<u8, AddrEncoding>((control >> 4) & 0x07)
-        )};
+            // SAFETY: This is the defined encoding of the control byte.
+            //         The enum is sized to always be in range.
+            let (id_enc, offset_enc) = unsafe {(
+                core::mem::transmute::<u8, AddrEncoding>(control & 0x07),
+                core::mem::transmute::<u8, AddrEncoding>((control >> 4) & 0x07)
+            )};
 
-        self.prev_id     = id_enc.read(&mut self.file, self.prev_id);
-        self.prev_offset = if (control & 0x80) != 0 /* is the offset by pointer? */ {
-            offset_enc.read(&mut self.file, self.prev_offset / self.ptr_size) * self.ptr_size
+            self.prev_id     = id_enc.read(&mut self.file, self.prev_id);
+            self.prev_offset = if (control & 0x80) != 0 /* is the offset by pointer? */ {
+                offset_enc.read(&mut self.file, self.prev_offset / self.ptr_size) * self.ptr_size
+            } else {
+                offset_enc.read(&mut self.file, self.prev_offset)
+            };
+
+            Some(DatabaseItem { id: self.prev_id, addr: RelocAddr::from_offset(self.prev_offset) })
         } else {
-            offset_enc.read(&mut self.file, self.prev_offset)
-        };
-
-        Some(DatabaseItem { id: self.prev_id, addr: RelocAddr::from_offset(self.prev_offset) })
+            // The V5 format is just an array of u32s, where each entry is the offset
+            // matching the ith ID.
+            let id = self.prev_id;
+            self.prev_id += 1;
+            Some(DatabaseItem {
+                id,
+                addr: RelocAddr::from_offset(Self::read::<u32>(&mut self.file) as usize)
+            })
+        }
     }
 }
 
