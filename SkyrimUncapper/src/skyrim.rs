@@ -12,7 +12,7 @@
 //! The player object provides a number of static methods to access various fields within the
 //! player structure. When necessary, these fields are accessed by manually offsetting the player
 //! pointer based on the game version, as the location of many fields within the player structures
-//! changed in AE 1.6.629.
+//! changed in AE 1.6.629. This, unfortunately, happened again in AE 1.7.99.
 //!
 //! The actor value owner object is simply an abstract C type that can be passed to other
 //! functions. It has no methods and cannot be directly created in rust code.
@@ -27,7 +27,7 @@ use core::cell::Cell;
 use core::ffi::c_int;
 
 use libskyrim::patcher::{GameRef, Descriptor, DescriptorObject, GameLocation};
-use libskyrim::version::{RUNTIME_VERSION_1_6_629, RUNTIME_VERSION_1_5_97};
+use libskyrim::version::{RUNTIME_VERSION_1_7_99, RUNTIME_VERSION_1_6_629, RUNTIME_VERSION_1_5_97};
 
 use crate::settings::SkillMult;
 use crate::settings::SETTINGS;
@@ -104,7 +104,7 @@ impl PlayerCharacter {
         // SAFETY: These offsets have been verified to be correct. Cell is transparent, so we
         //         can use it here as a safe wrapper around a variable that we don't have
         //         exclusive access to.
-        unsafe { Cell::from_mut(Self::version_offset::<u8>(0xb09, 0xb01).as_mut().unwrap()) }
+        unsafe { Cell::from_mut(Self::version_offset::<u8>(0xb11, 0xb09, 0xb01).as_mut().unwrap()) }
     }
 
     /// Gets the actor value owner for the player actor.
@@ -112,7 +112,7 @@ impl PlayerCharacter {
     /// Called from ASM code, so we must mark it as extern "system".
     pub extern "system" fn get_avo() -> *mut ActorValueOwner {
         // SAFETY: These offsets have been verified to be correct.
-        unsafe { Self::version_offset(0xb8, 0xb0) }
+        unsafe { Self::version_offset(0xb8, 0xb8, 0xb0) }
     }
 
     /// Gets the base value of the given attribute.
@@ -177,12 +177,19 @@ impl PlayerCharacter {
 
     /// Gets a version dependent offset in the player structure.
     unsafe fn version_offset<T>(
-        current: usize,
+        after_1_7: usize,
+        after_1_6_629: usize,
         compat: usize
     ) -> *mut T {
         // SAFETY: We know the player pointer is valid, as GameRef ensures this.
         let version = libskyrim::version::current_runtime();
-        let offset: usize = if version >= RUNTIME_VERSION_1_6_629 { current } else { compat };
+        let offset: usize = if version >= RUNTIME_VERSION_1_7_99 {
+            after_1_7
+        } else if version >= RUNTIME_VERSION_1_6_629 {
+            after_1_6_629
+        } else {
+            compat
+        };
         let player = *(PLAYER_OBJECT.get());
         player.cast::<u8>().add(offset).cast()
     }

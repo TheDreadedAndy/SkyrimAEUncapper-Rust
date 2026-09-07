@@ -25,14 +25,4 @@ fn main() {
     res.set("ProductName", RC_NAME);
     res.set("ProductVersion", RC_VERSION);
     res.compile().unwrap();
-
-    // Generate git version information.
-    let std::process::Output { stdout, .. } = std::process::Command::new("git").args(&[
-        "describe",
-        "--always",
-        "--dirty",
-        "--tags"
-    ]).output().unwrap();
-    let version = String::from_utf8(stdout).unwrap();
-    println!("cargo:rustc-env=LIBSKYRIM_PLUGIN_VC_VERSION={}", version.trim());
 }
