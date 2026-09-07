@@ -70,6 +70,7 @@ pub enum Register {
 #[repr(u8)]
 pub enum Opcode {
     Code(u8),
+    OneOf(&'static [u8]),
     Any
 }
 
@@ -86,8 +87,9 @@ macro_rules! signature {
         $crate::patcher::Signature::new(&[ $($crate::signature!(@munch $sig)),* ])
     }};
 
-    ( @munch $op:literal ) => { $crate::patcher::Opcode::Code($op) };
-    ( @munch ? )           => { $crate::patcher::Opcode::Any       };
+    ( @munch ($($op:literal)|+) ) => { $crate::patcher::Opcode::OneOf(&[$($op),*]) };
+    ( @munch $op:literal )        => { $crate::patcher::Opcode::Code($op)          };
+    ( @munch ? )                  => { $crate::patcher::Opcode::Any                };
 }
 pub use signature;
 
@@ -606,8 +608,22 @@ impl Signature {
         let mut diff = 0;
         use_region(a, self.len(), || {
             for (i, op) in self.0.iter().enumerate() {
-                if let Opcode::Code(b) = *op {
-                    diff += if b == *(a as *mut u8).add(i) { 0 } else { 1 };
+                match *op {
+                    Opcode::Code(b) => {
+                        diff += if b == *(a as *mut u8).add(i) { 0 } else { 1 };
+                    },
+                    Opcode::OneOf(opts) => {
+                        let mut found = false;
+                        for b in opts.iter() {
+                            if *b == *(a as *mut u8).add(i) {
+                                found = true;
+                                break;
+                            }
+                        }
+
+                        diff += if found { 0 } else { 1 };
+                    },
+                    Opcode::Any => (),
                 }
             }
         });
@@ -637,10 +653,21 @@ impl core::fmt::Display for Signature {
     ) -> Result<(), core::fmt::Error> {
         write!(f, "{{ ")?;
         for op in self.0.iter() {
-            if let Opcode::Code(b) = op {
-                write!(f, "{:02x} ", b)?;
-            } else {
-                write!(f, "?? ")?;
+            match op {
+                Opcode::Code(b) => write!(f, "{:02x} ", b)?,
+                Opcode::Any     => write!(f, "?? ")?,
+                Opcode::OneOf(opts) => {
+                    let mut first = true;
+                    write!(f, "(")?;
+                    for b in opts.iter() {
+                        if !first {
+                            write!(f, " | ")?;
+                        }
+                        write!(f, "{:02x}", b)?;
+                        first = false;
+                    }
+                    write!(f, ") ")?;
+                },
             }
         }
         write!(f, "}}")

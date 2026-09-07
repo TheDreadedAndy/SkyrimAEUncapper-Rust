@@ -79,6 +79,18 @@ pub mod version {
         SkseVersion::new(1, 6, 659, RUNTIME_TYPE_GOG);
     pub const RUNTIME_VERSION_1_6_678_EPIC: SkseVersion =
         SkseVersion::new(1, 6, 678, RUNTIME_TYPE_EPIC);
+    pub const RUNTIME_VERSION_1_6_1130: SkseVersion =
+        SkseVersion::new(1, 6, 1130, RUNTIME_TYPE_BETHESDA);
+    pub const RUNTIME_VERSION_1_6_1170: SkseVersion =
+        SkseVersion::new(1, 6, 1170, RUNTIME_TYPE_BETHESDA);
+    pub const RUNTIME_VERSION_1_6_1170_GOG: SkseVersion =
+        SkseVersion::new(1, 6, 1170, RUNTIME_TYPE_GOG);
+    pub const RUNTIME_VERSION_1_6_1179_GOG: SkseVersion =
+        SkseVersion::new(1, 6, 1179, RUNTIME_TYPE_GOG);
+    pub const RUNTIME_VERSION_1_7_99: SkseVersion =
+        SkseVersion::new(1, 7, 99, RUNTIME_TYPE_BETHESDA);
+    pub const RUNTIME_VERSION_1_7_104: SkseVersion =
+        SkseVersion::new(1, 7, 104, RUNTIME_TYPE_BETHESDA);
 
     pub const CURRENT_RELEASE_RUNTIME: SkseVersion = RUNTIME_VERSION_1_6_640;
     pub const PACKED_SKSE_VERSION: SkseVersion = SkseVersion::new(2, 2, 3, RUNTIME_TYPE_BETHESDA);
